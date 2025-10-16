@@ -4,9 +4,9 @@ import React, { useState } from 'react';
 import { Key, Plug, CreditCard, Settings, Lock, Phone, MessageCircle } from 'lucide-react';
 
 // Import Feature Components
-import IntegrationsContent from '../components/Integration/Integrations';
+import IntegrationsContent from '../components/Integration/Integrations.jsx';
 import APIKeysContent from '../components/Integration/Api.jsx';
-import WebhooksContent from '../components/Integration/Webhooks';
+import WebhooksContent from '../components/Integration/Webhooks.jsx';
 
 
 
