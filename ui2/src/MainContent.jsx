@@ -36,11 +36,12 @@ export default function MainContent() {
       <Header title={currentTitle} />
 
       {/* Main Content */}
-      <main className="flex-1 p-6 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<Inbox />} />
           <Route path="/call" element={<CallCenter />} />
           <Route path="/contacts" element={<Contacts />} />
+        
           <Route path="/knowledge" element={<Knowledge />} />
           <Route path="/assistants" element={<Assistants />} />
           <Route path="/activetags" element={<Tags />} />
