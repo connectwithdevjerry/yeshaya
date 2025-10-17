@@ -171,4 +171,24 @@ export const transactionData = [
     eventId: "call_4_700128",
     amount: "-$0.1073",
   },
+  
 ];
+export const dummyCallData = {
+  totalCalls: 12,
+  outboundCalls: 7,
+  inboundCalls: 5,
+  webCalls: 3,
+  costPerDial: 1.25,
+  contactEnds: 10,
+  aiEnds: 2,
+  voicemails: 1,
+  transfers: 2,
+  appointments: 4,
+  totalCallTime: 250,
+  avgCallTime: 21,
+  totalSpend: 45.6,
+  costPerBookedAppointment: 11.4,
+  costPerTransfer: 3.5,
+};
+
+
