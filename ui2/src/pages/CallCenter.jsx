@@ -18,6 +18,7 @@ import {
   Timer,
   Wallet,
 } from "lucide-react";
+import DownloadContact from "../components/CallCenter/DownloadContact";
 
 const CallDashboard = () => {
   const [data, setData] = useState({});
@@ -77,10 +78,10 @@ const CallDashboard = () => {
         </button>
       </div>
 
+      <HeaderFilters />
       {/* Modal 1: Data Center */}
       {activeModal === "dataCenter" && (
         <div className="p-6 animate-fadeIn">
-          <HeaderFilters />
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
             {metrics.map((m, i) => (
               <MetricCard key={i} {...m} />
@@ -92,18 +93,7 @@ const CallDashboard = () => {
 
       {/* Modal 2: Call List */}
       {activeModal === "callList" && (
-        <div className="p-6 animate-fadeIn">
-          <div className="bg-white rounded-xl p-6 shadow-sm">
-            <h2 className="text-lg font-semibold mb-4">📞 Call List</h2>
-            <p className="text-gray-600 text-sm">
-              This is where your call list data or table will appear.  
-              You can add a table, pagination, or API integration here.
-            </p>
-            <div className="mt-4 border-t pt-4 text-sm text-gray-500">
-              (Currently showing dummy modal for "Call List")
-            </div>
-          </div>
-        </div>
+        <DownloadContact />
       )}
     </div>
   );
