@@ -2,7 +2,7 @@ import React from "react";
 
 const HeaderFilters = () => {
   return (
-    <div className="flex p-6 text-gray-400 gap-3 mb-6">
+    <div className="flex p-6 text-gray-400 gap-3 mb-2">
       <div className="flex items-center justify-evenly flex-wrap gap-8">
         <input
           type="text"

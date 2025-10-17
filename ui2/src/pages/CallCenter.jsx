@@ -19,6 +19,7 @@ import {
   Wallet,
 } from "lucide-react";
 import DownloadContact from "../components/CallCenter/DownloadContact";
+import BigCards from "../components/CallCenter/BigCards";
 
 const CallDashboard = () => {
   const [data, setData] = useState({});
@@ -79,7 +80,6 @@ const CallDashboard = () => {
       </div>
 
       <HeaderFilters />
-      {/* Modal 1: Data Center */}
       {activeModal === "dataCenter" && (
         <div className="p-6 animate-fadeIn">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
@@ -88,10 +88,10 @@ const CallDashboard = () => {
             ))}
           </div>
           <SummaryStats data={data} />
+          <BigCards />
         </div>
       )}
 
-      {/* Modal 2: Call List */}
       {activeModal === "callList" && (
         <DownloadContact />
       )}

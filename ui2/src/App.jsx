@@ -24,7 +24,7 @@ function Layout() {
       )}
 
       {/* Main Area */}
-      <div className="flex-1">
+      <div className="flex-1 ml-64 overflow-y-auto">
         <Routes>
           {/* Auth Routes */}
           <Route path="/login" element={<Login />} />
