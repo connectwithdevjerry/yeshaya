@@ -23,7 +23,7 @@ import BigCards from "../components/CallCenter/BigCards";
 
 const CallDashboard = () => {
   const [data, setData] = useState({});
-  const [activeModal, setActiveModal] = useState(null); 
+  const [activeModal, setActiveModal] = useState("dataCenter"); 
   useEffect(() => {
     const timer = setTimeout(() => {
       setData(dummyCallData);
