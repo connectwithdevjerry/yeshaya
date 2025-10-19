@@ -1,5 +1,6 @@
 import React from "react";
-import { Smile } from "lucide-react";
+import { Smile, PhoneMissed, Mic, Archive } from "lucide-react";
+
 
 const BigCards = () => {
   return (
@@ -22,11 +23,11 @@ const BigCards = () => {
         <div className="flex-1 h-[250px] border p-4 rounded-lg bg-white flex flex-col ">
           <div className="flex justify-between items-center">
             <div className="flex gap-1">
-              <Smile
+              <PhoneMissed 
                 size={35}
                 className="text-white p-2 rounded-lg bg-red-600 "
               />
-              <p className="text-gray-400 text-sm">Contact Sentiment</p>
+              <p className="text-gray-400 text-sm">Hangup Reasons</p>
             </div>
 
             <p className="text-sm text-gray-400">Last 10.2 days</p>
@@ -36,7 +37,7 @@ const BigCards = () => {
       <div className="mb-5 flex-1 h-[300px] border p-4 rounded-lg bg-white flex flex-col ">
         <div className="flex justify-between items-center">
           <div className="flex gap-2">
-            <Smile
+            <Archive 
               size={35}
               className="text-white p-2 rounded-lg bg-blue-600 "
             />
@@ -53,7 +54,7 @@ const BigCards = () => {
       <div className="flex-1 h-[300px] border p-4 rounded-lg bg-white flex flex-col ">
         <div className="flex justify-between items-center">
           <div className="flex gap-2">
-            <Smile
+            <Mic
               size={35}
               className="text-white p-2 rounded-lg bg-green-600 "
             />

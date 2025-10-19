@@ -23,7 +23,7 @@ import BigCards from "../components/CallCenter/BigCards";
 
 const CallDashboard = () => {
   const [data, setData] = useState({});
-  const [activeModal, setActiveModal] = useState("dataCenter"); 
+  const [activeModal, setActiveModal] = useState("dataCenter");
   useEffect(() => {
     const timer = setTimeout(() => {
       setData(dummyCallData);
@@ -32,21 +32,112 @@ const CallDashboard = () => {
   }, []);
 
   const metrics = [
-    { label: "Total Calls", value: data.totalCalls, icon: <Phone />, color: "text-blue-500" },
-    { label: "Outbound Calls", value: data.outboundCalls, icon: <PhoneOutgoing />, color: "text-green-500" },
-    { label: "Inbound Calls", value: data.inboundCalls, icon: <PhoneIncoming />, color: "text-yellow-500" },
-    { label: "Web Calls", value: data.webCalls, icon: <Globe />, color: "text-purple-500" },
-    { label: "Cost Per Dial", value: `$${data.costPerDial?.toFixed(2)}`, icon: <DollarSign />, color: "text-red-500" },
-    { label: "Contact Ends", value: data.contactEnds, icon: <User />, color: "text-amber-600" },
-    { label: "AI Ends", value: data.aiEnds, icon: <Cpu />, color: "text-amber-700" },
-    { label: "Voicemails", value: data.voicemails, icon: <Voicemail />, color: "text-amber-800" },
-    { label: "Transfers", value: data.transfers, icon: <ArrowLeftRight />, color: "text-teal-600" },
-    { label: "Appointments", value: data.appointments, icon: <Calendar />, color: "text-emerald-600" },
-    { label: "Total Call Time", value: `${data.totalCallTime} mins`, icon: <Clock />, color: "text-orange-500" },
-    { label: "Avg Call Time", value: `${data.avgCallTime} mins`, icon: <Timer />, color: "text-sky-500" },
-    { label: "Total Spend", value: `$${data.totalSpend?.toFixed(2)}`, icon: <Wallet />, color: "text-rose-500" },
-    { label: "Cost Per Booked Appointment", value: `$${data.costPerBookedAppointment?.toFixed(2)}`, icon: <DollarSign />, color: "text-green-700" },
-    { label: "Cost Per Transfer", value: `$${data.costPerTransfer?.toFixed(2)}`, icon: <DollarSign />, color: "text-green-500" },
+    {
+      label: "Total Calls",
+      value: data.totalCalls,
+      icon: <Phone />,
+      color: "text-blue-500",
+      tooltip: "Total number of calls handled by all agents.",
+    },
+    {
+      label: "Outbound Calls",
+      value: data.outboundCalls,
+      icon: <PhoneOutgoing />,
+      color: "text-green-500",
+      tooltip: "Calls initiated by your team to customers or leads.",
+    },
+    {
+      label: "Inbound Calls",
+      value: data.inboundCalls,
+      icon: <PhoneIncoming />,
+      color: "text-yellow-500",
+      tooltip: "Calls received from customers or clients.",
+    },
+    {
+      label: "Web Calls",
+      value: data.webCalls,
+      icon: <Globe />,
+      color: "text-purple-500",
+      tooltip: "Calls made through the website or web widget.",
+    },
+    {
+      label: "Cost Per Dial",
+      value: `$${data.costPerDial?.toFixed(2)}`,
+      icon: <DollarSign />,
+      color: "text-red-500",
+      tooltip: "Average cost incurred for each outbound call made.",
+    },
+    {
+      label: "Contact Ends",
+      value: data.contactEnds,
+      icon: <User />,
+      color: "text-amber-600",
+      tooltip: "Total number of calls that ended with a live contact.",
+    },
+    {
+      label: "AI Ends",
+      value: data.aiEnds,
+      icon: <Cpu />,
+      color: "text-amber-700",
+      tooltip: "Calls concluded automatically by the AI assistant.",
+    },
+    {
+      label: "Voicemails",
+      value: data.voicemails,
+      icon: <Voicemail />,
+      color: "text-amber-800",
+      tooltip: "Number of voicemail messages left by callers.",
+    },
+    {
+      label: "Transfers",
+      value: data.transfers,
+      icon: <ArrowLeftRight />,
+      color: "text-teal-600",
+      tooltip:
+        "Total calls that were transferred to another agent or department.",
+    },
+    {
+      label: "Appointments",
+      value: data.appointments,
+      icon: <Calendar />,
+      color: "text-emerald-600",
+      tooltip: "Number of appointments successfully booked from calls.",
+    },
+    {
+      label: "Total Call Time",
+      value: `${data.totalCallTime} mins`,
+      icon: <Clock />,
+      color: "text-orange-500",
+      tooltip: "Combined total duration of all calls.",
+    },
+    {
+      label: "Avg Call Time",
+      value: `${data.avgCallTime} mins`,
+      icon: <Timer />,
+      color: "text-sky-500",
+      tooltip: "Average duration per call session.",
+    },
+    {
+      label: "Total Spend",
+      value: `$${data.totalSpend?.toFixed(2)}`,
+      icon: <Wallet />,
+      color: "text-rose-500",
+      tooltip: "Total amount spent on calls within this period.",
+    },
+    {
+      label: "Cost Per Booked Appointment",
+      value: `$${data.costPerBookedAppointment?.toFixed(2)}`,
+      icon: <DollarSign />,
+      color: "text-green-700",
+      tooltip: "Average cost incurred for each booked appointment.",
+    },
+    {
+      label: "Cost Per Transfer",
+      value: `$${data.costPerTransfer?.toFixed(2)}`,
+      icon: <DollarSign />,
+      color: "text-green-500",
+      tooltip: "Average cost per successful call transfer.",
+    },
   ];
 
   return (
@@ -92,9 +183,7 @@ const CallDashboard = () => {
         </div>
       )}
 
-      {activeModal === "callList" && (
-        <DownloadContact />
-      )}
+      {activeModal === "callList" && <DownloadContact />}
     </div>
   );
 };
