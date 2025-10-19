@@ -30,7 +30,7 @@ export const navigationItems = [
   {
     name: "Inbox",
     icon: "inbox",
-    link: "/",
+    link: "/inbox",
   },
   {
     name: "Call Center",

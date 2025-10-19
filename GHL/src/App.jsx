@@ -8,6 +8,7 @@ import MainContent from "./MainContent";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ResetPassword from "./pages/ResetPassword";
+import Homepage from "./pages/Homepage";
 
 function Layout() {
   const location = useLocation();
@@ -26,6 +27,7 @@ function Layout() {
       {/* Main Area */}
       <div className="flex-1 ml-64 overflow-y-auto">
         <Routes>
+          <Route path="/" element={<Homepage />} />
           {/* Auth Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />

@@ -12,11 +12,12 @@ import Widgets from "./pages/Widgets";
 import Settings from "./pages/Settings";
 import Helps from "./pages/Helps";
 
+
 export default function MainContent() {
   const location = useLocation();
 
   const pageTitles = {
-    "/": "Inbox",
+    "/inbox": "Inbox",
     "/call": "Call Center",
     "/contacts": "Contacts",
     "/knowledge": "Knowledge",
@@ -38,7 +39,7 @@ export default function MainContent() {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto">
         <Routes>
-          <Route path="/" element={<Inbox />} />
+          <Route path="/inbox" element={<Inbox />} />
           <Route path="/call" element={<CallCenter />} />
           <Route path="/contacts" element={<Contacts />} />
         
