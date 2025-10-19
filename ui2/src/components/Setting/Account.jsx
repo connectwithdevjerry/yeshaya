@@ -1,16 +1,19 @@
 // src/components/AccountSettings.jsx
 
-import React from 'react';
-import Card from '../ui/Card';
+import React from "react";
+import Card from "../ui/Card";
 
 const AccountSettings = () => {
   return (
-    <>
+    <div className="bg-slate-50 w-[800px] min-h-screen font-sans">
       <Card>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">My Profile</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="firstName"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Full Name
             </label>
             <input
@@ -22,7 +25,10 @@ const AccountSettings = () => {
             />
           </div>
           <div>
-            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 invisible mb-1">
+            <label
+              htmlFor="lastName"
+              className="block text-sm font-medium text-gray-700 invisible mb-1"
+            >
               Full Name (hidden label)
             </label>
             <input
@@ -35,7 +41,10 @@ const AccountSettings = () => {
           </div>
         </div>
         <div className="mb-6">
-          <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="phoneNumber"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             Phone Number
           </label>
           <input
@@ -54,13 +63,20 @@ const AccountSettings = () => {
       </Card>
 
       <Card>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Account Security</h2>
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">
+          Account Security
+        </h2>
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <label htmlFor="emailAddress" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="emailAddress"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Email Address
             </label>
-            <p id="emailAddress" className="text-gray-600 text-base">kenny@mail.yashayah.ai</p>
+            <p id="emailAddress" className="text-gray-600 text-base">
+              kenny@mail.yashayah.ai
+            </p>
           </div>
           <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md shadow-sm hover:bg-gray-200 transition-colors">
             Change Email
@@ -68,17 +84,22 @@ const AccountSettings = () => {
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Password
             </label>
-            <p id="password" className="text-gray-600 text-base">************</p>
+            <p id="password" className="text-gray-600 text-base">
+              ************
+            </p>
           </div>
           <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md shadow-sm hover:bg-gray-200 transition-colors">
             Reset Password
           </button>
         </div>
       </Card>
-    </>
+    </div>
   );
 };
 
