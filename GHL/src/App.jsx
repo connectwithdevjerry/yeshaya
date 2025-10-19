@@ -13,27 +13,22 @@ import Homepage from "./pages/Homepage";
 function Layout() {
   const location = useLocation();
 
-  // Paths where Sidebar should NOT appear
-  const authPaths = ["/login", "/register", "/reset-password"];
-  const isAuthPage = authPaths.includes(location.pathname);
+  const noSidebarPaths = ["/", "/login", "/register", "/reset-password"];
+  const showSidebar = !noSidebarPaths.includes(location.pathname);
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Sidebar only for main dashboard pages */}
-      {!isAuthPage && (
+      {showSidebar && (
         <Sidebar userInfo={userInfo} navigationItems={navigationItems} />
       )}
 
       {/* Main Area */}
-      <div className="flex-1 ml-64 overflow-y-auto">
+      <div className={`flex-1 ${showSidebar ? "ml-64" : ""} overflow-y-auto`}>
         <Routes>
           <Route path="/" element={<Homepage />} />
-          {/* Auth Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-
-          {/* Dashboard/Main Area */}
           <Route path="/*" element={<MainContent />} />
         </Routes>
       </div>
