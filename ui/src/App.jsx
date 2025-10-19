@@ -7,7 +7,7 @@ import MainContent from "./MainContent";
 // Auth pages
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import ResetPassword from "./pages/pages/ResetPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 function Layout() {
   const location = useLocation();
