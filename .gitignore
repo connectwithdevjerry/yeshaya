@@ -2,3 +2,4 @@
 /ui/node_modules
 /GHL/node_modules
 /server/node_modules
+/server/.env
