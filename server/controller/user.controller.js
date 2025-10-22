@@ -6,7 +6,7 @@ const {
   verifyForgotToken,
   verifyRefreshToken,
 } = require("../jwt_helpers");
-const transporter = require("../nodemailerObject");
+const resend = require("../resendObject");
 const {
   authSchema,
   signUpSchema,
@@ -57,31 +57,18 @@ const signup = async (req, res, next) => {
     const reset_link = `${process.env.FRONTEND_URL}/confirm_email_address/${token}`;
     console.log({ token, reset_link });
 
-    let mailOptions = {
-      from: process.env.MY_EMAIL_USER,
-      to: result.email,
-      subject: "Password Activation Link",
-      text: `Your activation link: ${reset_link}`,
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.log({ error });
-        return res.send({
-          status: false,
-          message: "Failed to send confirmation email!",
-        });
-      }
-
-      console.log("Email sent: " + info.response);
-
-      return res.send({
-        status: true,
-        message: "Confirmation Link sent successfully",
-        data: {...createdUser.toObject(), password: undefined},
-      });
+    await resend.emails.send({
+      from: `${process.env.APP_NAME} <${process.env.MY_EMAIL_USER}>`,
+      to: [result.email],
+      subject: "Confirm your email",
+      html: `<p>Your confirmation link: <a href="${reset_link}">click here for confirmation</a></p>`,
     });
-    return;
+
+    return res.send({
+      status: true,
+      message: "Confirmation Link sent successfully",
+      data: { ...createdUser.toObject(), password: undefined },
+    });
   } catch (error) {
     if (error.isJoi === true) {
       error.status = 422;
@@ -174,20 +161,11 @@ const forgotPassword = async (req, res) => {
     const reset_link = `${process.env.FRONTEND_URL}/resetpassword/${token}`;
     console.log({ token, reset_link });
 
-    let mailOptions = {
-      from: process.env.MY_EMAIL_USER,
+    await resend.emails.send({
+      from: `${process.env.APP_NAME} <${process.env.MY_EMAIL_USER}>`,
       to: email,
       subject: "Password Reset Link",
-      text: `Your reset link: ${reset_link}`,
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.log({ error });
-        return res.send({ status: false, message: "Failed to send email" });
-      }
-      console.log("Email sent: " + info.response);
-      res.send({ status: true, message: "Email sent successfully" });
+      html: `<p>Your password reset link: <a href="${reset_link}">click here for confirmation</a></p>`,
     });
 
     return res.send({
@@ -247,7 +225,7 @@ const logout = async (req, res, next) => {
         status: false,
         message: "already logged out successful!",
       });
-    
+
     const userId = await verifyRefreshToken(refreshToken);
     console.log({ userId });
 
@@ -354,8 +332,6 @@ const updateCompanyDetails = async (req, res, next) => {
     next(error);
   }
 };
-
-
 
 module.exports = {
   signup,
