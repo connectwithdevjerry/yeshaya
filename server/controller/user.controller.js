@@ -61,7 +61,10 @@ const signup = async (req, res, next) => {
       from: `${process.env.APP_NAME} <${process.env.MY_EMAIL_USER}>`,
       to: [result.email],
       subject: "Confirm your email",
-      html: `<p>Your confirmation link: <a href="${reset_link}">click here for confirmation</a></p>`,
+      html: `<p>Your confirmation link: </p>
+      <p>Please click on the link to activate your account.</p>
+      <p>If you did not create an account, no further action is required.</p>
+      `,
     });
 
     return res.send({
