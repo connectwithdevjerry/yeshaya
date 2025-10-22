@@ -2,12 +2,12 @@
 import apiClient from './config';
 
 export const authAPI = {
-  login: (credentials) => {
-    return apiClient.post('/auth/login', credentials);
+  login: (formData) => {
+    return apiClient.post('/auth/signin', formData);
   },
 
-  register: (userData) => {
-    return apiClient.post('/auth/register', userData);
+  register: (formData) => {
+    return apiClient.post('/auth/signup', formData);
   },
 
   logout: () => {
@@ -19,7 +19,7 @@ export const authAPI = {
   },
 
   verifyToken: (token) => {
-    return apiClient.get('/auth/verify', {
+    return apiClient.get('/auth/activate', {
       headers: { Authorization: `Bearer ${token}` },
     });
   },

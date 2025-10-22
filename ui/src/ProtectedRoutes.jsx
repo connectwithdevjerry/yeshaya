@@ -1,19 +1,28 @@
 // src/components/ProtectedRoute.jsx
-import React, { useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { Navigate, useLocation } from 'react-router-dom';
-import { verifyToken } from './store/slices/authSlice';
+import React, { useEffect, useRef } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import { Navigate, useLocation } from "react-router-dom";
+import { verifyToken } from "./store/slices/authSlice";
 
 const ProtectedRoute = ({ children }) => {
   const dispatch = useDispatch();
   const location = useLocation();
   const { isAuthenticated, loading, token } = useSelector((state) => state.auth);
 
+
+  const hasVerified = useRef(false);
+
   useEffect(() => {
-    if (token && !isAuthenticated) {
+    if (!hasVerified.current && token && token.trim() !== "") {
+      hasVerified.current = true; // prevent loop
       dispatch(verifyToken());
     }
-  }, [dispatch, token, isAuthenticated]);
+  }, [dispatch, token]);
+
+  if (!token || token.trim() === "") {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
 
   if (loading) {
     return (
@@ -23,10 +32,12 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
+  // ✅ Redirect if user is not authenticated
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // ✅ If all checks pass, render the protected content
   return children;
 };
 

@@ -7,7 +7,11 @@ import { register, clearError } from "../store/slices/authSlice";
 const Register = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { loading, error, isAuthenticated } = useSelector((state) => state.auth);
+  const { loading, error, isAuthenticated } = useSelector(
+    (state) => state.auth
+  );
+
+  const [success, setSuccess] = useState(false);
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -19,8 +23,11 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) navigate("/");
-  }, [isAuthenticated, navigate]);
+    if (isAuthenticated) {
+      setSuccess(true);
+  
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     return () => {
@@ -47,11 +54,13 @@ const Register = () => {
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-            {typeof error === "string" ? error : error.message || "Registration failed"}
+            {typeof error === "string"
+              ? error
+              : error.message || "Registration failed"}
           </div>
         )}
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
+  <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="flex gap-2">
             <input
               type="text"
@@ -110,11 +119,22 @@ const Register = () => {
 
           <p className="text-xs text-gray-500 text-center mt-2">
             By signing up, you agree to our{" "}
-            <span className="text-sky-600 hover:underline">Terms of Service</span>,{" "}
-            <span className="text-sky-600 hover:underline">Usage Policy</span>, and{" "}
-            <span className="text-sky-600 hover:underline">Privacy Policy</span>.
+            <span className="text-sky-600 hover:underline">
+              Terms of Service
+            </span>
+            , <span className="text-sky-600 hover:underline">Usage Policy</span>
+            , and{" "}
+            <span className="text-sky-600 hover:underline">Privacy Policy</span>
+            .
           </p>
+          
         </form>
+
+        {success && (
+          <div className="mt-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
+            Account created successfully, check your email a link has been sent to verify your account.
+          </div>
+        )}
 
         <p className="text-center text-sm text-gray-600 mt-4">
           Already have an account?{" "}
