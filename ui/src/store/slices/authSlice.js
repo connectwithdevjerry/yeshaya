@@ -1,50 +1,53 @@
-
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { authAPI } from '../api/authApi';
-
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { authAPI } from "../api/authApi";
 
 export const login = createAsyncThunk(
-  'auth/login',
-  async (credentials, { rejectWithValue }) => {
+  "auth/signin",
+  async (formData, { rejectWithValue }) => {
     try {
-      const response = await authAPI.login(credentials);
-
-      localStorage.setItem('token', response.data.token);
+      const response = await authAPI.login(formData);
+      localStorage.setItem("token", response.data.token);
+      console.log("Login successful:", response.data);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data || 'Login failed');
+      return rejectWithValue(error.response?.data || "Login failed");
     }
   }
 );
 
 export const register = createAsyncThunk(
-  'auth/register',
-  async (userData, { rejectWithValue }) => {
+  "auth/signup",
+  async (formData, { rejectWithValue }) => {
     try {
-      const response = await authAPI.register(userData);
-      localStorage.setItem('token', response.data.token);
+      const response = await authAPI.register(formData);
+      localStorage.setItem("token", response.data.token);
+      console.log("Registration successful:", response.data);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data || 'Registration failed');
+      console.log("Error during registration:", error.response?.data);
+      return rejectWithValue(error.response?.data || "Registration failed");
     }
   }
 );
 
 export const logout = createAsyncThunk(
-  'auth/logout',
+  "auth/logout",
   async (_, { rejectWithValue }) => {
     try {
       await authAPI.logout();
-      localStorage.removeItem('token');
-      return null;
+      return { message: "Logged out successfully" };
     } catch (error) {
-      return rejectWithValue(error.response?.data || 'Logout failed');
+      // Still remove token even if request fails (e.g., network error)
+      localStorage.removeItem("token");
+      return rejectWithValue(error.response?.data || "Logout failed");
+    } finally {
+      localStorage.removeItem("token");
     }
   }
 );
 
 export const resetPassword = createAsyncThunk(
-  "auth/resetPassword",
+  "auth/activate",
   async (email, { rejectWithValue }) => {
     try {
       const response = await fetch("/auth/reset-password", {
@@ -61,40 +64,49 @@ export const resetPassword = createAsyncThunk(
   }
 );
 
-
 export const verifyToken = createAsyncThunk(
-  'auth/verifyToken',
-  async (_, { rejectWithValue }) => {
+  "auth/verifyToken",
+  async (tokenFromLink, { rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error('No token found');
+      // Priority: use token from link if available, else from localStorage
+      const token = tokenFromLink || localStorage.getItem("token");
+      if (!token) throw new Error("No token found");
+
       const response = await authAPI.verifyToken(token);
+
+      // Save the verified token to localStorage (optional)
+      localStorage.setItem("token", token);
+
       return response.data;
     } catch (error) {
-      localStorage.removeItem('token');
-      return rejectWithValue(error.response?.data || 'Token verification failed');
+      localStorage.removeItem("token");
+      return rejectWithValue(
+        error.response?.data || "Token verification failed"
+      );
     }
   }
 );
 
 export const verifyEmail = createAsyncThunk(
   "auth/verifyEmail",
-  async (token, { rejectWithValue }) => {   
+  async (token, { rejectWithValue }) => {
     try {
       const response = await authAPI.verifyToken(token);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data || "Email verification failed");
-    } 
+      return rejectWithValue(
+        error.response?.data || "Email verification failed"
+      );
+    }
   }
-);  
+);
 
 const authSlice = createSlice({
-  name: 'auth',
+  name: "auth",
   initialState: {
-    user: JSON.parse(localStorage.getItem('user')) || null,
-    token: localStorage.getItem('token'),
-    isAuthenticated: !!localStorage.getItem('token'),
+    user: JSON.parse(localStorage.getItem("user")) || null,
+    token: localStorage.getItem("token"),
+    isAuthenticated: !!localStorage.getItem("token"),
     loading: false,
     error: null,
     resetPasswordSuccess: false,
@@ -133,10 +145,11 @@ const authSlice = createSlice({
       })
       .addCase(register.fulfilled, (state, action) => {
         state.loading = false;
-        state.isAuthenticated = true;
+        state.isAuthenticated = false; // don't authenticate until verified
         state.user = action.payload.user;
         state.token = action.payload.token;
-        state.error = null;
+        state.successMessage =
+          "Registration successful. Please check your email to activate your account.";
       })
       .addCase(register.rejected, (state, action) => {
         state.loading = false;
@@ -181,7 +194,7 @@ const authSlice = createSlice({
         state.user = null;
         state.token = null;
       })
-       // ---------------- VERIFY EMAIL ----------------
+      // ---------------- VERIFY EMAIL ----------------
       .addCase(verifyEmail.pending, (state) => {
         state.loading = true;
         state.error = null;

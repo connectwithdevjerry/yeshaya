@@ -30,7 +30,7 @@ function Layout() {
   }, [dispatch, token, isAuthenticated]);
 
   // Paths where Sidebar should NOT appear
-  const authPaths = ["/login", "/register", "/reset-password", "/verify-email"];
+  const authPaths = ["/login", "/register", "/reset-password", "/confirm_email_address"];
   const isAuthPage = authPaths.includes(location.pathname);
 
   return (
@@ -51,7 +51,7 @@ function Layout() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-           <Route path="/verify" element={<VerifyEmail />} />
+           <Route path="/confirm_email_address" element={<VerifyEmail />} />
 
           {/* Dashboard/Main Area */}
           <Route
