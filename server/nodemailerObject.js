@@ -9,6 +9,7 @@ let transporter = nodemailer.createTransport({
     user: process.env.MY_EMAIL_USER,
     pass: process.env.MY_EMAIL_PASSWORD,
   },
+  connectionTimeout: 30000, // 20 seconds
 });
 
 transporter.verify((error, success) => {
