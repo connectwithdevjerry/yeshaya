@@ -15,7 +15,7 @@ const {
 } = require("../validation_schema");
 const { REFRESH_TOKEN } = require("../constants");
 const client = require("../jwt_db_access");
-const { saveImageToDB } = require("../cloudinaryImageHandler");
+// const { saveImageToDB } = require("../cloudinaryImageHandler");
 
 const myPayload = (user) => ({
   firstName: user.firstName,
@@ -39,17 +39,17 @@ const signup = async (req, res, next) => {
 
     console.log("Saving profile picture...");
 
-    const pic = await saveImageToDB(
-      "data:image/jpeg;base64," + result.companyLogo,
-      "brand-logo",
-      "image"
-    );
+    // const pic = await saveImageToDB(
+    //   "data:image/jpeg;base64," + result.companyLogo,
+    //   "brand-logo",
+    //   "image"
+    // );
 
-    console.log({ pic });
+    // console.log({ pic });
 
     const user = await new userModel({
       ...result,
-      companyLogo: pic.secure_url,
+      // companyLogo: pic.secure_url,
     });
     const createdUser = await user.save();
 
@@ -78,7 +78,7 @@ const signup = async (req, res, next) => {
       return res.send({
         status: true,
         message: "Confirmation Link sent successfully",
-        data: createdUser,
+        data: { ...createdUser.toObject(), password: undefined },
       });
     });
     return;

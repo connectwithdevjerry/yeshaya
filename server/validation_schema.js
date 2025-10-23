@@ -10,10 +10,10 @@ const signUpSchema = Joi.object({
   password: Joi.string().required(),
   firstName: Joi.string().required(),
   lastName: Joi.string().required(),
-  phoneNumber: Joi.string().required(),
-  address: Joi.string().required(),
-  companyLogo: Joi.string().base64().required(),
-  t_and_c: Joi.boolean().required(),
+  // phoneNumber: Joi.string().required(),
+  // address: Joi.string().required(),
+  // companyLogo: Joi.string().base64().required(),
+  // t_and_c: Joi.boolean().required(),
 });
 
 const forgotPasswordSchema = Joi.object({
