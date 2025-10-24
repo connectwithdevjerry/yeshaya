@@ -10,8 +10,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+<<<<<<< HEAD
+<<<<<<< HEAD
+    "@gohighlevel/api-client": "^2.2.1",
+=======
     "@reduxjs/toolkit": "^2.9.1",
     "axios": "^1.12.2",
+>>>>>>> refs/remotes/origin/master
+=======
+    "@reduxjs/toolkit": "^2.9.1",
+    "axios": "^1.12.2",
+>>>>>>> refs/remotes/origin/master
     "lucide-react": "^0.545.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
