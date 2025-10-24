@@ -11,20 +11,20 @@ export const authAPI = {
   },
 
   logout: () => {
-    return apiClient.post('/auth/logout');
+    return apiClient.del('/auth/logout');
   },
 
   resetPassword: (email) => {
-    return apiClient.post('/auth/reset-password', { email });
+    return apiClient.post('/auth/forgot_password', { email });
   },
 
   verifyToken: (token) => {
-    return apiClient.get('/auth/activate', {
+    return apiClient.get(`/auth/activate/${token}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
   },
 
   updatePassword: (passwordData) => {
-    return apiClient.put('/auth/password', passwordData);
+    return apiClient.put('/auth/reset_password', passwordData);
   },
 };

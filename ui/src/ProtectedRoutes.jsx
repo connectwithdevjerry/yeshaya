@@ -1,4 +1,3 @@
-// src/components/ProtectedRoute.jsx
 import React, { useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { Navigate, useLocation } from "react-router-dom";
@@ -9,35 +8,34 @@ const ProtectedRoute = ({ children }) => {
   const location = useLocation();
   const { isAuthenticated, loading, token } = useSelector((state) => state.auth);
 
-
   const hasVerified = useRef(false);
 
   useEffect(() => {
-    if (!hasVerified.current && token && token.trim() !== "") {
-      hasVerified.current = true; // prevent loop
+    if (!hasVerified.current && token && token.trim() !== "" && !isAuthenticated) {
+      hasVerified.current = true;
       dispatch(verifyToken());
     }
-  }, [dispatch, token]);
+  }, [dispatch, token, isAuthenticated]);
+
 
   if (!token || token.trim() === "") {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-
+  // Loading - show spinner
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+        <p className="text-gray-600">Verifying authentication...</p>
       </div>
     );
   }
 
-  // ✅ Redirect if user is not authenticated
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // ✅ If all checks pass, render the protected content
   return children;
 };
 

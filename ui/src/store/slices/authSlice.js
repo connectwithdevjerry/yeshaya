@@ -2,15 +2,33 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { authAPI } from "../api/authApi";
 
 export const login = createAsyncThunk(
-  "auth/signin",
+  "auth/login",
   async (formData, { rejectWithValue }) => {
     try {
       const response = await authAPI.login(formData);
-      localStorage.setItem("token", response.data.token);
-      console.log("Login successful:", response.data);
-      return response.data;
+      const data = response.data;
+
+      if (data.status === false) {
+        return rejectWithValue(data.message || "Login failed");
+      }
+
+      // ✅ Fix: use the correct property name from backend
+      const accessToken = data.accessToken;
+      const refreshToken = data.refreshToken;
+
+      if (accessToken) {
+        localStorage.setItem("accessToken", accessToken);
+      }
+      if (refreshToken) {
+        localStorage.setItem("refreshToken", refreshToken);
+      }
+
+      console.log("Login success:", data);
+      return data; // will be passed to reducer
     } catch (error) {
-      return rejectWithValue(error.response?.data || "Login failed");
+      return rejectWithValue(
+        error.response?.data?.message || "Network or server error"
+      );
     }
   }
 );
@@ -20,12 +38,19 @@ export const register = createAsyncThunk(
   async (formData, { rejectWithValue }) => {
     try {
       const response = await authAPI.register(formData);
-      localStorage.setItem("token", response.data.token);
-      console.log("Registration successful:", response.data);
+      console.log("Registration response:", response.data);
+      if (response.data.status === false) {
+        return rejectWithValue(response.data.message);
+      }
       return response.data;
     } catch (error) {
       console.log("Error during registration:", error.response?.data);
-      return rejectWithValue(error.response?.data || "Registration failed");
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        "Registration failed. Please try again.";
+
+      return rejectWithValue(errorMessage);
     }
   }
 );
@@ -35,68 +60,65 @@ export const logout = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       await authAPI.logout();
+
+      // ✅ Clear tokens on successful logout
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+
       return { message: "Logged out successfully" };
     } catch (error) {
-      // Still remove token even if request fails (e.g., network error)
-      localStorage.removeItem("token");
-      return rejectWithValue(error.response?.data || "Logout failed");
-    } finally {
-      localStorage.removeItem("token");
+      // ✅ Always clear tokens even if server logout fails
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+
+      return rejectWithValue(error.response?.data?.message || "Logout failed");
     }
   }
 );
 
 export const resetPassword = createAsyncThunk(
-  "auth/activate",
+  "auth/forgot_password",
   async (email, { rejectWithValue }) => {
     try {
-      const response = await fetch("/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
-      return data.message;
-    } catch (err) {
-      return rejectWithValue(err.message);
+      const response = await authAPI.resetPassword(email);
+      return (
+        response.data.message || "Reset link sent! Please check your email."
+      );
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data ||
+        "Failed to send reset email";
+      return rejectWithValue(errorMessage);
     }
   }
 );
 
 export const verifyToken = createAsyncThunk(
-  "auth/verifyToken",
+  "auth/verifyToken", // 👈 Action type name (not the API URL)
   async (tokenFromLink, { rejectWithValue }) => {
     try {
-      // Priority: use token from link if available, else from localStorage
+      // Use token from link or fallback to localStorage
       const token = tokenFromLink || localStorage.getItem("token");
       if (!token) throw new Error("No token found");
 
+      // API call — pass token dynamically to your authAPI
       const response = await authAPI.verifyToken(token);
 
-      // Save the verified token to localStorage (optional)
-      localStorage.setItem("token", token);
+      // Save verified token in localStorage
+      localStorage.setItem("token", response.data.token);
 
       return response.data;
     } catch (error) {
+      console.error("Token verification failed:", error);
       localStorage.removeItem("token");
-      return rejectWithValue(
-        error.response?.data || "Token verification failed"
-      );
-    }
-  }
-);
 
-export const verifyEmail = createAsyncThunk(
-  "auth/verifyEmail",
-  async (token, { rejectWithValue }) => {
-    try {
-      const response = await authAPI.verifyToken(token);
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data || "Email verification failed"
-      );
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data ||
+        "Token verification failed";
+
+      return rejectWithValue(errorMessage);
     }
   }
 );
@@ -109,109 +131,132 @@ const authSlice = createSlice({
     isAuthenticated: !!localStorage.getItem("token"),
     loading: false,
     error: null,
-    resetPasswordSuccess: false,
+    successMessage: null,
+    registrationSuccess: false,
+    verification: {
+      loading: false,
+      success: false,
+      error: null,
+    },
   },
   reducers: {
     clearError: (state) => {
       state.error = null;
     },
-    clearResetPasswordSuccess: (state) => {
-      state.resetPasswordSuccess = false;
+    clearSuccessMessage: (state) => {
+      state.successMessage = null;
+      state.registrationSuccess = false;
+    },
+    clearVerification: (state) => {
+      state.verification = {
+        loading: false,
+        success: false,
+        error: null,
+      };
     },
   },
   extraReducers: (builder) => {
     builder
-
+      // LOGIN
+      .addCase(login.fulfilled, (state, action) => {
+        state.loading = false;
+        state.error = null;
+        state.isAuthenticated = true;
+        state.token = action.payload.accessToken; // ✅ correct property
+        state.refreshToken = action.payload.refreshToken || null;
+      })
       .addCase(login.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
-      .addCase(login.fulfilled, (state, action) => {
-        state.loading = false;
-        state.isAuthenticated = true;
-        state.user = action.payload.user;
-        state.token = action.payload.token;
-        state.error = null;
-      })
       .addCase(login.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload;
+        state.error = action.payload || "Login failed";
         state.isAuthenticated = false;
       })
 
+      // REGISTER
       .addCase(register.pending, (state) => {
         state.loading = true;
         state.error = null;
+        state.registrationSuccess = false;
       })
-      .addCase(register.fulfilled, (state, action) => {
+      .addCase(register.fulfilled, (state) => {
         state.loading = false;
         state.isAuthenticated = false; // don't authenticate until verified
-        state.user = action.payload.user;
-        state.token = action.payload.token;
+        state.registrationSuccess = true;
         state.successMessage =
-          "Registration successful. Please check your email to activate your account.";
+          "Registration successful! Please check your email to activate your account.";
+        state.error = null;
       })
       .addCase(register.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
         state.isAuthenticated = false;
+        state.registrationSuccess = false;
       })
 
+      // LOGOUT
       .addCase(logout.fulfilled, (state) => {
-        state.user = null;
-        state.token = null;
         state.isAuthenticated = false;
-        state.loading = false;
+        state.token = null;
+        state.refreshToken = null;
         state.error = null;
+        state.loading = false;
+      })
+      .addCase(logout.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(logout.rejected, (state, action) => {
+        state.loading = false;
+        state.isAuthenticated = false; // still force logout locally
+        state.token = null;
+        state.refreshToken = null;
+        state.error = action.payload;
       })
 
+      // RESET PASSWORD
       .addCase(resetPassword.pending, (state) => {
         state.loading = true;
         state.error = null;
-        state.resetPasswordSuccess = false;
+        state.successMessage = null;
       })
-      .addCase(resetPassword.fulfilled, (state) => {
+      .addCase(resetPassword.fulfilled, (state, action) => {
         state.loading = false;
-        state.resetPasswordSuccess = true;
+        state.successMessage = action.payload;
         state.error = null;
       })
       .addCase(resetPassword.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
-        state.resetPasswordSuccess = false;
+        state.successMessage = null;
       })
+
+      // VERIFY TOKEN
       .addCase(verifyToken.pending, (state) => {
-        state.loading = true;
+        state.verification.loading = true;
+        state.verification.error = null;
+        state.verification.success = false;
       })
       .addCase(verifyToken.fulfilled, (state, action) => {
-        state.loading = false;
+        state.verification.loading = false;
+        state.verification.success = true;
         state.isAuthenticated = true;
         state.user = action.payload.user;
+        state.token = action.payload.token;
+        state.verification.error = null;
       })
-      .addCase(verifyToken.rejected, (state) => {
-        state.loading = false;
+      .addCase(verifyToken.rejected, (state, action) => {
+        state.verification.loading = false;
+        state.verification.success = false;
+        state.verification.error = action.payload;
         state.isAuthenticated = false;
         state.user = null;
         state.token = null;
-      })
-      // ---------------- VERIFY EMAIL ----------------
-      .addCase(verifyEmail.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-        state.emailVerified = false;
-      })
-      .addCase(verifyEmail.fulfilled, (state) => {
-        state.loading = false;
-        state.emailVerified = true;
-        state.error = null;
-      })
-      .addCase(verifyEmail.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-        state.emailVerified = false;
       });
   },
 });
 
-export const { clearError, clearResetPasswordSuccess } = authSlice.actions;
+export const { clearError, clearSuccessMessage, clearVerification } =
+  authSlice.actions;
 export default authSlice.reducer;

@@ -15,8 +15,9 @@ import { verifyToken } from "./store/slices/authSlice";
 // Auth pages
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import ResetPassword from "./pages/ResetPassword";
+import ResetLink from "./pages/ResetLink";
 import VerifyEmail from "./pages/VerifyEmail";
+import ResetPassword from "./pages/ForgotPassword";
 
 function Layout() {
   const location = useLocation();
@@ -30,7 +31,7 @@ function Layout() {
   }, [dispatch, token, isAuthenticated]);
 
   // Paths where Sidebar should NOT appear
-  const authPaths = ["/login", "/register", "/reset-password", "/confirm_email_address"];
+  const authPaths = ["/login", "/register", "/reset-link", "/confirm_email_address"];
   const isAuthPage = authPaths.includes(location.pathname);
 
   return (
@@ -50,8 +51,9 @@ function Layout() {
           {/* Auth Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-           <Route path="/confirm_email_address" element={<VerifyEmail />} />
+          <Route path="/reset-link" element={<ResetLink />} />
+          <Route path="/confirm_email_address/:token" element={<VerifyEmail />} />
+          <Route path="/resetpassword/:token" element={<ResetPassword />} />
 
           {/* Dashboard/Main Area */}
           <Route

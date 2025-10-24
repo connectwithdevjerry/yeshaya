@@ -1,28 +1,54 @@
-// src/pages/Login.jsx
 import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, Link } from "react-router-dom";
-import { Bot, Eye, EyeOff } from "lucide-react";
+import { Bot, Eye, EyeOff, Mail, AlertCircle } from "lucide-react";
 import { login, clearError } from "../store/slices/authSlice";
 
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { loading, error, isAuthenticated } = useSelector(
+  const { loading, error, isAuthenticated, token, user } = useSelector(
     (state) => state.auth
   );
 
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
+  const [formData, setFormData] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
+  const [alertType, setAlertType] = useState(""); // "activation", "invalid", "server"
 
+  // ✅ Navigate after successful login
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/");
+    if (isAuthenticated && token) {
+      // Save token to sessionStorage (optional)
+      sessionStorage.setItem("token", token);
+      sessionStorage.setItem("user", JSON.stringify(user));
+
+      // Redirect to dashboard or home page
+      navigate("/", { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, token, user, navigate]);
+
+  // ✅ Detect message type for alert styling
+  useEffect(() => {
+    if (typeof error === "string") {
+      const lower = error.toLowerCase();
+      if (lower.includes("activate")) {
+        setAlertType("activation");
+      } else if (
+        lower.includes("invalid") ||
+        lower.includes("incorrect") ||
+        lower.includes("not found") ||
+        lower.includes("wrong") ||
+        lower.includes("email") ||
+        lower.includes("password")
+      ) {
+        setAlertType("invalid");
+      } else {
+        setAlertType("server");
+      }
+    } else {
+      setAlertType("");
+    }
+  }, [error]);
 
   useEffect(() => {
     return () => {
@@ -30,21 +56,61 @@ const Login = () => {
     };
   }, [dispatch]);
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const handleChange = (e) =>
+    setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    dispatch(login(formData));
+    dispatch(clearError());
+    await dispatch(login(formData));
   };
 
-  const handleGoogleLogin = () => {
-    // Implement Google OAuth
-    console.log("Google login not implemented yet");
+  // ✅ Centralized alert rendering
+  const renderAlert = () => {
+    if (!error) return null;
+
+    if (alertType === "activation") {
+      return (
+        <div className="mb-4 p-3 rounded-lg bg-yellow-50 border border-yellow-300 text-yellow-800 text-sm">
+          <div className="flex items-start gap-2">
+            <Mail className="w-5 h-5 mt-0.5" />
+            <div>
+              <p className="font-semibold mb-1">Account Not Activated</p>
+              <p>{error}</p>
+              <p className="text-xs mt-2">
+                Didn’t receive the email?{" "}
+                <Link
+                  to="/reset-password"
+                  className="font-semibold underline hover:no-underline"
+                >
+                  Request a new activation link
+                </Link>
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (alertType === "invalid") {
+      return (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-300 text-red-800 text-sm flex items-center gap-2">
+          <AlertCircle className="w-5 h-5" />
+          <span>{error}</span>
+        </div>
+      );
+    }
+
+    if (alertType === "server") {
+      return (
+        <div className="mb-4 p-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-700 text-sm flex items-center gap-2">
+          <AlertCircle className="w-5 h-5" />
+          <span>{error}</span>
+        </div>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -53,13 +119,7 @@ const Login = () => {
       <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-sm">
         <h2 className="text-xl font-semibold text-center mb-4">Welcome back</h2>
 
-        {error && (
-          <div className="transition-all duration-300 mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-            {typeof error === "string"
-              ? error
-              : error.message || "Login failed"}
-          </div>
-        )}
+        {renderAlert()}
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <input
@@ -89,12 +149,14 @@ const Login = () => {
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
+
           <Link
-            to="/reset-password"
+            to="/reset-link"
             className="text-sm text-sky-600 hover:underline block text-right"
           >
             Forgot Password?
           </Link>
+
           <button
             type="submit"
             disabled={loading}
@@ -102,28 +164,14 @@ const Login = () => {
           >
             {loading ? "Logging in..." : "Log In"}
           </button>
-          <div className="flex items-center justify-center my-2 text-sm text-gray-400">
-            <span>Continue with</span>
-          </div>
-          <button
-            type="button"
-            onClick={handleGoogleLogin}
-            className="w-full border border-gray-300 py-2 rounded-lg flex items-center justify-center hover:bg-gray-100"
-          >
-            <img
-              src="https://www.svgrepo.com/show/475656/google-color.svg"
-              alt="Google"
-              className="w-5 h-5 mr-2"
-            />
-            Continue with Google
-          </button>
+
+          <p className="text-center text-sm text-gray-600 mt-4">
+            New here?{" "}
+            <Link to="/register" className="text-sky-600 hover:underline">
+              Create an account
+            </Link>
+          </p>
         </form>
-        <p className="text-center text-sm text-gray-600 mt-4">
-          New here?{" "}
-          <Link to="/register" className="text-sky-600 hover:underline">
-            Create an account
-          </Link>
-        </p>
       </div>
     </div>
   );
