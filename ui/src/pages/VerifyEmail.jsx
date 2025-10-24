@@ -7,43 +7,77 @@ const VerifyEmail = () => {
   const navigate = useNavigate();
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState("loading"); // 'loading' | 'success' | 'error'
+  const [expired, setExpired] = useState(false);
   const BaseUrl = import.meta.env.VITE_API_BASE_URL;
-
 
   useEffect(() => {
     const verifyEmail = async () => {
       try {
-        const response = await axios.get(
-          `${BaseUrl}/auth/activate/${token}`
-        );
-        console.log("Verification response:", response.data);
-        const successMsg =
-          response.data.message || "Email verified successfully!";
-        setMessage(successMsg);
-        setStatus("success");
+        const response = await axios.get(`${BaseUrl}/auth/activate/${token}`, {
+          headers: { Accept: "application/json" },
+          validateStatus: (status) => status < 500, 
+        });
 
-        // Save token to sessionStorage (optional)
-        if (token) sessionStorage.setItem("token", token);
+        if (
+          response.data &&
+          typeof response.data === "object" &&
+          (response.data.status === true ||
+            response.data.message?.toLowerCase().includes("verified"))
+        ) {
+          setMessage(response.data.message || "Email verified successfully!");
+          setStatus("success");
 
-        // // Redirect after a delay
-        // setTimeout(() => navigate("/"), 3000);
+          // Redirect after delay
+          setTimeout(() => navigate("/login"), 2500);
+        } else {
+          throw new Error("Invalid response or email not verified");
+        }
       } catch (error) {
         console.error("Verification error:", error);
 
-        const errorMsg =
-          error.response?.data?.message ||
-          "Verification failed. The activation link may have expired.";
+        let errorMsg = "Verification failed. The activation link may be invalid.";
+        if (error.response?.data?.message) {
+          errorMsg = error.response.data.message;
+        } else if (
+          typeof error.response?.data === "string" &&
+          error.response.data.includes("<!DOCTYPE html>")
+        ) {
+          // Detected ngrok or HTML response
+          errorMsg = "Invalid server response — please open the link directly or contact support.";
+        }
 
         setMessage(errorMsg);
         setStatus("error");
 
-        // Clear token if it exists
-        sessionStorage.removeItem("token");
+        // Detect expired token
+        if (errorMsg.toLowerCase().includes("expired")) {
+          setExpired(true);
+        } else {
+          setExpired(false);
+        }
       }
     };
 
     if (token) verifyEmail();
   }, [token, navigate]);
+
+  const handleResendLink = async () => {
+    try {
+      setStatus("loading");
+      setMessage("Sending new verification link...");
+
+      const response = await axios.post(`${BaseUrl}/auth/resend-activation`, { token });
+
+      setMessage(response.data.message || "New verification link sent successfully!");
+      setStatus("success");
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        "Unable to resend verification link. Please try again later.";
+      setMessage(errorMsg);
+      setStatus("error");
+    }
+  };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 px-4">
@@ -53,7 +87,9 @@ const VerifyEmail = () => {
             <h2 className="text-2xl font-semibold mb-4 text-gray-800">
               Verifying Your Email...
             </h2>
-            <p className="text-gray-600">Please wait while we confirm your account.</p>
+            <p className="text-gray-600">
+              Please wait while we confirm your account.
+            </p>
           </>
         )}
 
@@ -64,7 +100,7 @@ const VerifyEmail = () => {
             </h2>
             <p className="text-green-600 mb-4">{message}</p>
             <p className="text-gray-500 text-sm">
-              Redirecting you to login page...
+              Redirecting you to the login page...
             </p>
           </>
         )}
@@ -75,12 +111,22 @@ const VerifyEmail = () => {
               Verification Failed
             </h2>
             <p className="text-red-600 mb-4">{message}</p>
-            <button
-              onClick={() => navigate("/forgot-password")}
-              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-            >
-              Reset Link
-            </button>
+
+            {expired ? (
+              <button
+                onClick={handleResendLink}
+                className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              >
+                Click here to request a new link
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate("/reset-link")}
+                className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Reset Password
+              </button>
+            )}
           </>
         )}
       </div>

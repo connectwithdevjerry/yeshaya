@@ -25,7 +25,7 @@ const ResetPassword = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (formData.newPassword !== formData.cNewPassword) {
+    if (formData.newPassword !== formData.cnewPassword) {
       setMessage("Passwords do not match");
       setStatus("error");
       return;
@@ -97,8 +97,8 @@ const ResetPassword = () => {
             </label>
             <input
               type={showPassword ? "text" : "password"}
-              name="cNewPassword"
-              value={formData.cNewPassword}
+              name="cnewPassword"
+              value={formData.cnewPassword}
               onChange={handleChange}
               required
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
