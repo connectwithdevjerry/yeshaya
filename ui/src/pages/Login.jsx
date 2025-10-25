@@ -7,7 +7,7 @@ import { login, clearError } from "../store/slices/authSlice";
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { loading, error, isAuthenticated, token, user } = useSelector(
+  const { loading, error, isAuthenticated, accessToken, user } = useSelector(
     (state) => state.auth
   );
 
@@ -17,15 +17,16 @@ const Login = () => {
 
   // ✅ Navigate after successful login
   useEffect(() => {
-    if (isAuthenticated && token) {
+    if (isAuthenticated && accessToken) {
       // Save token to sessionStorage (optional)
-      sessionStorage.setItem("token", token);
+      sessionStorage.setItem("token", accessToken);
       sessionStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("acces", accessToken);
 
       // Redirect to dashboard or home page
       navigate("/", { replace: true });
     }
-  }, [isAuthenticated, token, user, navigate]);
+  }, [isAuthenticated, accessToken, user, navigate]);
 
   // ✅ Detect message type for alert styling
   useEffect(() => {
@@ -63,9 +64,7 @@ const Login = () => {
     e.preventDefault();
     dispatch(clearError());
     await dispatch(login(formData));
-  };
-
-  // ✅ Centralized alert rendering
+  };  
   const renderAlert = () => {
     if (!error) return null;
 

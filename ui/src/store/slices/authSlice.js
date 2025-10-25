@@ -99,7 +99,7 @@ export const verifyToken = createAsyncThunk(
   async (tokenFromLink, { rejectWithValue }) => {
     try {
       // Use token from link or fallback to localStorage
-      const token = tokenFromLink || localStorage.getItem("token");
+      const token = tokenFromLink || localStorage.getItem("accessToken");
       if (!token) throw new Error("No token found");
 
       // API call — pass token dynamically to your authAPI
@@ -127,8 +127,8 @@ const authSlice = createSlice({
   name: "auth",
   initialState: {
     user: JSON.parse(localStorage.getItem("user")) || null,
-    token: localStorage.getItem("token"),
-    isAuthenticated: !!localStorage.getItem("token"),
+    accessToken: localStorage.getItem("accessToken") || null,
+    isAuthenticated: !!localStorage.getItem("accessToken"),
     loading: false,
     error: null,
     successMessage: null,
@@ -162,7 +162,7 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = null;
         state.isAuthenticated = true;
-        state.token = action.payload.accessToken; // ✅ correct property
+        state.accessToken = action.payload.accessToken;
         state.refreshToken = action.payload.refreshToken || null;
       })
       .addCase(login.pending, (state) => {
@@ -199,7 +199,7 @@ const authSlice = createSlice({
       // LOGOUT
       .addCase(logout.fulfilled, (state) => {
         state.isAuthenticated = false;
-        state.token = null;
+        state.accessToken = null;
         state.refreshToken = null;
         state.error = null;
         state.loading = false;
@@ -210,7 +210,7 @@ const authSlice = createSlice({
       .addCase(logout.rejected, (state, action) => {
         state.loading = false;
         state.isAuthenticated = false; // still force logout locally
-        state.token = null;
+        state.accessToken = null;
         state.refreshToken = null;
         state.error = action.payload;
       })
@@ -243,7 +243,7 @@ const authSlice = createSlice({
         state.verification.success = true;
         state.isAuthenticated = true;
         state.user = action.payload.user;
-        state.token = action.payload.token;
+        state.accessToken = action.payload.token;
         state.verification.error = null;
       })
       .addCase(verifyToken.rejected, (state, action) => {
@@ -252,7 +252,7 @@ const authSlice = createSlice({
         state.verification.error = action.payload;
         state.isAuthenticated = false;
         state.user = null;
-        state.token = null;
+        state.accessToken = null;
       });
   },
 });

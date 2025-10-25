@@ -61,24 +61,6 @@ const VerifyEmail = () => {
     if (token) verifyEmail();
   }, [token, navigate]);
 
-  const handleResendLink = async () => {
-    try {
-      setStatus("loading");
-      setMessage("Sending new verification link...");
-
-      const response = await axios.post(`${BaseUrl}/auth/resend-activation`, { token });
-
-      setMessage(response.data.message || "New verification link sent successfully!");
-      setStatus("success");
-    } catch (error) {
-      const errorMsg =
-        error.response?.data?.message ||
-        "Unable to resend verification link. Please try again later.";
-      setMessage(errorMsg);
-      setStatus("error");
-    }
-  };
-
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 px-4">
       <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md text-center">
@@ -114,7 +96,7 @@ const VerifyEmail = () => {
 
             {expired ? (
               <button
-                onClick={handleResendLink}
+                onClick={() => navigate("/reset-link")}
                 className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
               >
                 Click here to request a new link

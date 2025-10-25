@@ -7,6 +7,8 @@ import Integrations from "./pages/Integrations";
 import Rebilling from "./pages/Rebilling";
 import Settings from "./pages/Settings";
 import SubAccounts from "./pages/SubAccounts";
+import GHLConnectionSuccess from "./pages/ghl/Sucess";
+import GHLConnectionFailed from "./pages/ghl/Failure";
 
 export default function MainContent() {
   const location = useLocation();
@@ -34,6 +36,8 @@ export default function MainContent() {
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/rebilling" element={<Rebilling />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/connection-success" element={<GHLConnectionSuccess />} />
+          <Route path="/connection-failed" element={<GHLConnectionFailed />} />
         </Routes>
       </main>
     </div>

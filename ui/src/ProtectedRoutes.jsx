@@ -6,19 +6,19 @@ import { verifyToken } from "./store/slices/authSlice";
 const ProtectedRoute = ({ children }) => {
   const dispatch = useDispatch();
   const location = useLocation();
-  const { isAuthenticated, loading, token } = useSelector((state) => state.auth);
+  const { isAuthenticated, loading, accessToken } = useSelector((state) => state.auth);
 
   const hasVerified = useRef(false);
 
   useEffect(() => {
-    if (!hasVerified.current && token && token.trim() !== "" && !isAuthenticated) {
+    if (!hasVerified.current && accessToken && accessToken.trim() !== "" && !isAuthenticated) {
       hasVerified.current = true;
       dispatch(verifyToken());
     }
-  }, [dispatch, token, isAuthenticated]);
+  }, [dispatch, accessToken, isAuthenticated]);
 
 
-  if (!token || token.trim() === "") {
+  if (!accessToken || accessToken.trim() === "") {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

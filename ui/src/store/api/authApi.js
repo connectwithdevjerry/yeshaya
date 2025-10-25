@@ -11,16 +11,16 @@ export const authAPI = {
   },
 
   logout: () => {
-    return apiClient.del('/auth/logout');
+    return apiClient.delete('/auth/logout');
   },
 
   resetPassword: (email) => {
     return apiClient.post('/auth/forgot_password', { email });
   },
 
-  verifyToken: (token) => {
-    return apiClient.get(`/auth/activate/${token}`, {
-      headers: { Authorization: `Bearer ${token}` },
+  verifyToken: (accessToken) => {
+    return apiClient.get(`/auth/activate/${accessToken}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
   },
 
