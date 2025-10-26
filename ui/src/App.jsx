@@ -44,7 +44,7 @@ function Layout() {
       {/* Main Area */}
       <div
         className={`flex-1 ${
-          !isAuthPage && isAuthenticated ? "ml-64" : ""
+          !isAuthPage && isAuthenticated ? "" : ""
         } overflow-y-auto`}
       >
         <Routes>

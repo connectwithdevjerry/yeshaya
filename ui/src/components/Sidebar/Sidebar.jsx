@@ -5,7 +5,7 @@ import { BottomInfo } from './BottomInfo';
 
 export function Sidebar({ userInfo, navigationItems }) {
   return (
-    <div className="w-64 h-screen fixed left-0 top-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
+    <div className=" w-56 h-screen left-0 top-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
       <UserProfile name={userInfo.name} users={userInfo.users} />
       
       <nav className="flex-1 p-4 space-y-1">

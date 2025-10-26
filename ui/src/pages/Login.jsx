@@ -24,7 +24,7 @@ const Login = () => {
       localStorage.setItem("acces", accessToken);
 
       // Redirect to dashboard or home page
-      navigate("/", { replace: true });
+      navigate("/dashboard", { replace: true });
     }
   }, [isAuthenticated, accessToken, user, navigate]);
 

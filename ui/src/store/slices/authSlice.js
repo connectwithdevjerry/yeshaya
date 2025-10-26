@@ -95,17 +95,13 @@ export const resetPassword = createAsyncThunk(
 );
 
 export const verifyToken = createAsyncThunk(
-  "auth/verifyToken", // 👈 Action type name (not the API URL)
+  "auth/verifyToken",
   async (tokenFromLink, { rejectWithValue }) => {
     try {
-      // Use token from link or fallback to localStorage
+      
       const token = tokenFromLink || localStorage.getItem("accessToken");
       if (!token) throw new Error("No token found");
-
-      // API call — pass token dynamically to your authAPI
       const response = await authAPI.verifyToken(token);
-
-      // Save verified token in localStorage
       localStorage.setItem("token", response.data.token);
 
       return response.data;
@@ -183,7 +179,7 @@ const authSlice = createSlice({
       })
       .addCase(register.fulfilled, (state) => {
         state.loading = false;
-        state.isAuthenticated = false; // don't authenticate until verified
+        state.isAuthenticated = false;
         state.registrationSuccess = true;
         state.successMessage =
           "Registration successful! Please check your email to activate your account.";
@@ -209,7 +205,7 @@ const authSlice = createSlice({
       })
       .addCase(logout.rejected, (state, action) => {
         state.loading = false;
-        state.isAuthenticated = false; // still force logout locally
+        state.isAuthenticated = false; 
         state.accessToken = null;
         state.refreshToken = null;
         state.error = action.payload;

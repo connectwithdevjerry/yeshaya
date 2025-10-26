@@ -2,8 +2,10 @@
 
 import React from 'react';
 import Card from '../ui/Card';
+import { useNavigate } from 'react-router-dom';
 
 const AccountSettings = () => {
+  const navigate = useNavigate();
   return (
     <>
       <Card>
@@ -73,7 +75,7 @@ const AccountSettings = () => {
             </label>
             <p id="password" className="text-gray-600 text-base">************</p>
           </div>
-          <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md shadow-sm hover:bg-gray-200 transition-colors">
+          <button onClick={() => navigate("/reset-link")}  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md shadow-sm hover:bg-gray-200 transition-colors">
             Reset Password
           </button>
         </div>

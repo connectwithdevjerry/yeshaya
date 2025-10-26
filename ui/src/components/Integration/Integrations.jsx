@@ -2,7 +2,11 @@ import React from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { ChevronRight } from "lucide-react";
 import Card from "../ui/Card";
-import { connectGoHighLevel } from "../../store/slices/integrationSlice";
+import {
+  connectGoHighLevel,
+  connectStripe,
+  connectOpenAI,
+} from "../../store/slices/integrationSlice";
 
 const IntegrationItem = ({
   name,
@@ -41,7 +45,9 @@ const IntegrationItem = ({
 
 const IntegrationsContent = () => {
   const dispatch = useDispatch();
-  const integrations = useSelector((state) => state.integrations);
+  const { goHighLevel, stripe, openAI } = useSelector(
+    (state) => state.integrations || {}
+  );
 
   return (
     <Card>
@@ -49,21 +55,27 @@ const IntegrationsContent = () => {
         name="GoHighLevel"
         image_url="https://canny-assets.io/icons/5b918f2630865c174eaa9483fdedac22.png"
         description="Connect GoHighLevel to import your sub-accounts, manage connections & more"
-        isConnected={integrations.goHighLevel.connected}
-        loading={integrations.goHighLevel.loading}
+        isConnected={goHighLevel?.connected}
+        loading={goHighLevel?.loading}
         onClick={() => dispatch(connectGoHighLevel())}
       />
+
       <IntegrationItem
         name="OpenAI"
-        image_url="https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg?c=1bxid64Mup7aczewSAYMX&t=1749527355219"
+        image_url="https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg"
         description="Connect OpenAI to use our assistant / agent framework using your own keys"
-        isConnected={integrations.openAI.connected}
+        isConnected={openAI?.connected}
+        loading={openAI?.loading}
+        onClick={() => dispatch(connectOpenAI())}
       />
+
       <IntegrationItem
         name="Stripe"
         image_url="https://freelogopng.com/images/all_img/1685814539stripe-icon-png.png"
         description="Connect Stripe to re-bill or resell AI voice minutes using your own Stripe"
-        isConnected={integrations.stripe.connected}
+        isConnected={stripe?.connected}
+        loading={stripe?.loading}
+        onClick={() => dispatch(connectStripe())}
       />
     </Card>
   );

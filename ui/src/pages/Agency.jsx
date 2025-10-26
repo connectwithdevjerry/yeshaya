@@ -17,7 +17,7 @@ function Agency() {
   const [activeTab, setActiveTab] = useState("branding");
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 md:p-10">
+    <div className=" bg-gray-50 p-6 md:p-10">
       <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-sm">
         {/* Tabs */}
         <div className="border-b flex flex-wrap">

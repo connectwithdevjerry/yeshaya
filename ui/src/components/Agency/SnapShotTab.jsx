@@ -25,7 +25,7 @@ export default function SnapshotSettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8 text-gray-800">
+    <div className=" bg-gray-50 p-4 md:p-8 text-gray-800">
       <h1 className="text-sm font-semibold text-gray-500 mb-2">
         SNAPSHOT FOR NEW ACCOUNTS
       </h1>
