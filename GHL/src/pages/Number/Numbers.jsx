@@ -1,9 +1,9 @@
 // src/pages/NumbersPage.jsx
 import React, { useState } from 'react';
 import { Search, ChevronLeft, ChevronRight, Ban, Home, Upload, ShoppingCart } from 'lucide-react';
-import TabButton from '../components/TabButton';
-import ImportNumberModal from '../components/Numbers/ImportNumber';
-import BuyNumberModal from '../components/Numbers/BuyNumber';
+import TabButton from '../../components/TabButton';
+import ImportNumberModal from '../../components/Numbers/ImportNumber';
+import BuyNumberModal from '../../components/Numbers/BuyNumber';
 const numbers = [];
 
 const Numbers = () => {
@@ -14,7 +14,7 @@ const Numbers = () => {
   const headers = ['NAME', 'NUMBER', 'UPDATED', 'REPUTATION', 'VERIFIED', 'CALLER ID', 'LINKED ASSISTANT'];
 
   return (
-    <div className="flex-grow min-h-screen bg-gray-50 p-8">
+    <div className="flex-grow bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
         
 

@@ -3,7 +3,7 @@ import React from 'react';
 const Integration = () => {
 
   return (
-   <div className="bg-slate-50 min-h-screen p-8 font-sans">
+   <div className="bg-slate-50 p-8 font-sans">
       
       {/* Main Card Container */}
       <div className="max-w-4xl bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">

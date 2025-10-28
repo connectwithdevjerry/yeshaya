@@ -28,7 +28,7 @@ const MembersSettings = () => {
   ];
 
   return (
-    <div className="bg-slate-50 w-[800px] min-h-screen font-sans">
+    <div className="bg-slate-50 w-[800px] font-sans">
       <Card>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Members</h2>

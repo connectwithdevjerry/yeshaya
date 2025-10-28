@@ -60,7 +60,10 @@ export const navigationItems = [
   {
     name: "Numbers",
     icon: "numbers",
-    link: "/numbers",
+    children: [
+      { name: 'Numbers', link: '/numbers' },
+      { name: 'Pools', link: '/pools' }
+    ]
   },
   {
     name: "Widgets",

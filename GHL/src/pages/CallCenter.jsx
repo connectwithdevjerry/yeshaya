@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import HeaderFilters from "../components/CallCenter/HeadFilters";
 import MetricCard from "../components/CallCenter/MetricCard";
-import SummaryStats from "../components/CallCenter/SummaryStats";
 import { dummyCallData } from "../data/accountsData";
 import {
   Phone,
@@ -19,7 +18,11 @@ import {
   Wallet,
 } from "lucide-react";
 import DownloadContact from "../components/CallCenter/DownloadContact";
+import FunnelChart from "../components/CallCenter/BigCards";
 import BigCards from "../components/CallCenter/BigCards";
+import FunnelVisual from "../components/CallCenter/FunnelChart";
+import PieChartsDashboard from "../components/CallCenter/PieChartDashboard";
+import CallCharts from "../components/CallCenter/CallsChart";
 
 const CallDashboard = () => {
   const [data, setData] = useState({});
@@ -141,7 +144,7 @@ const CallDashboard = () => {
   ];
 
   return (
-    <div className="bg-gray-50 min-h-screen">
+    <div className="bg-gray-50">
       {/* Top Buttons */}
       <div className="flex bg-white p-3 gap-4">
         <button
@@ -178,8 +181,12 @@ const CallDashboard = () => {
               <MetricCard key={i} {...m} />
             ))}
           </div>
-          <SummaryStats data={data} />
-          <BigCards />
+          <div className="flex flex-col  gap-4 mb-8">
+            <FunnelVisual />
+            <PieChartsDashboard />
+            {/* <BigCards /> */}
+            <CallCharts />
+          </div>
         </div>
       )}
 

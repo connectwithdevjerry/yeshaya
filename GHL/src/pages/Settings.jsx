@@ -40,7 +40,7 @@ const Settings = () => {
   }
 
   return (
-    <div className="min-h-screen  bg-gray-50">
+    <div className=" bg-gray-50">
       <div className=" mx-auto">
         {/* Top-level Tabs Navigation */}
         <div className="flex space-x-2 mb-6 py-3 bg-white">
