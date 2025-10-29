@@ -7,17 +7,22 @@ import {
   Menu,
   Settings,
   ArrowLeft,
+  Tags,
+  Pencil,
+  Sparkle,
 } from "lucide-react";
 import { ChatLabView } from "./ChatLab";
 import { VoiceLabView } from "./VoiceLab";
 import { ToolkitSidebar } from "./AssistantSidebar";
+import { GeneratePromptModal } from "./GeneratePromptModal";
+import DynamicGreetingModal from "./DynamicGreetingModal";
 
 const TabButton = ({ text, isActive, onClick }) => (
   <button
     onClick={onClick}
-    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-200 ${
+    className={`px-4 py-2 text-sm font-medium border-2 transition-colors duration-200 ${
       isActive
-        ? "border-blue-600 text-blue-600"
+        ? "border-gray-300 text-black font-bold rounded-md text-[15px]"
         : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
     }`}
   >
@@ -27,15 +32,23 @@ const TabButton = ({ text, isActive, onClick }) => (
 
 export const GlobalPromptEditor = () => {
   const [activeTab, setActiveTab] = useState("Builder");
-  const [promptContent, setPromptContent] = useState("Enter your prompt here...");
+  const [promptContent, setPromptContent] = useState(
+    "Enter your prompt here..."
+  );
   const [isToolkitOpen, setIsToolkitOpen] = useState(true);
-
+  const [isGeneratePromptModalOpen, setIsGeneratePromptModalOpen] =
+    useState(false);
+  const [isDynamicGreetingModalOpen, setIsDynamicGreetingModalOpen] =
+    useState(false);
   const maxChars = 8024;
   const charCount = promptContent.length;
 
   const toggleToolkit = () => setIsToolkitOpen((prev) => !prev);
+  const openGeneratePromptModal = () => setIsGeneratePromptModalOpen(true);
+  const closeGeneratePromptModal = () => setIsGeneratePromptModalOpen(false);
+  const openDynamicGreetingModal = () => setIsDynamicGreetingModalOpen(true);
+  const closeDynamicGreetingModal = () => setIsDynamicGreetingModalOpen(false);
 
-  // Close sidebar automatically when switching away from Builder
   useEffect(() => {
     if (activeTab !== "Builder") {
       setIsToolkitOpen(false);
@@ -57,18 +70,33 @@ export const GlobalPromptEditor = () => {
               <span className="text-sm font-normal text-gray-500">
                 {charCount} / {maxChars}
               </span>
-              <HelpCircle className="w-4 h-4 text-gray-400 cursor-pointer" title="Help" />
+              <HelpCircle
+                className="w-4 h-4 text-gray-400 cursor-pointer"
+                title="Help"
+              />
             </h2>
 
             <div className="flex items-center space-x-4 text-sm text-blue-600">
-              <button className="flex items-center space-x-1 hover:underline">
+              <button
+                className="flex items-center space-x-1 hover:underline"
+                onClick={openDynamicGreetingModal} 
+              >
                 <X className="w-3 h-3" />
                 <span>Dynamic Greeting</span>
               </button>
-              <button className="hover:underline">Fields & Values</button>
-              <button className="hover:underline">Add Snippet</button>
-              <button className="flex items-center space-x-1 hover:underline">
-                <ChevronsRight className="w-4 h-4" />
+              <button className="hover:underline flex items-center gap-1">
+                {" "}
+                <Tags size={15} /> Fields & Values
+              </button>
+              <button className="hover:underline  flex items-center gap-1">
+                {" "}
+                <Pencil size={15} /> Add Snippet
+              </button>
+              <button
+                className="flex items-center space-x-1 hover:underline"
+                onClick={openGeneratePromptModal} // Added onClick to open modal
+              >
+                <Sparkle className="w-4 h-4" />
                 <span>Generate Prompt</span>
               </button>
             </div>
@@ -122,10 +150,16 @@ export const GlobalPromptEditor = () => {
             >
               <ToolCase className="w-5 h-5" />
             </button>
-            <button className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100" title="Menu">
+            <button
+              className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+              title="Menu"
+            >
               <Menu className="w-5 h-5" />
             </button>
-            <button className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100" title="Settings">
+            <button
+              className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+              title="Settings"
+            >
               <Settings className="w-5 h-5" />
             </button>
           </div>
@@ -144,6 +178,15 @@ export const GlobalPromptEditor = () => {
           <ArrowLeft className="w-5 h-5" />
         </button>
       )}
+
+      <GeneratePromptModal
+        isOpen={isGeneratePromptModalOpen}
+        onClose={closeGeneratePromptModal}
+      />
+      <DynamicGreetingModal
+        isOpen={isDynamicGreetingModalOpen}
+        onClose={closeDynamicGreetingModal}
+      />
     </div>
   );
 };
