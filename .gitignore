@@ -15,4 +15,5 @@
 /GHL/node_modules
 /server/node_modules
 /server/.env
+/client
 >>>>>>> refs/remotes/origin/master

@@ -12,6 +12,7 @@ import Widgets from "./pages/Widgets";
 import Settings from "./pages/Settings";
 import Helps from "./pages/Helps";
 import { NumberPool } from "./pages/Number/Pools";
+import { AssistantBuilderPage } from "./components/AssistantsBuilder/AssistantsBuilder";
 
 
 export default function MainContent() {
@@ -23,6 +24,7 @@ export default function MainContent() {
     "/contacts": "Contacts",
     "/knowledge": "Knowledge",
     "/assistants": "Assistants",
+    "/assistants/:id": "Assistants",
     "/activetags": "Active Tags",
     "/numbers": "Numbers",
     "/pools": "Numbers",
@@ -31,7 +33,7 @@ export default function MainContent() {
     "/helps": "Helps",
   };
 
-  const currentTitle = pageTitles[location.pathname] || "Accounts";
+const currentTitle = pageTitles[location.pathname];
 
   return (
     <div className="flex flex-col flex-1">
@@ -53,6 +55,7 @@ export default function MainContent() {
           <Route path="/widgets" element={<Widgets />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/helps" element={<Helps />} />
+          <Route path="assistants/:id" element={<AssistantBuilderPage />} />
         </Routes>
       </main>
     </div>
