@@ -3,19 +3,22 @@ import {
   HelpCircle,
   ChevronsRight,
   X,
-  ToolCase,
-  Menu,
+  Phone,
+  Tag,
   Settings,
   ArrowLeft,
   Tags,
   Pencil,
   Sparkle,
+  Volume2,
 } from "lucide-react";
 import { ChatLabView } from "./ChatLab";
 import { VoiceLabView } from "./VoiceLab";
 import { ToolkitSidebar } from "./AssistantSidebar";
 import { GeneratePromptModal } from "./GeneratePromptModal";
 import DynamicGreetingModal from "./DynamicGreetingModal";
+import { useNavigate } from "react-router-dom";
+import { VoiceMenuDrawer } from "./VoiceMenu";
 
 const TabButton = ({ text, isActive, onClick }) => (
   <button
@@ -42,12 +45,16 @@ export const GlobalPromptEditor = () => {
     useState(false);
   const maxChars = 8024;
   const charCount = promptContent.length;
+  const navigate = useNavigate();
 
   const toggleToolkit = () => setIsToolkitOpen((prev) => !prev);
   const openGeneratePromptModal = () => setIsGeneratePromptModalOpen(true);
   const closeGeneratePromptModal = () => setIsGeneratePromptModalOpen(false);
   const openDynamicGreetingModal = () => setIsDynamicGreetingModalOpen(true);
   const closeDynamicGreetingModal = () => setIsDynamicGreetingModalOpen(false);
+  const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
+  const openVoiceMenu = () => setIsVoiceMenuOpen(true);
+  const closeVoiceMenu = () => setIsVoiceMenuOpen(false);
 
   useEffect(() => {
     if (activeTab !== "Builder") {
@@ -79,7 +86,7 @@ export const GlobalPromptEditor = () => {
             <div className="flex items-center space-x-4 text-sm text-blue-600">
               <button
                 className="flex items-center space-x-1 hover:underline"
-                onClick={openDynamicGreetingModal} 
+                onClick={openDynamicGreetingModal}
               >
                 <X className="w-3 h-3" />
                 <span>Dynamic Greeting</span>
@@ -138,30 +145,54 @@ export const GlobalPromptEditor = () => {
         </div>
 
         {/* Right Controls */}
-        <div className="flex items-center space-x-3 bg-white border border-gray-200 rounded-lg px-3 py-2">
-          <span className="text-sm font-mono text-gray-700 truncate max-w-[200px]">
-            1761056664694×928651361970399400
-          </span>
-          <div className="flex items-center space-x-2">
-            <button
-              className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
-              onClick={toggleToolkit}
-              title="Open Toolkit"
-            >
-              <ToolCase className="w-5 h-5" />
-            </button>
-            <button
-              className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
-              title="Menu"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <button
-              className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
-              title="Settings"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
+        <div className="flex gap-2 items-center">
+          <div
+            onClick={() => navigate("/activetags")}
+            className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer"
+          >
+            <Tag className="w-4 h-4 text-gray-400" />
+            <span className="text-sm font-mono text-gray-700 truncate max-w-[140px]">
+              1761056664694×928651361970399400
+            </span>
+            <div className="flex items-center space-x-2">
+              <button
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                title="Settings"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div
+            onClick={() => navigate("/numbers")}
+            className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer"
+          >
+            <Phone className="w-4 h-4 text-gray-400" />
+            <span className="text-sm font-mono text-gray-700 truncate max-w-[120px]">
+              +1222342743
+            </span>
+            <div className="flex items-center space-x-2">
+              <button
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                title="Settings"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div onClick={openVoiceMenu} className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
+            <Volume2 className="w-4 h-4 text-gray-400" />
+            <span className="text-sm font-mono text-gray-700 truncate max-w-[150px]">
+              Marrisa
+            </span>
+            <div className="flex items-center space-x-2">
+              <button
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                title="Settings"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -187,6 +218,7 @@ export const GlobalPromptEditor = () => {
         isOpen={isDynamicGreetingModalOpen}
         onClose={closeDynamicGreetingModal}
       />
+      <VoiceMenuDrawer isOpen={isVoiceMenuOpen} onClose={closeVoiceMenu} />
     </div>
   );
 };
