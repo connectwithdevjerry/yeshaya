@@ -18,17 +18,20 @@ import {
 } from "lucide-react";
 
 import FolderModal from "../../components/components-ui/Modals/FolderModal";
+import { AccountDetailSidebar } from "../../components/components-ui/Modals/AccountDetailSidebar";
 
 function SubAccounts() {
   const [activeTab, setActiveTab] = useState("All");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState(null);
   const dropdownRef = useRef(null); 
 
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsDropdownOpen(false); // Close dropdown if click is outside
+        setIsDropdownOpen(false); 
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -59,6 +62,15 @@ function SubAccounts() {
   const filtered =
     activeTab === "All" ? accounts : accounts.filter(() => false);
 
+    const handleAccountClick = (account) => {
+    setSelectedAccount(account);
+    setIsSidebarOpen(true);
+  };
+  
+  const handleCloseSidebar = () => {
+    setIsSidebarOpen(false);
+    setSelectedAccount(null); 
+  }
 
   const DropdownItem = ({ icon: Icon, text }) => (
     <li>
@@ -172,6 +184,7 @@ function SubAccounts() {
                 <tr
                   key={acc.id}
                   className="border-b hover:bg-gray-50 transition-colors"
+                  onClick={() => handleAccountClick(acc)}
                 >
                   <td className="p-3 align-middle">
                     <div className="flex items-center">
@@ -235,6 +248,12 @@ function SubAccounts() {
       <FolderModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+      />
+
+      <AccountDetailSidebar
+        isOpen={isSidebarOpen}
+        onClose={handleCloseSidebar}
+        account={selectedAccount}
       />
     </div>
   );

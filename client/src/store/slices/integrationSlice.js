@@ -67,7 +67,7 @@ export const connectOpenAI = createAsyncThunk(
         return { status: "redirecting" };
       }
 
-      console.log("OpenAI Response:", response.data);
+      console.log("OpenAI Response:", response.data); 
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);
