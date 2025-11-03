@@ -9,10 +9,14 @@ export const connectGoHighLevel = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const token =
-        sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
-      const response = await axios.get(`${BaseUrl}/integrations/ghl/authorize`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        sessionStorage.getItem("accessToken") ||
+        localStorage.getItem("accessToken");
+      const response = await axios.get(
+        `${BaseUrl}/integrations/ghl/authorize`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
       if (response.data?.authUrl) {
         window.location.href = response.data.authUrl;
@@ -33,13 +37,17 @@ export const connectStripe = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const token =
-        sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
-      const response = await axios.get(`${BaseUrl}/integrations/stripe/authorize`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        sessionStorage.getItem("accessToken") ||
+        localStorage.getItem("accessToken");
+      const response = await axios.get(
+        `${BaseUrl}/integrations/stripe/authorize`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-      if (response.data?.authUrl) {
-        window.location.href = response.data.authUrl;
+      if (response.data?.authorizeUrl) {
+        window.location.href = response.data.authorizeUrl;
         return { status: "redirecting" };
       }
       console.log("Stripe Response:", response.data);
@@ -53,22 +61,31 @@ export const connectStripe = createAsyncThunk(
 // 🔹 OpenAI
 export const connectOpenAI = createAsyncThunk(
   "integrations/connectOpenAI",
-  async (_, { rejectWithValue }) => {
+  async (apiKey, { rejectWithValue }) => {
+    const token =
+      sessionStorage.getItem("accessToken") ||
+      localStorage.getItem("accessToken");
+
     try {
-      const token =
-        sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
-      const response = await axios.get(`${BaseUrl}/integrations/connect/openai`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await axios.post(
+        `${BaseUrl}/integrations/connect/openai`,
+        { apiKey },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      if (response.data?.authUrl) {
-        window.location.href = response.data.authUrl;
-        return { status: "redirecting" };
-      }
-
-      console.log("OpenAI Response:", response.data); 
+      console.log("✅ OpenAI Response:", response.data);
       return response.data;
     } catch (error) {
+      console.error("❌ OpenAI Connection Failed:", {
+        message: error.message,
+        response: error.response?.data,
+      });
+
       return rejectWithValue(error.response?.data || error.message);
     }
   }
@@ -130,13 +147,14 @@ const integrationSlice = createSlice({
       })
       .addCase(connectOpenAI.fulfilled, (state, action) => {
         state.openAI.loading = false;
-        state.openAI.connected =
-          action.payload?.status === "connected" ||
-          action.payload?.status === "redirecting";
+        state.openAI.connected = !!action.payload?.status; 
+        state.openAI.message = action.payload?.message || "Connected successfully";
+        state.openAI.error = null;
       })
       .addCase(connectOpenAI.rejected, (state, action) => {
         state.openAI.loading = false;
-        state.openAI.error = action.payload || "Connection failed";
+        state.openAI.error =
+          action.payload?.message || action.payload || "Connection failed";
       });
   },
 });

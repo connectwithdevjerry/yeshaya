@@ -100,7 +100,7 @@ export default function MainContent() {
           <Route path="/connection-failed" element={<GHLConnectionFailed />} />
           <Route
             path="/payment/connection-success/:message"
-            element={<StripeConnectionSuccess />}
+            element={<GHLConnectionSuccess/>}
           />
           <Route
             path="/payment/connection-failed/:message"
