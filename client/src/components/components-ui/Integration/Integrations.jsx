@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useState} from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { ChevronRight } from "lucide-react";
 import Card from "../ui/Card";
@@ -7,6 +7,7 @@ import {
   connectStripe,
   connectOpenAI,
 } from "../../../store//slices/integrationSlice";
+import OpenAIConnectModal from "./OpenAiConnectModal";
 
 const IntegrationItem = ({
   name,
@@ -48,6 +49,7 @@ const IntegrationsContent = () => {
   const { goHighLevel, stripe, openAI } = useSelector(
     (state) => state.integrations || {}
   );
+  const [isOpenAIConnectOpen, setIsOpenAIConnectOpen] = useState(false)
 
   return (
     <Card>
@@ -66,7 +68,7 @@ const IntegrationsContent = () => {
         description="Connect OpenAI to use our assistant / agent framework using your own keys"
         isConnected={openAI?.connected}
         loading={openAI?.loading}
-        onClick={() => dispatch(connectOpenAI())}
+        onClick={() => setIsOpenAIConnectOpen(true)}
       />
 
       <IntegrationItem
@@ -76,6 +78,11 @@ const IntegrationsContent = () => {
         isConnected={stripe?.connected}
         loading={stripe?.loading}
         onClick={() => dispatch(connectStripe())}
+      />
+
+       <OpenAIConnectModal
+        isOpen={isOpenAIConnectOpen}
+        onClose={() => setIsOpenAIConnectOpen(false)}
       />
     </Card>
   );
