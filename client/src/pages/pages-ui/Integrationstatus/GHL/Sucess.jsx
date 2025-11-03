@@ -6,7 +6,7 @@ const GHLConnectionSuccess = () => {
     const navigate = useNavigate();
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-green-50 text-center">
+    <div className="flex flex-col items-center justify-center bg-green-50 text-center">
       <CheckCircle className="text-green-600 w-16 h-16 mb-4" />
       <h1 className="text-2xl font-semibold text-green-700 mb-2">
         Connection Successful 🎉

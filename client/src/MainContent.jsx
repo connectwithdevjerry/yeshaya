@@ -96,7 +96,7 @@ export default function MainContent() {
           <Route path="/ghl_settings" element={<GHLSettings />} />
 
           {/* --- Integration Status Routes --- */}
-          <Route path="/connection-success" element={<GHLConnectionSuccess />} />
+          <Route path="/connection-success/:message" element={<GHLConnectionSuccess />} />
           <Route path="/connection-failed" element={<GHLConnectionFailed />} />
           <Route
             path="/payment/connection-success/:message"

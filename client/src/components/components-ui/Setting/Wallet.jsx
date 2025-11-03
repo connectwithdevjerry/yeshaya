@@ -22,23 +22,14 @@ import WalletBalanceCard from "./Wallet/WalletBalanceCard";
 import AutopayToggle from "./Wallet/AutopayToggle";
 import TransactionRow from "./Wallet/TransactionRow";
 
-
-// --- Main Component ---
-
 const WalletUsageContent = () => {
-  // Mock Data
-
   return (
     <Card>
-      {/* Top Section: Cards, Autopay, Actions */}
       <div className="flex flex-wrap lg:flex-nowrap gap-6 mb-8">
-        {/* Card Widgets */}
         <div className="flex flex-col sm:flex-row gap-4 flex-shrink-0">
           <PaymentCardWidget />
-          {/* <WalletBalanceCard balance={9.0} /> */}
         </div>
 
-        {/* Autopay & Actions */}
         <div className="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-6">
           <AutopayToggle />
 
@@ -71,15 +62,12 @@ const WalletUsageContent = () => {
         </div>
       </div>
 
-      {/* Transaction History Header */}
       <h3 className="text-xl font-semibold text-gray-800 mb-4 pt-4 border-t">
         Transaction History
       </h3>
 
-      {/* Filters and Search */}
       <div className="flex flex-wrap items-center justify-between mb-4 space-y-2 sm:space-y-0">
         <div className="flex items-center space-x-2">
-          {/* Date Range Picker (Mockup) */}
           <div className="flex items-center space-x-1 p-2 border border-gray-300 rounded-md text-sm text-gray-700">
             <Calendar className="w-4 h-4" />
             <span>10/05/2025</span>
@@ -98,7 +86,7 @@ const WalletUsageContent = () => {
               className="pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm w-full sm:w-64"
             />
           </div>
-          {/* Filter Dropdown */}
+
           <div className="relative">
             <select className="pl-3 pr-8 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
               <option>No filter</option>
@@ -108,7 +96,6 @@ const WalletUsageContent = () => {
         </div>
       </div>
 
-      {/* Transaction Table Header */}
       <div className="grid grid-cols-[1fr_0.8fr_0.8fr_0.5fr] gap-4 py-3 border-b text-sm font-medium text-gray-500 uppercase tracking-wider">
         <div>Description</div>
         <div>Status</div>
@@ -116,14 +103,12 @@ const WalletUsageContent = () => {
         <div className="text-right">Amount</div>
       </div>
 
-      {/* Transaction Rows */}
       <div>
         {transactionData.map((tx, index) => (
           <TransactionRow key={index} {...tx} />
         ))}
       </div>
 
-      {/* Pagination */}
       <div className="flex justify-between items-center pt-4 mt-4 border-t">
         <div className="flex items-center space-x-2 text-sm text-gray-700">
           <span>10</span>

@@ -10,7 +10,7 @@ export const connectGoHighLevel = createAsyncThunk(
     try {
       const token =
         sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
-      const response = await axios.get(`${BaseUrl}/auth/ghl/authorize`, {
+      const response = await axios.get(`${BaseUrl}/integrations/ghl/authorize`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -42,7 +42,6 @@ export const connectStripe = createAsyncThunk(
         window.location.href = response.data.authUrl;
         return { status: "redirecting" };
       }
-
       console.log("Stripe Response:", response.data);
       return response.data;
     } catch (error) {
