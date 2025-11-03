@@ -25,6 +25,7 @@ const GET_ASSISTANTS = "/get-all";
 const UPDATE_ASSISTANT = "/update";
 const GENERATE_PROMPT = "/generate-prompt";
 const GET_GHL_SUB_ACCOUNTS = "/get-subaccounts";
+const CHECK_INTEGRATION_STATUS = "/status";
 
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
@@ -57,4 +58,5 @@ module.exports = {
   UPDATE_ASSISTANT,
   GENERATE_PROMPT,
   GET_GHL_SUB_ACCOUNTS,
+  CHECK_INTEGRATION_STATUS,
 };

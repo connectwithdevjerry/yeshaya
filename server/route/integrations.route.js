@@ -12,6 +12,7 @@ const {
   importGhlSubaccounts,
   importGhlSubaccount,
   callGetSubaccounts,
+  checkIntegrationStatus,
   // admin_super_signup,
 } = require("../controller/integrations.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
@@ -28,6 +29,7 @@ const {
   IMPORT_GHL_SUB_ACCOUNTS,
   IMPORT_GHL_SUB_ACCOUNT,
   GET_GHL_SUB_ACCOUNTS,
+  CHECK_INTEGRATION_STATUS
 } = require("../constants");
 
 router.get(GHL_AUTHORIZE, verifyAccessToken, ghlAuthorize);
@@ -41,5 +43,6 @@ router.post(CHARGE_CUSTOMER, verifyAccessToken, chargeUserCustomers);
 router.post(IMPORT_GHL_SUB_ACCOUNT, verifyAccessToken, importGhlSubaccount);
 router.post(IMPORT_GHL_SUB_ACCOUNTS, verifyAccessToken, importGhlSubaccounts);
 router.get(GET_GHL_SUB_ACCOUNTS, verifyAccessToken, callGetSubaccounts);
+router.get(CHECK_INTEGRATION_STATUS, verifyAccessToken, checkIntegrationStatus);
 
 module.exports = router;
