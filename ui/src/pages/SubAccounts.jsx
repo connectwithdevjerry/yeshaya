@@ -1,8 +1,41 @@
-import React, { useState } from "react";
-import { Search, Plus, Folder, Trash2, Users, Link } from "lucide-react";
+// src/pages/SubAccounts.jsx
+import React, { useState, useEffect, useRef } from "react"; // --- MODIFICATION ---
+import {
+  Search,
+  Plus,
+  Folder,
+  Trash2,
+  Users,
+  Link,
+  ChevronLeft,
+  ChevronRight,
+  Link2,
+  UploadCloud, 
+  Zap,         
+  ArrowRightLeft, 
+  Info,
+
+} from "lucide-react";
+
+import FolderModal from "../components/Modals/FolderModal";
 
 function SubAccounts() {
   const [activeTab, setActiveTab] = useState("All");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null); 
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false); // Close dropdown if click is outside
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [dropdownRef]);
 
   const tabs = ["All", "Active", "Favorites", "Re-billed", "Archived"];
 
@@ -26,8 +59,21 @@ function SubAccounts() {
   const filtered =
     activeTab === "All" ? accounts : accounts.filter(() => false);
 
+
+  const DropdownItem = ({ icon: Icon, text }) => (
+    <li>
+      <button className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+        <div className="flex items-center gap-3">
+          <Icon size={18} className="text-gray-600" />
+          <span>{text}</span>
+        </div>
+        <Info size={16} className="text-gray-400" />
+      </button>
+    </li>
+  );
+ 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 p-6">
+    <div className="text-gray-800 p-6">
       {/* Header Section */}
       <div className="flex justify-between items-center mb-6">
         <div>
@@ -47,12 +93,33 @@ function SubAccounts() {
               className="border border-gray-300 rounded-md pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           </div>
-          <button className="border border-gray-300 px-4 py-2 rounded-md text-sm hover:bg-gray-100 flex items-center gap-1">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="border border-gray-300 px-4 py-2 rounded-md text-sm hover:bg-gray-100 flex items-center gap-1"
+          >
             <Folder size={14} /> New Folder
           </button>
-          <button className="bg-black text-white px-4 py-2 rounded-md text-sm flex items-center gap-1 hover:bg-gray-800">
-            <Plus size={14} /> New Sub-account
-          </button>
+
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)} // Toggle dropdown
+              className="bg-black text-white px-4 py-2 rounded-md text-sm flex items-center gap-1 hover:bg-gray-800"
+            >
+              <Plus size={14} /> New Sub-account
+            </button>
+
+            {isDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-60 bg-white border border-gray-200 rounded-lg shadow-xl z-20 overflow-hidden py-1">
+                <ul>
+                  <DropdownItem icon={Link2} text="Custom menu link" />
+                  <DropdownItem icon={UploadCloud} text="Import installed" />
+                  <DropdownItem icon={Zap} text="Direct connection" />
+                  <DropdownItem icon={ArrowRightLeft} text="Transfer account" />
+                </ul>
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
 
@@ -114,20 +181,16 @@ function SubAccounts() {
                       </span>
                     </div>
                   </td>
-
                   <td className="p-3 text-gray-600 align-middle">
                     {acc.locationId}
                   </td>
-
                   <td className="p-3 align-middle">{acc.wallet}</td>
-
                   <td className="p-3 text-green-600 align-middle">
                     <div className="flex items-center gap-2">
                       <Link size={14} />
                       <span>{acc.status}</span>
                     </div>
                   </td>
-
                   <td className="p-3 text-right align-middle">
                     <div className="flex gap-2 justify-end items-center">
                       <Users
@@ -154,15 +217,25 @@ function SubAccounts() {
               <option>20</option>
               <option>50</option>
             </select>
-            <span>Showing 1 - {filtered.length || 10}</span>
+            <span>Showing 1 - {filtered.length ? filtered.length : 10}</span>
           </div>
           <div className="flex items-center gap-1">
             <p className="">page 1 of 1</p>
-            <button className="px-2 py-1 border rounded">&lt;</button>
-            <button className="px-2 py-1 border rounded">&gt;</button>
+            <button className="p-1 border rounded disabled:text-gray-300" disabled>
+              <ChevronLeft size={16} />
+            </button>
+            <button className="p-1 border rounded disabled:text-gray-300" disabled>
+              <ChevronRight size={16} />
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Render the modal component */}
+      <FolderModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
     </div>
   );
 }

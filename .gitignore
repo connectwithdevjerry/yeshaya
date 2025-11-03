@@ -1,5 +1,20 @@
 /Claude.js
+<<<<<<< HEAD
+<<<<<<< HEAD
+./ui/node_modules
+./GHL/node_modules
+./server/node_modules
+=======
 /ui/node_modules
 /GHL/node_modules
 /server/node_modules
 /server/.env
+>>>>>>> refs/remotes/origin/master
+=======
+/ui/node_modules
+/GHL/node_modules
+/server/node_modules
+/server/.env
+/client/.env
+/client/node_modules
+>>>>>>> refs/remotes/origin/master

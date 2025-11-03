@@ -7,10 +7,12 @@ import Contacts from "./pages/Contacts";
 import Knowledge from "./pages/Knowledge";
 import Assistants from "./pages/Assistants";
 import Tags from "./pages/Tags";
-import Numbers from "./pages/Numbers";
+import Numbers from "./pages/Number/Numbers";
 import Widgets from "./pages/Widgets";
 import Settings from "./pages/Settings";
 import Helps from "./pages/Helps";
+import { NumberPool } from "./pages/Number/Pools";
+import { AssistantBuilderPage } from "./components/AssistantsBuilder/AssistantsBuilder";
 
 
 export default function MainContent() {
@@ -22,14 +24,16 @@ export default function MainContent() {
     "/contacts": "Contacts",
     "/knowledge": "Knowledge",
     "/assistants": "Assistants",
+    "/assistants/:id": "Assistants",
     "/activetags": "Active Tags",
     "/numbers": "Numbers",
+    "/pools": "Numbers",
     "/widgets": "Widgets",
     "/settings": "Settings",
     "/helps": "Helps",
   };
 
-  const currentTitle = pageTitles[location.pathname] || "Accounts";
+const currentTitle = pageTitles[location.pathname];
 
   return (
     <div className="flex flex-col flex-1">
@@ -47,9 +51,11 @@ export default function MainContent() {
           <Route path="/assistants" element={<Assistants />} />
           <Route path="/activetags" element={<Tags />} />
           <Route path="/numbers" element={<Numbers />} />
+          <Route path="/pools" element={<NumberPool />} />
           <Route path="/widgets" element={<Widgets />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/helps" element={<Helps />} />
+          <Route path="assistants/:id" element={<AssistantBuilderPage />} />
         </Routes>
       </main>
     </div>

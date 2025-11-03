@@ -7,6 +7,12 @@ import Integrations from "./pages/Integrations";
 import Rebilling from "./pages/Rebilling";
 import Settings from "./pages/Settings";
 import SubAccounts from "./pages/SubAccounts";
+import GHLConnectionSuccess from "./pages/Integrationstatus/GHL/Sucess";
+import GHLConnectionFailed from "./pages/Integrationstatus/GHL/Failure";
+import DashboardPage from "./pages/Dashboard";
+import StripeConnectionSuccess from "./pages/Integrationstatus/Stripe/Success";
+import StripeConnectionFailed from "./pages/Integrationstatus/Stripe/Failure";
+
 
 export default function MainContent() {
   const location = useLocation();
@@ -27,13 +33,20 @@ export default function MainContent() {
       <Header title={currentTitle} />
 
       {/* Main Content */}
-      <main className="flex-1 p-6 overflow-y-auto">
+      <main className="flex-1  overflow-y-auto">
         <Routes>
           <Route path="/" element={<SubAccounts />} />
           <Route path="/agency" element={<Agency />} />
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/rebilling" element={<Rebilling />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+
+          {/* Integrations Status Page */}
+          <Route path="/connection-success" element={<GHLConnectionSuccess />} />
+          <Route path="/connection-failed" element={<GHLConnectionFailed />} />
+          <Route path="/payment/connection-success/:message" element={<StripeConnectionSuccess />} />
+          <Route path="/payment/connection-failed/:message" element={<StripeConnectionFailed />} />
         </Routes>
       </main>
     </div>

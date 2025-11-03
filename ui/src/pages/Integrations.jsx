@@ -42,7 +42,7 @@ const Integrations = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className=" bg-gray-50 p-8">
       <div className="max-w-4xl mx-auto">
         {/* Tabs Navigation */}
         <div className="flex border-b border-gray-200 mb-6 bg-white rounded-t-lg shadow-sm p-0">

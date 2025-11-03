@@ -23,7 +23,7 @@ function Layout() {
       )}
 
       {/* Main Area */}
-      <div className={`flex-1 ${showSidebar ? "ml-64" : ""} overflow-y-auto`}>
+      <div className={`flex-1 ${showSidebar ? "ml-56" : ""} overflow-y-auto`}>
         <Routes>
           <Route path="/" element={<Homepage />} />
           <Route path="/login" element={<Login />} />
