@@ -21,14 +21,16 @@ const forgotPasswordSchema = Joi.object({
 });
 
 const resetPasswordSchema = Joi.object({
-  token: Joi.string().min(10).required(),
-  newPassword: Joi.string().min(5).required(),
-  cnewPassword: Joi.string().min(5).required(),
+  token: Joi.string().min(10).required("token is required"),
+  newPassword: Joi.string().min(5).required("new password is required"),
+  cnewPassword: Joi.string()
+    .min(5)
+    .required("confirm new password is required"),
 });
 
 module.exports = {
   authSchema,
-signUpSchema,
-forgotPasswordSchema,
-resetPasswordSchema
+  signUpSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 };

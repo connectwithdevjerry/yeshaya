@@ -1,12 +1,33 @@
 const { db } = require("../db");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
-const {
-} = require("../constants");
+const {} = require("../constants");
 
 const userSchema = mongoose.Schema({
   firstName: { type: String, required: false },
   lastName: { type: String, required: false },
+  stripePublishableKey: { type: String, required: false },
+  stripeCustomerId: { type: String, required: false },
+  stripeUserId: { type: String, required: false },
+  stripeAccessToken: { type: String, required: false }, // does not expire
+  openAIApiKey: { type: String, required: false },
+  ghlAgencyId: { type: String, required: false },
+  ghlSubAccountIds: [
+    {
+      accountId: String,
+      connected: { type: Boolean, default: false },
+      installationType: String,
+      vapiAssistants: [{ assistantId: String, description: String }],
+      numberDetails: [
+        {
+          phone: String,
+          phoneId: String,
+        },
+      ],
+    },
+  ],
+  ghlRefreshToken: { type: String, required: false },
+  ghlRefreshTokenExpiry: { type: Date, required: false },
   companyName: { type: String, required: false },
   companyLogo: { type: String, default: "" },
   companyColorHex: { type: String, default: "" },
@@ -23,6 +44,8 @@ const userSchema = mongoose.Schema({
 });
 
 userSchema.pre("save", function (next) {
+  if (!this.isModified("password")) return next();
+
   bcrypt.hash(this.password, 10, (err, hash) => {
     if (err) {
       console.log({ err });

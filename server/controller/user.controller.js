@@ -15,6 +15,7 @@ const {
 } = require("../validation_schema");
 const { REFRESH_TOKEN } = require("../constants");
 const client = require("../jwt_db_access");
+
 // const { saveImageToDB } = require("../cloudinaryImageHandler");
 
 const myPayload = (user) => ({
@@ -37,7 +38,7 @@ const signup = async (req, res, next) => {
     if (isUser)
       return res.send({ status: false, message: "Email already exist" });
 
-    console.log("Saving profile picture...");
+    // console.log("Saving profile picture...");
 
     // const pic = await saveImageToDB(
     //   "data:image/jpeg;base64," + result.companyLogo,
@@ -107,6 +108,11 @@ const signin = async (req, res, next) => {
       });
 
     const isMatch = await user.isValidPassword(result.password);
+
+    console.log({ p: result.password });
+
+    console.log({ isMatch });
+
     if (!isMatch)
       return res.send({
         status: false,
@@ -206,13 +212,13 @@ const forgotPassword = async (req, res) => {
 };
 
 const handleResetPassword = async (req, res) => {
-  const { newPassword, cnewPassword, token } =
-    await resetPasswordSchema.validateAsync(req.body);
-
-  if (newPassword !== cnewPassword)
-    return res.send({ status: false, message: "Passwords do not match!" });
-
   try {
+    const { newPassword, cnewPassword, token } =
+      await resetPasswordSchema.validateAsync(req.body);
+
+    if (newPassword !== cnewPassword)
+      return res.send({ status: false, message: "Passwords do not match!" });
+
     const decoded = await verifyForgotToken(token);
     const user = await userModel.findOne({ email: decoded });
 
@@ -226,10 +232,14 @@ const handleResetPassword = async (req, res) => {
 
     await user.save();
 
-    res.send({ status: true, message: "Password updated successfully" });
+    return res.send({ status: true, message: "Password updated successfully" });
   } catch (error) {
-    console.log(error);
-    res.send({ status: false, message: error.message });
+    if (error.isJoi === true) {
+      error.status = 422;
+      console.log(error.message);
+      return res.send({ status: false, message: error.message });
+    }
+    return res.send({ status: false, message: error.message });
   }
 };
 
@@ -247,7 +257,7 @@ const logout = async (req, res, next) => {
         status: false,
         message: "already logged out successful!",
       });
-    
+
     const userId = await verifyRefreshToken(refreshToken);
     console.log({ userId });
 
@@ -272,7 +282,7 @@ const logout = async (req, res, next) => {
   }
 };
 
-const getRefreshToken = async (req, res, next) => {
+const exchangeToken = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
 
@@ -355,8 +365,6 @@ const updateCompanyDetails = async (req, res, next) => {
   }
 };
 
-
-
 module.exports = {
   signup,
   signin,
@@ -364,5 +372,5 @@ module.exports = {
   handleResetPassword,
   logout,
   activateUser,
-  getRefreshToken,
+  exchangeToken,
 };

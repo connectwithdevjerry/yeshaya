@@ -1,0 +1,45 @@
+const express = require("express");
+const router = express.Router();
+const {
+  ghlAuthorize,
+  ghlOauthCallback,
+  testOpenAIKey,
+  stripeOauthCallback,
+  stripeAuthorize,
+  testStripeToken,
+  connectOpenAI,
+  chargeUserCustomers,
+  importGhlSubaccounts,
+  importGhlSubaccount,
+  callGetSubaccounts,
+  // admin_super_signup,
+} = require("../controller/integrations.controller");
+const { verifyAccessToken } = require("../jwt_helpers");
+
+const {
+  GHL_AUTHORIZE,
+  GHL_OAUTH_CALLBACK,
+  TEST_OPENAI_KEY,
+  STRIPE_AUTHORIZE,
+  STRIPE_OAUTH_CALLBACK,
+  TEST_STRIPE_TOKEN,
+  CONNECT_OPENAI,
+  CHARGE_CUSTOMER,
+  IMPORT_GHL_SUB_ACCOUNTS,
+  IMPORT_GHL_SUB_ACCOUNT,
+  GET_GHL_SUB_ACCOUNTS,
+} = require("../constants");
+
+router.get(GHL_AUTHORIZE, verifyAccessToken, ghlAuthorize);
+router.get(GHL_OAUTH_CALLBACK, ghlOauthCallback);
+router.get(STRIPE_AUTHORIZE, verifyAccessToken, stripeAuthorize);
+router.get(STRIPE_OAUTH_CALLBACK, stripeOauthCallback);
+router.get(TEST_OPENAI_KEY, verifyAccessToken, testOpenAIKey);
+router.post(CONNECT_OPENAI, verifyAccessToken, connectOpenAI);
+router.get(TEST_STRIPE_TOKEN, verifyAccessToken, testStripeToken);
+router.post(CHARGE_CUSTOMER, verifyAccessToken, chargeUserCustomers);
+router.post(IMPORT_GHL_SUB_ACCOUNT, verifyAccessToken, importGhlSubaccount);
+router.post(IMPORT_GHL_SUB_ACCOUNTS, verifyAccessToken, importGhlSubaccounts);
+router.get(GET_GHL_SUB_ACCOUNTS, verifyAccessToken, callGetSubaccounts);
+
+module.exports = router;
