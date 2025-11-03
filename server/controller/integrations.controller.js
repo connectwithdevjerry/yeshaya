@@ -1,0 +1,810 @@
+const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
+const OpenAI = require("openai");
+const stateModel = require("../model/state.model");
+const axios = require("axios");
+const { GHL_OAUTH_CALLBACK, STRIPE_OAUTH_CALLBACK } = require("../constants");
+const userModel = require("../model/user.model");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const Stripe = require("stripe");
+const { HighLevel } = require("@gohighlevel/api-client");
+const pLimit = require("p-limit").default;
+const https = require("https");
+
+const SUB_PATH = "/integrations";
+const CLIENT_ID = process.env.GHL_APP_CLIENT_ID;
+const CLIENT_SECRET = process.env.GHL_APP_CLIENT_SECRET;
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  minVersion: "TLSv1.2", // ensure strong TLS
+});
+
+// GOHIGHLEVEL AUTHENTICATION AND SSO DECRYPTION
+const generateSecureState = async (myId) => {
+  /**
+   Generates a random state string and stores it in the user's session.
+   */
+  // Generate a 16-byte random string (32 characters hexadecimal)
+  const state = crypto.randomBytes(16).toString("hex");
+
+  // Store the state in the session for later verification in the callback
+  const saveState = await stateModel({
+    state: state,
+    cust_id: myId,
+  });
+  await saveState.save();
+
+  return state;
+};
+
+const ghlAuthorize = async (req, res, next) => {
+  const userId = req.user;
+  const scopes =
+    "locations.write+locations.readonly+saas/company.read+saas/company.write+saas/location.read+saas/location.write+users.readonly+users.write+snapshots.readonly+snapshots.write";
+
+  const REDIRECT_URI = encodeURIComponent(
+    `${process.env.SERVER_URL}${SUB_PATH}${GHL_OAUTH_CALLBACK}`
+  ); // Must match GHL settings!
+
+  // The 'state' parameter is crucial for security (CSRF protection)
+  const state = await generateSecureState(userId);
+
+  const authUrl = `https://marketplace.leadconnectorhq.com/oauth/chooselocation?response_type=code&redirect_uri=${REDIRECT_URI}&client_id=${CLIENT_ID}&scope=${scopes}&version_id=6905111141b5e7b749099891&state=${state}`;
+
+  console.log("Redirecting to GHL OAuth URL:", authUrl);
+
+  return res.send({
+    status: true,
+    authUrl,
+    message: "GHL Authorization URL generated.",
+  });
+};
+
+const ghlOauthCallback = async (req, res) => {
+  // This function will handle the OAuth callback and exchange the code for tokens
+  // Implementation would go here
+
+  const REDIRECT_URI = `${process.env.SERVER_URL}${SUB_PATH}${GHL_OAUTH_CALLBACK}`;
+
+  const { code, state: receivedState } = req.query;
+
+  console.log({ code, receivedState });
+
+  const reqState = await stateModel.findOne({ state: receivedState });
+  const storedState = reqState ? reqState.state : null;
+  const userId = reqState ? reqState.cust_id : null;
+
+  // 1. STATE VERIFICATION (CSRF Protection)
+  if (!receivedState || receivedState !== storedState) {
+    // Clear the state from the session after use
+    await stateModel.deleteOne({ state: receivedState });
+
+    console.error("State mismatch or missing state");
+    const errorMsg = "CSRF check failed: Invalid state parameter.";
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
+        errorMsg
+      )}`
+    );
+  }
+
+  await stateModel.deleteOne({ state: receivedState });
+
+  if (!code) {
+    const errorMsg = "Authorization code missing in callback.";
+
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
+        errorMsg
+      )}`
+    );
+  }
+
+  const highLevel = new HighLevel({
+    clientId: CLIENT_ID,
+    clientSecret: CLIENT_SECRET,
+  });
+
+  try {
+    const response = await highLevel.oauth.getAccessToken({
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: "authorization_code",
+      code,
+      user_type: "Company",
+    });
+    console.log({ response });
+
+    const updateUser = await userModel.findById(userId);
+
+    // save agency id
+    if (!updateUser.ghlAgencyId) {
+      updateUser.ghlAgencyId = response.companyId;
+      await updateUser.save();
+    }
+
+    if (updateUser.ghlAgencyId !== response.companyId) {
+      return res.send({
+        status: false,
+        message: "Account Cross-Breeding Not allowed!",
+      });
+    }
+
+    updateUser.ghlRefreshToken = response.refresh_token;
+    updateUser.ghlRefreshTokenExpiry = new Date(
+      Date.now() + response.expires_in * 1000
+    );
+
+    await updateUser.save();
+
+    const successMsg = "GHL Connection successful!";
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/connection-success/${encodeURIComponent(
+        successMsg
+      )}`
+    );
+  } catch (error) {
+    console.error(
+      "Token Exchange Error:",
+      error.response ? error.response.data : error.message
+    );
+
+    const errorMsg = "Failed to exchange authorization code for access token.";
+
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
+        errorMsg
+      )}`
+    );
+  }
+};
+
+const decodeJWTokens = (accessToken, refreshToken) => {
+  try {
+    // Use jwt.decode() to get the payload without verification
+    const decodedAccess = jwt.decode(accessToken);
+
+    const decodedRefresh = jwt.decode(refreshToken);
+
+    return { status: true, decodedAccess, decodedRefresh };
+  } catch (error) {
+    console.error("Error decoding/verifying JWT:", error.message);
+    return { status: false, message: error.message };
+  }
+};
+
+const getAttachedSubaccounts = async (accessToken) => {
+  let config = {
+    method: "get",
+    maxBodyLength: Infinity,
+    url: "https://services.leadconnectorhq.com/locations/search",
+    headers: {
+      Accept: "application/json",
+      Version: "2021-07-28",
+      Authorization: `Bearer ${accessToken}`, // agency level accessToken
+    },
+  };
+
+  try {
+    const response = await axios.request(config);
+    console.log(JSON.stringify(response.data));
+
+    return { subAccounts: response.data, status: true };
+  } catch (error) {
+    console.log(error);
+    console.error("Error fetching subaccounts:", error.message);
+    console.error("Full error details:", error.response?.data || error.message);
+    return {
+      subAccounts: [],
+      status: false,
+      message: "Full error details:" + error.response?.data || error.message,
+    };
+  }
+};
+
+const getGhlTokens = async (userId) => {
+  const user = await userModel.findById(userId);
+  const refreshToken = user.ghlRefreshToken;
+
+  try {
+    const url = "https://services.leadconnectorhq.com/oauth/token";
+
+    // process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+    const response = await axios.post(
+      url,
+      {
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      },
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        // httpsAgent, // attach secure agent
+        timeout: 10000, // optional safety timeout
+      }
+    );
+
+    user.ghlRefreshToken = response.data.refresh_token;
+    user.ghlRefreshTokenExpiry = new Date(
+      Date.now() + response.data.expires_in * 1000
+    );
+    await user.save();
+
+    return { status: true, data: response.data };
+  } catch (error) {
+    console.error(
+      "Error refreshing GHL Access Token:",
+      error.response?.data || error.message
+    );
+    return {
+      status: false,
+      message: `Error refreshing GHL Access Token:${
+        error.response?.data || error.message
+      }`,
+    };
+  }
+};
+
+const callGetSubaccounts = async (req, res) => {
+  const userId = req.user;
+
+  const reqDetails = await getSubAccountsHelper(userId);
+  const { status, subAccounts } = reqDetails;
+
+  return res.send({ status: true, data: subAccounts });
+};
+
+const getSubAccountsHelper = async (userId) => {
+  const getGhlTokensValue = await getGhlTokens(userId);
+
+  const access_token = getGhlTokensValue?.data?.access_token;
+  const refresh_token = getGhlTokensValue?.data?.access_token;
+  const expires_in = getGhlTokensValue?.data?.expires_in;
+  const a_message = getGhlTokensValue?.data?.message;
+
+  console.log({ access_token, refresh_token, expires_in });
+
+  if (!access_token || !refresh_token || !expires_in)
+    return { status: false, message: a_message };
+
+  const response = await getAttachedSubaccounts(access_token);
+
+  return response;
+};
+
+const getSubAccount = async (accessToken, subAccountId) => {
+  const axios = require("axios");
+
+  let config = {
+    method: "get",
+    maxBodyLength: Infinity,
+    url: `https://services.leadconnectorhq.com/locations/${subAccountId}`,
+    headers: {
+      Accept: "application/json",
+      Version: "2021-07-28",
+      Authorization: `Bearer ${accessToken}`, // agency level accessToken
+    },
+  };
+
+  try {
+    const response = await axios.request(config);
+
+    console.log(JSON.stringify(response.data));
+    console.log({ subaccountdata: response.data });
+
+    return { status: true, data: response.data, subAccountId };
+  } catch (error) {
+    console.log(error);
+
+    return { status: false, message: error.message, subAccountId };
+  }
+};
+
+const importGhlSubaccount = async (req, res) => {
+  const { subAccountId } = req.body;
+  const userId = req.user;
+
+  const user = await userModel.findById(userId);
+
+  const subAccountInDb = user.ghlSubAccountIds.filter(
+    (account) => account.accountId === subAccountId
+  );
+
+  if (subAccountInDb.length > 0)
+    return res.send({
+      status: false,
+      message: "Sub-account Already Installed!",
+    });
+
+  const getGhlTokensValue = await getGhlTokens(userId);
+
+  const access_token = getGhlTokensValue?.data?.access_token;
+  const refresh_token = getGhlTokensValue?.data?.access_token;
+  const expires_in = getGhlTokensValue?.data?.expires_in;
+  const a_message = getGhlTokensValue?.data?.message;
+
+  console.log({ access_token, refresh_token, expires_in });
+
+  if (!access_token || !refresh_token || !expires_in)
+    return res.send({ status: false, message: a_message });
+
+  const getSubAccountValues = await getSubAccount(access_token, subAccountId);
+  const status = getSubAccountValues?.status;
+  const data = getSubAccountValues?.data;
+  const message = getSubAccountValues?.message;
+  // if status is true, it means the location id works well with the access token, which authenticates the presence of this subaccountId
+
+  console.log({ getSubAccountValues });
+
+  if (!status) {
+    console.log();
+    return res.send({ status: false, message });
+  }
+
+  // since the access token is linked with the refresh token (which is linked with this particular agency and stored in the databse), there's no point doing an agency comparation again. This access token is used with the subaccount id to prove tha authenticity of the owner
+
+  user.ghlSubAccountIds.push({
+    accountId: subAccountId,
+    connected: true,
+    vapiAssistants: [],
+    numberDetails: [],
+  });
+
+  await user.save();
+
+  return res.send({ status: true, data, subaccounts: user.ghlSubAccountIds });
+};
+
+const importGhlSubaccounts = async (req, res) => {
+  const { accountIds } = req.body;
+  const userId = req.user;
+
+  // console.log({ subAccountIds: JSON.parse(subAccountIds) });
+
+  const subAccountIds = JSON.parse(accountIds);
+
+  const user = await userModel.findById(userId);
+
+  const subAccountsInDb = user.ghlSubAccountIds.map(
+    (account) => account.accountId
+  );
+
+  console.log(subAccountsInDb);
+
+  const missing = subAccountIds.filter(
+    (item) => !subAccountsInDb.includes(item)
+  );
+
+  if (missing.length === 0)
+    return res.send({
+      status: false,
+      message: "Sub-accounts Already Installed!",
+    });
+
+  const values = await getGhlTokens(userId);
+
+  const { access_token, refresh_token, expires_in } = values;
+
+  const limit = pLimit(5); // 5 at a time
+  const promises = missing.map((id) =>
+    limit(() => getSubAccount(access_token, id))
+  );
+
+  const results = await Promise.all(promises);
+  console.log({ results });
+
+  results.forEach((result) => {
+    if (result.status) {
+      // true shows the subaccount id is linked to the agency account
+      user.ghlSubAccountIds.push({
+        accountId: result.subAccountId,
+        connected: true,
+        vapiAssistants: [],
+        numberDetails: [],
+      });
+    }
+  });
+
+  await user.save();
+
+  // if status is true, it means the location id works well with the access token, which authenticates the presence of this subaccountId
+
+  // since the access token is linked with the refresh token (which is linked with this particular agency and stored in the databse), there's no point doing an agency comparation again. This access token is used with the subaccount id to prove tha authenticity of the owner
+
+  return res.send({
+    status: true,
+    data: results,
+    installedAccounts: user.ghlSubAccountIds,
+  });
+};
+
+const decryptGhlSsoPayload = (encryptedPayload, ssoKey) => {
+  if (!encryptedPayload || !ssoKey) {
+    console.error("Missing encrypted payload or SSO Key.");
+    return null;
+  }
+
+  // 1. Decode the base64 payload into a Buffer
+  const buffer = Buffer.from(encryptedPayload, "base64");
+
+  // 2. Extract IV (Initialization Vector) and Ciphertext
+  // GHL SSO often puts the 16-byte IV at the start of the payload.
+  const IV_LENGTH = 16;
+  if (buffer.length < IV_LENGTH) {
+    console.error("Payload too short to contain IV.");
+    return null;
+  }
+  const iv = buffer.subarray(0, IV_LENGTH);
+  const cipherText = buffer.subarray(IV_LENGTH);
+
+  // 3. Create the Decipher
+  try {
+    const key = Buffer.from(ssoKey, "utf8"); // The key must be a 32-byte (256-bit) buffer
+    const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv);
+
+    // 4. Decrypt the data
+    let decrypted = decipher.update(cipherText);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+
+    // 5. Parse the decrypted JSON string
+    const jsonString = decrypted.toString("utf8");
+    const sessionData = JSON.parse(jsonString);
+
+    return sessionData;
+  } catch (error) {
+    console.error("SSO Decryption Error:", error.message);
+    return null;
+  }
+};
+
+const connectOpenAI = async (req, res) => {
+  const apiKey = req.body.apiKey;
+  const userId = req.user;
+
+  if (!apiKey || typeof apiKey !== "string" || !apiKey.startsWith("sk-")) {
+    return res.send({
+      status: false,
+      message: "API key is required in the correct format.",
+    });
+  }
+
+  const updateKey = await userModel.findById(userId);
+
+  try {
+    const openai = new OpenAI({ apiKey });
+    const response = await openai.models.list();
+
+    if (response && Array.isArray(response.data) && response.data.length > 0) {
+      console.log("API Key is valid and authorized.");
+      console.log(`(Found ${response.data.length} models.)`);
+
+      updateKey.openAIApiKey = apiKey;
+      await updateKey.save();
+
+      return res.send({ status: true, message: "API Key is valid." });
+    }
+
+    updateKey.openAIApiKey = "";
+    await updateKey.save();
+
+    return res.send({ status: false, message: "API Key test failed." });
+  } catch (error) {
+    if (error.status === 401) {
+      console.error("API Key is invalid or expired (401 Unauthorized).");
+    } else if (error.status === 429) {
+      console.warn(
+        "API Key is valid but currently rate-limited or has insufficient usage credit (429)."
+      );
+    } else {
+      console.error(`An unexpected error occurred: ${error.message}`);
+    }
+    return res.send({ status: false, message: "API Key not valid." });
+  }
+};
+
+const testOpenAIKey = async (req, res) => {
+  const userId = req.user;
+
+  const key = await userModel.findById(userId);
+  const apiKey = key.openAIApiKey;
+
+  try {
+    const openai = new OpenAI({ apiKey });
+    const response = await openai.models.list();
+
+    if (response && Array.isArray(response.data) && response.data.length > 0) {
+      console.log("API Key is valid and authorized.");
+      console.log(`(Found ${response.data.length} models.)`);
+
+      return res.send({ status: true, message: "API Key is valid." });
+    }
+
+    key.openAIApiKey = "";
+    await key.save();
+
+    return res.send({ status: false, message: "API Key test failed." });
+  } catch (error) {
+    if (error.status === 401) {
+      console.error("API Key is invalid or expired (401 Unauthorized).");
+    } else if (error.status === 429) {
+      console.warn(
+        "API Key is valid but currently rate-limited or has insufficient usage credit (429)."
+      );
+    } else {
+      console.error(`An unexpected error occurred: ${error.message}`);
+    }
+    key.openAIApiKey = "";
+    await key.save();
+    return res.send({ status: false, message: "API Key not valid." });
+  }
+};
+
+const ghlSsoLoginHandler = async (req, res) => {
+  // 1. Get encrypted payload from the POST request body
+  const { encryptedPayload } = req.body;
+
+  // NOTE: In a real app, read the SSO_KEY from environment variables for security
+  const GHL_SSO_KEY = process.env.GHL_SSO_KEY;
+
+  // 2. Decrypt the session data
+  const sessionData = decryptGhlSsoPayload(encryptedPayload, GHL_SSO_KEY);
+
+  if (!sessionData) {
+    return res.status(401).send("SSO Authentication Failed.");
+  }
+
+  // 3. Process Decrypted Data and Authenticate
+  const { userId, locationId, firstName, lastName, email } = sessionData;
+
+  // TODO:
+  // a) Look up the user in YOUR database using the GHL 'userId' or 'email'.
+  // b) If the user doesn't exist, create a new user entry.
+  // c) Establish a secure session (e.g., generate an access token or set a cookie).
+
+  // Example Session Data Structure (what GHL sends after decryption):
+  /*
+    {
+      "userId": "jA0E5e1aF2b3c4d5e6f7g8h9i0",
+      "locationId": "a1b2c3d4e5f6g7h8i9j0k1l2",
+      "agencyId": "A1B2C3D4E5F6G7H8I9J0K1L2",
+      "firstName": "John",
+      "lastName": "Doe",
+      "email": "john.doe@example.com",
+      // ... other fields
+    }
+    */
+
+  // 4. Respond to the iFrame with a success message or redirect URL
+  console.log(`Successfully authenticated user: ${firstName} (${email})`);
+
+  // In a real application, you'd send a token or redirect to your app's main view
+  return res.status(200).json({
+    success: true,
+    message: "Authentication successful",
+    user: { userId, locationId, email },
+  });
+};
+
+const stripeAuthorize = async (req, res) => {
+  const userId = req.user;
+
+  const STRIPE_CONNECT_URL = "https://connect.stripe.com/oauth/authorize";
+  const CLIENT_ID = process.env.STRIPE_CLIENT_ID;
+
+  const REDIRECT_URI = `${process.env.SERVER_URL}${SUB_PATH}${STRIPE_OAUTH_CALLBACK}`;
+
+  // Generate a unique state token
+  const state = crypto.randomBytes(16).toString("hex");
+
+  // Store the state token for later verification (mapping it to your customer's session/ID)
+  const saveState = await new stateModel({ state, cust_id: `cust_${userId}` });
+  await saveState.save();
+
+  // Scopes define what permissions you are requesting from the connected account
+  const scopes = "read_write"; // Grants permission to read and write data (e.g., manage charges, bank accounts)
+
+  const authorizeUrl =
+    `${STRIPE_CONNECT_URL}?` +
+    new URLSearchParams({
+      response_type: "code",
+      client_id: CLIENT_ID,
+      scope: scopes,
+      redirect_uri: REDIRECT_URI,
+      state: state,
+    }).toString();
+
+  // Redirect your customer to Stripe to begin the onboarding process
+  res.send({ status: true, authorizeUrl });
+};
+
+const testStripeToken = async (req, res) => {
+  try {
+    const userId = req.user;
+    const user = await userModel.findById(userId);
+
+    const accessToken = user.stripeAccessToken;
+
+    if (!accessToken) {
+      return res.send({
+        status: false,
+        error: "No Stripe access token found for user.",
+      });
+    }
+
+    const stripe = new Stripe(accessToken);
+    const account = await stripe.accounts.retrieve();
+
+    return res.send({ status: true, message: "Token is valid", account });
+  } catch (error) {
+    return res.send({ status: false, error: error.message });
+  }
+};
+
+const stripeOauthCallback = async (req, res) => {
+  const { code, state, error } = req.query;
+
+  const storedState = await stateModel.findOne({ state });
+  const storedStateValue = storedState ? storedState.state : null;
+
+  const cust_id = storedState ? storedState.cust_id : null;
+  const userId = cust_id?.replace("cust_", ""); // In this example, we stored cust_id in stateModel
+
+  if (error) {
+    // Handle potential errors returned by Stripe (e.g., user denied access)
+    console.error("Stripe Connect Error:", error);
+    return res.status(400).send(`Connection Failed: ${error}`);
+  }
+
+  if (!state || state !== storedStateValue) {
+    // return res
+    //   .status(403)
+    //   .send("Invalid or missing state parameter. CSRF attempt detected.");
+    return res.redirect(
+      `${
+        process.env.FRONTEND_URL
+      }/payment/connection-failed/${encodeURIComponent(
+        "CSRF check failed: Invalid state parameter."
+      )}`
+    );
+  }
+
+  await stateModel.deleteOne({ state });
+
+  // --- B. Exchange Code for Access Token ---
+  try {
+    const response = await stripe.oauth.token({
+      grant_type: "authorization_code",
+      code: code,
+    });
+
+    const {
+      access_token,
+      refresh_token,
+      stripe_user_id, // This is the ID of your customer's new/connected Stripe account (acct_...)
+      stripe_publishable_key,
+    } = response;
+
+    // --- C. Store Credentials (CRITICAL) ---
+
+    // In a real app, you MUST securely save these tokens and the stripe_user_id
+    // to your database, linked to your internal customer ID (genUserStripeId).
+
+    console.log(`
+            SUCCESS! Connected Account Details:
+            - Stripe Account ID (stripe_user_id): ${stripe_user_id}
+            - Access Token: ${access_token} (Use this to make API calls on their behalf)
+            - Refresh Token: ${refresh_token} (Use this to get new access tokens)
+        `);
+
+    // Stripe tokens doesn't expire, they can be revoked though.
+    // However, I'm storing them so I can implement token refresh logic if needed in future.
+    // Refresh tokens works just once per exchange. So I'm not storing them for now.
+
+    const updateUser = await userModel.findById(userId);
+
+    updateUser.stripeUserId = stripe_user_id;
+    updateUser.stripePublishableKey = stripe_publishable_key; // Storing publishable key as customer identifier
+    updateUser.stripeAccessToken = access_token; // Storing access token
+    await updateUser.save();
+
+    console.log("Stripe credentials saved to user profile.", updateUser);
+
+    // Example: Retrieve the connected account's details to confirm capabilities
+    const account = await stripe.accounts.retrieve(stripe_user_id);
+    const paymentsEnabled = account.capabilities?.card_payments === "active";
+
+    return res.redirect(
+      `${
+        process.env.FRONTEND_URL
+      }/payment/connection-success/${encodeURIComponent(
+        `Stripe Connection successful! Payments Enabled: ${
+          paymentsEnabled ? "Yes" : "No"
+        } \n Stripe Account ID: ${stripe_user_id}`
+      )}`
+    );
+  } catch (e) {
+    console.error("Token Exchange Failed:", e.message);
+    // return res.status(500).send(`Token exchange failed: ${e.message}`);
+    return res.redirect(
+      `${
+        process.env.FRONTEND_URL
+      }/payment/connection-failed/${encodeURIComponent(
+        "Token exchange failed. Please try again."
+      )}`
+    );
+  }
+};
+
+const chargeUserCustomers = async (req, res) => {
+  // 1. Lookup the connected account's ID for the customer being paid
+  // In a real app, this ID comes from your database based on who the customer is paying.
+  const { amount, currency } = req.body;
+  const user = await userModel.findById(req.user);
+  const connectedAccountId = await user.stripeUserId;
+
+  if (!connectedAccountId) {
+    // return res
+    //   .status(404)
+    //   .json({ error: "Connected account ID not found for this user." });
+    return res.send({
+      status: false,
+      message: "Connected account ID not found for this user.",
+    });
+  }
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.create(
+      {
+        payment_method_types: ["card"],
+        amount, // in cents ($10.00 for 1000 cents)
+        currency,
+        // CRITICAL: Use the Stripe-Account header to act on their behalf
+      },
+      {
+        stripeAccount: connectedAccountId,
+      }
+    );
+
+    // The connected account receives the funds and pays Stripe fees.
+    // The PaymentIntent created belongs to the connected account, not your platform.
+
+    return res.send({
+      status: true,
+      message: "Payment Intent created successfully.",
+      paymentIntentId: paymentIntent.id,
+      clientSecret: paymentIntent.client_secret,
+      accountId: connectedAccountId,
+    });
+  } catch (error) {
+    console.error(
+      "Error creating Payment Intent on behalf of connected account:",
+      error
+    );
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
+// const check
+
+module.exports = {
+  ghlAuthorize,
+  ghlOauthCallback,
+  ghlSsoLoginHandler,
+  stripeOauthCallback,
+  testOpenAIKey,
+  stripeAuthorize,
+  testStripeToken,
+  connectOpenAI,
+  chargeUserCustomers,
+  importGhlSubaccount,
+  importGhlSubaccounts,
+  callGetSubaccounts,
+};

@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./route/user.route");
+const integrationsRoutes = require("./route/integrations.route");
+const assistantsRoutes = require("./route/assistant.route");
 const cookieParser = require("cookie-parser");
 const { verifyAccessToken } = require("./jwt_helpers");
 require("dotenv").config();
@@ -22,6 +24,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: "10mb" }));
 
 app.use("/auth", authRoutes);
+app.use("/integrations", integrationsRoutes);
+app.use("/assistants", assistantsRoutes);
 
 app.get("/dashboard", verifyAccessToken, async (req, res) => {
   const beaconRequests = await BeaconRequestModel.find({
