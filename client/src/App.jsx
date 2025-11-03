@@ -19,7 +19,7 @@ import Login from "./pages/pages-ui/Login";
 import Register from "./pages/pages-ui/Register";
 import ResetLink from "./pages/pages-ui/ResetLink";
 import VerifyEmail from "./pages/pages-ui/VerifyEmail";
-import HomePage from "../../GHL/src/pages/Homepage";
+import HomePage from "./pages/pages-ghl/Homepage";
 import ResetPassword from "./pages/pages-ui/ForgotPassword";
 
 function Layout() {
