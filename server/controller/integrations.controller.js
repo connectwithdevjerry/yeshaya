@@ -544,6 +544,62 @@ const testOpenAIKey = async (req, res) => {
   }
 };
 
+const checkIntegrationStatus = async (req, res) => {
+  const userId = req.user;
+
+  const key = await userModel.findById(userId);
+  const apiKey = key.openAIApiKey;
+
+  let intResponse = {};
+
+  // openai check
+  try {
+    const openai = new OpenAI({ apiKey });
+    const response = await openai.models.list();
+
+    if (response && Array.isArray(response.data) && response.data.length > 0) {
+      console.log("API Key is valid and authorized.");
+      console.log(`(Found ${response.data.length} models.)`);
+
+      intResponse = {
+        ...intResponse,
+        openai: { status: true, message: "API Key is valid." },
+      };
+    }
+  } catch (error) {
+    if (error.status === 401) {
+      console.error("API Key is invalid or expired (401 Unauthorized).");
+    } else if (error.status === 429) {
+      console.warn(
+        "API Key is valid but currently rate-limited or has insufficient usage credit (429)."
+      );
+    } else {
+      console.error(`An unexpected error occurred: ${error.message}`);
+    }
+    intResponse = {
+      ...intResponse,
+      openai: { status: false, message: error.message },
+    };
+  }
+
+  // try {
+  // expiry date for refresh token
+  intResponse = {
+    ...intResponse,
+    ghl: { status: true, expiryDate: key.ghlRefreshTokenExpiry },
+  };
+
+  intResponse = {
+    ...intResponse,
+    stripe: { status: true, presence: key.stripeAccessToken ? true : false },
+  };
+
+  return res.send(intResponse);
+  // } catch (error) {
+  //   return res.send({ status: false, error: error.message, intResponse });
+  // }
+};
+
 const ghlSsoLoginHandler = async (req, res) => {
   // 1. Get encrypted payload from the POST request body
   const { encryptedPayload } = req.body;
@@ -807,4 +863,5 @@ module.exports = {
   importGhlSubaccount,
   importGhlSubaccounts,
   callGetSubaccounts,
+  checkIntegrationStatus,
 };
