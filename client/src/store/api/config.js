@@ -1,37 +1,41 @@
 // src/store/api/config.js
-import axios from 'axios';
+import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://unscrutable-gallinulelike-ty.ngrok-free.dev';
+const API_BASE_URL =   import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_D_BASE_URL
 
+// ✅ Create axios instance
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
-// Request interceptor to add auth token
+// ✅ Request interceptor – attach token before every request
 apiClient.interceptors.request.use(
   (config) => {
-    const acessToken = localStorage.getItem('acessToken');
-    if (acessToken) {
-      config.headers.Authorization = `Bearer ${acessToken}`;
+    const accessToken =
+      localStorage.getItem("accessToken") ||
+      sessionStorage.getItem("accessToken");
+
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
     }
+
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle errors
+// ✅ Response interceptor – handle expired/invalid token
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      console.warn("⚠️ Token expired or invalid. Redirecting to login...");
+      localStorage.removeItem("accessToken");
+      sessionStorage.removeItem("accessToken");
+      window.location.href = "/login";
     }
     return Promise.reject(error);
   }

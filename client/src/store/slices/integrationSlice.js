@@ -1,31 +1,23 @@
+// src/store/slices/integrationSlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import axios from "axios";
-
-const BaseUrl = import.meta.env.VITE_API_BASE_URL;
+import apiClient from "../api/config"; // using interceptor instance
 
 // 🔹 GoHighLevel
 export const connectGoHighLevel = createAsyncThunk(
   "integrations/connectGoHighLevel",
   async (_, { rejectWithValue }) => {
     try {
-      const token =
-        sessionStorage.getItem("accessToken") ||
-        localStorage.getItem("accessToken");
-      const response = await axios.get(
-        `${BaseUrl}/integrations/ghl/authorize`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const response = await apiClient.get("/integrations/ghl/authorize");
 
       if (response.data?.authUrl) {
         window.location.href = response.data.authUrl;
         return { status: "redirecting" };
       }
 
-      console.log("GHL Response:", response.data);
+      console.log("✅ GHL Response:", response.data);
       return response.data;
     } catch (error) {
+      console.error("❌ GHL Error:", error.response?.data || error.message);
       return rejectWithValue(error.response?.data || error.message);
     }
   }
@@ -36,23 +28,17 @@ export const connectStripe = createAsyncThunk(
   "integrations/connectStripe",
   async (_, { rejectWithValue }) => {
     try {
-      const token =
-        sessionStorage.getItem("accessToken") ||
-        localStorage.getItem("accessToken");
-      const response = await axios.get(
-        `${BaseUrl}/integrations/stripe/authorize`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const response = await apiClient.get("/integrations/stripe/authorize");
 
       if (response.data?.authorizeUrl) {
         window.location.href = response.data.authorizeUrl;
         return { status: "redirecting" };
       }
-      console.log("Stripe Response:", response.data);
+
+      console.log("✅ Stripe Response:", response.data);
       return response.data;
     } catch (error) {
+      console.error("❌ Stripe Error:", error.response?.data || error.message);
       return rejectWithValue(error.response?.data || error.message);
     }
   }
@@ -62,41 +48,60 @@ export const connectStripe = createAsyncThunk(
 export const connectOpenAI = createAsyncThunk(
   "integrations/connectOpenAI",
   async (apiKey, { rejectWithValue }) => {
-    const token =
-      sessionStorage.getItem("accessToken") ||
-      localStorage.getItem("accessToken");
-
     try {
-      const response = await axios.post(
-        `${BaseUrl}/integrations/connect/openai`,
-        { apiKey },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await apiClient.post("/integrations/connect/openai", {
+        apiKey,
+      });
 
       console.log("✅ OpenAI Response:", response.data);
       return response.data;
     } catch (error) {
-      console.error("❌ OpenAI Connection Failed:", {
-        message: error.message,
-        response: error.response?.data,
-      });
-
+      console.error("❌ OpenAI Error:", error.response?.data || error.message);
       return rejectWithValue(error.response?.data || error.message);
     }
   }
 );
 
+// 🔹 Get Integration Status
+export const getIntegrationStatus = createAsyncThunk(
+  "integrations/getStatus",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/integrations/status");
+      console.log("🟢 Integration Status Response:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("🔴 Failed to fetch integration status:", error);
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+// ✅ Fetch all GoHighLevel Subaccounts
+export const fetchSubAccounts = createAsyncThunk(
+  "integrations/fetchSubAccounts",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/integrations/get-subaccounts");
+      console.log("✅ Subaccounts fetched:", response.data);
+      return response.data.data.locations;
+    } catch (error) {
+      console.error("🔴 Failed to fetch subaccounts:", error);
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+// 🔹 Slice
 const integrationSlice = createSlice({
   name: "integrations",
   initialState: {
     goHighLevel: { connected: false, loading: false, error: null },
     stripe: { connected: false, loading: false, error: null },
-    openAI: { connected: false, loading: false, error: null },
+    openAI: { connected: false, loading: false, error: null, message: "" },
+    subAccounts: [],
+    loading: false,
+    error: null,
   },
   reducers: {
     setIntegrationStatus: (state, action) => {
@@ -147,14 +152,59 @@ const integrationSlice = createSlice({
       })
       .addCase(connectOpenAI.fulfilled, (state, action) => {
         state.openAI.loading = false;
-        state.openAI.connected = !!action.payload?.status; 
-        state.openAI.message = action.payload?.message || "Connected successfully";
+        state.openAI.connected = !!action.payload?.status;
+        state.openAI.message =
+          action.payload?.message || "Connected successfully";
         state.openAI.error = null;
       })
       .addCase(connectOpenAI.rejected, (state, action) => {
         state.openAI.loading = false;
         state.openAI.error =
           action.payload?.message || action.payload || "Connection failed";
+      });
+
+    // GET INTEGRATION STATUS
+    builder
+      .addCase(getIntegrationStatus.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(getIntegrationStatus.fulfilled, (state, action) => {
+        state.loading = false;
+        const { openai, ghl, stripe } = action.payload;
+
+        if (openai) {
+          state.openAI.connected = !!openai.status;
+          state.openAI.message = openai.message;
+        }
+
+        if (ghl) {
+          state.goHighLevel.connected = !!ghl.status;
+          state.goHighLevel.expiryDate = ghl.expiryDate || null;
+        }
+
+        if (stripe) {
+          state.stripe.connected = !!stripe.status;
+          state.stripe.presence = stripe.presence || false;
+        }
+      })
+      .addCase(getIntegrationStatus.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || "Failed to fetch integration status";
+      });
+
+    builder
+      .addCase(fetchSubAccounts.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchSubAccounts.fulfilled, (state, action) => {
+        state.loading = false;
+        state.subAccounts = action.payload;
+      })
+      .addCase(fetchSubAccounts.rejected, (state, action) => {
+        state.loading = false;  
+        state.error = action.payload;
       });
   },
 });

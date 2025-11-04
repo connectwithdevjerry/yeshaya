@@ -1,5 +1,5 @@
 // src/pages/SubAccounts.jsx
-import React, { useState, useEffect, useRef } from "react"; // --- MODIFICATION ---
+import React, { useState, useEffect, useRef } from "react";
 import {
   Search,
   Plus,
@@ -7,16 +7,19 @@ import {
   Trash2,
   Users,
   Link,
+  CreditCard,
+  Wallet,
+  Link2,
+  UploadCloud,
+  Zap,
+  ArrowRightLeft,
+  Info,
+  MoreVertical,
   ChevronLeft,
   ChevronRight,
-  Link2,
-  UploadCloud, 
-  Zap,         
-  ArrowRightLeft, 
-  Info,
-
 } from "lucide-react";
-
+import { useDispatch, useSelector } from "react-redux";
+import { fetchSubAccounts } from "../../store/slices/integrationSlice";
 import FolderModal from "../../components/components-ui/Modals/FolderModal";
 import { AccountDetailSidebar } from "../../components/components-ui/Modals/AccountDetailSidebar";
 
@@ -26,51 +29,40 @@ function SubAccounts() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
-  const dropdownRef = useRef(null); 
+  const dropdownRef = useRef(null);
+
+  const dispatch = useDispatch();
+  const { subAccounts, loading, error } = useSelector(
+    (state) => state.integrations
+  );
 
   useEffect(() => {
-    function handleClickOutside(event) {
+    dispatch(fetchSubAccounts());
+  }, [dispatch]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsDropdownOpen(false); 
+        setIsDropdownOpen(false);
       }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [dropdownRef]);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const tabs = ["All", "Active", "Favorites", "Re-billed", "Archived"];
-
-  const accounts = [
-    {
-      id: 1,
-      name: "YashaYah AI",
-      locationId: "r4bu...29aF",
-      wallet: "$0.00",
-      status: "Connected",
-    },
-    {
-      id: 2,
-      name: "Salvation solutions",
-      locationId: "p0JB...67rQ",
-      wallet: "$0.00",
-      status: "Connected",
-    },
-  ];
-
   const filtered =
-    activeTab === "All" ? accounts : accounts.filter(() => false);
+    activeTab === "All" ? subAccounts : subAccounts.filter(() => false);
 
-    const handleAccountClick = (account) => {
+  const handleAccountClick = (account) => {
     setSelectedAccount(account);
     setIsSidebarOpen(true);
   };
-  
+
   const handleCloseSidebar = () => {
     setIsSidebarOpen(false);
-    setSelectedAccount(null); 
-  }
+    setSelectedAccount(null);
+  };
 
   const DropdownItem = ({ icon: Icon, text }) => (
     <li>
@@ -83,17 +75,16 @@ function SubAccounts() {
       </button>
     </li>
   );
- 
+
   return (
     <div className="text-gray-800 p-6">
-      {/* Header Section */}
+      {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-blue-600 text-sm font-medium cursor-pointer">
-            Account Snapshot
-          </h1>
-        </div>
+        <h1 className="text-blue-600 text-sm font-medium cursor-pointer">
+          Account Snapshot
+        </h1>
         <div className="flex gap-3">
+          {/* Search */}
           <div className="relative">
             <Search
               className="absolute left-3 top-2.5 text-gray-400"
@@ -102,9 +93,11 @@ function SubAccounts() {
             <input
               type="text"
               placeholder="Search for an account..."
-              className="border border-gray-300 rounded-md pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="border border-gray-300 rounded-md pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 w-60"
             />
           </div>
+
+          {/* New Folder */}
           <button
             onClick={() => setIsModalOpen(true)}
             className="border border-gray-300 px-4 py-2 rounded-md text-sm hover:bg-gray-100 flex items-center gap-1"
@@ -112,9 +105,10 @@ function SubAccounts() {
             <Folder size={14} /> New Folder
           </button>
 
+          {/* New Sub-account */}
           <div className="relative" ref={dropdownRef}>
             <button
-              onClick={() => setIsDropdownOpen(!isDropdownOpen)} // Toggle dropdown
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="bg-black text-white px-4 py-2 rounded-md text-sm flex items-center gap-1 hover:bg-gray-800"
             >
               <Plus size={14} /> New Sub-account
@@ -131,7 +125,6 @@ function SubAccounts() {
               </div>
             )}
           </div>
-
         </div>
       </div>
 
@@ -147,109 +140,151 @@ function SubAccounts() {
                 : "text-gray-500"
             }`}
           >
-            {tab} {tab === "All" ? `(${accounts.length})` : "(0)"}
+            {tab} {tab === "All" ? `(${filtered.length})` : "(0)"}
           </button>
         ))}
       </div>
 
-      {/* Breadcrumb */}
-      <div className="text-xs text-gray-500 mb-2">
-        Home / <span className="capitalize">{activeTab}</span> /{" "}
-        <span className="text-blue-600 cursor-pointer">Select all</span>
-      </div>
-
       {/* Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600 border-b">
-            <tr>
-              <th className="p-3 text-left font-medium">NAME</th>
-              <th className="p-3 text-left font-medium">LOCATION ID</th>
-              <th className="p-3 text-left font-medium">WALLET</th>
-              <th className="p-3 text-left font-medium">CONNECTION STATUS</th>
-              <th className="p-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
+        {loading ? (
+          <p className="text-center p-6 text-gray-500">
+            Loading subaccounts...
+          </p>
+        ) : error ? (
+          <p className="text-center p-6 text-red-500">Error: {error}</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-center p-6 text-gray-400">
+            No subaccounts available.
+          </p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-600 border-b">
               <tr>
-                <td colSpan="5" className="p-6 text-center text-gray-400">
-                  <span className="inline-flex items-center gap-2">
-                    <span className="text-xl">🚫</span> No locations to display
-                  </span>
-                </td>
+                <th className="p-3 text-left font-medium w-1/4">NAME</th>
+                <th className="p-3 text-left font-medium w-1/5">LOCATION ID</th>
+                <th className="p-3 text-left font-medium w-1/6">WALLET</th>
+                <th className="p-3 text-left font-medium w-1/5">
+                  CONNECTION STATUS
+                </th>
+                <th className="p-3text-left font-medium w-1/6"></th>
               </tr>
-            ) : (
-              filtered.map((acc) => (
+            </thead>
+
+            <tbody>
+              {filtered.map((acc) => (
                 <tr
                   key={acc.id}
-                  className="border-b hover:bg-gray-50 transition-colors"
+                  className="border-b hover:bg-gray-50 transition text-sm text-gray-700"
                   onClick={() => handleAccountClick(acc)}
                 >
+                  {/* NAME */}
                   <td className="p-3 align-middle">
-                    <div className="flex items-center">
-                      <input type="checkbox" className="mr-2" />
-                      <span className="text-indigo-600 cursor-pointer hover:underline">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-blue-600"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <span className="text-blue-600 font-medium hover:underline">
                         {acc.name}
                       </span>
                     </div>
                   </td>
-                  <td className="p-3 text-gray-600 align-middle">
-                    {acc.locationId}
-                  </td>
-                  <td className="p-3 align-middle">{acc.wallet}</td>
-                  <td className="p-3 text-green-600 align-middle">
-                    <div className="flex items-center gap-2">
-                      <Link size={14} />
-                      <span>{acc.status}</span>
+
+                  {/* LOCATION ID */}
+                  <td className="p-3 align-middle text-gray-600 whitespace-nowrap">
+                    <div className="flex flex-col">
+                      <span className="text-sm">
+                        {acc.id.slice(0, 4)}...{acc.id.slice(-4)}
+                      </span>
                     </div>
                   </td>
-                  <td className="p-3 text-right align-middle">
-                    <div className="flex gap-2 justify-end items-center">
-                      <Users
-                        className="text-gray-400 hover:text-gray-600 cursor-pointer"
-                        size={16}
-                      />
-                      <Trash2
-                        className="text-red-400 hover:text-red-600 cursor-pointer"
-                        size={16}
-                      />
+
+                  {/* WALLET */}
+                  <td className="p-3 align-middle text-gray-700 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <Wallet size={18} />
+                      <span className="text-sm">$0.00</span>
+                    </div>
+                  </td>
+
+                  {/* CONNECTION STATUS */}
+                  <td className="p-3 align-middle">
+                    <div className="flex items-center gap-2 text-green-600 whitespace-nowrap">
+                      
+                      <Link size={18} />
+                      <span className="text-sm">Connected</span>
+                    </div>
+                  </td>
+
+                  {/* ACTIONS - fixed width, center vertically & horizontally */}
+                  <td className="p-3 align-middle w-40">
+                    <div className="flex items-center justify-center gap-3">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); 
+                        }}
+                        className="p-1 rounded-full hover:bg-gray-100"
+                        aria-label="users"
+                        title="Users"
+                      >
+                        <Users size={16} className="text-gray-500" />
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); /* more */
+                        }}
+                        className="p-1 rounded-full hover:bg-gray-100"
+                        aria-label="more"
+                        title="More"
+                      >
+                        <MoreVertical size={16} className="text-gray-500" />
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); /* delete */
+                        }}
+                        className="p-1 rounded-full hover:bg-red-50"
+                        aria-label="delete"
+                        title="Delete"
+                      >
+                        <Trash2 size={16} className="text-red-400" />
+                      </button>
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between p-3 text-sm text-gray-500 border-t">
-          <div className="flex items-center gap-2">
-            <select className="border border-gray-300 rounded px-2 py-1 text-sm">
-              <option>10</option>
-              <option>20</option>
-              <option>50</option>
-            </select>
-            <span>Showing 1 - {filtered.length ? filtered.length : 10}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <p className="">page 1 of 1</p>
-            <button className="p-1 border rounded disabled:text-gray-300" disabled>
-              <ChevronLeft size={16} />
-            </button>
-            <button className="p-1 border rounded disabled:text-gray-300" disabled>
-              <ChevronRight size={16} />
-            </button>
-          </div>
+      {/* Footer */}
+      <div className="flex justify-between items-center mt-4 text-sm text-gray-500">
+        <div className="flex items-center gap-2">
+          <select className="border border-gray-300 rounded-md px-2 py-1 text-sm">
+            <option>10</option>
+            <option>25</option>
+            <option>50</option>
+          </select>
+          <span>Showing 1 - 10</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span>Page 1 of 1</span>
+          <button className="p-1 border rounded hover:bg-gray-100">
+            <ChevronLeft size={14} />
+          </button>
+          <button className="p-1 border rounded hover:bg-gray-100">
+            <ChevronRight size={14} />
+          </button>
         </div>
       </div>
 
-      {/* Render the modal component */}
-      <FolderModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-      />
-
+      {/* Modals */}
+      <FolderModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
       <AccountDetailSidebar
         isOpen={isSidebarOpen}
         onClose={handleCloseSidebar}

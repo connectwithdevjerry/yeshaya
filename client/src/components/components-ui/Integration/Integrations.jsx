@@ -1,4 +1,4 @@
-import React, {useState} from "react";
+import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { ChevronRight } from "lucide-react";
 import Card from "../ui/Card";
@@ -6,7 +6,8 @@ import {
   connectGoHighLevel,
   connectStripe,
   connectOpenAI,
-} from "../../../store//slices/integrationSlice";
+  getIntegrationStatus, 
+} from "../../../store/slices/integrationSlice";
 import OpenAIConnectModal from "./OpenAiConnectModal";
 
 const IntegrationItem = ({
@@ -46,13 +47,22 @@ const IntegrationItem = ({
 
 const IntegrationsContent = () => {
   const dispatch = useDispatch();
-  const { goHighLevel, stripe, openAI } = useSelector(
+  const { goHighLevel, stripe, openAI, loading } = useSelector(
     (state) => state.integrations || {}
   );
-  const [isOpenAIConnectOpen, setIsOpenAIConnectOpen] = useState(false)
+
+  const [isOpenAIConnectOpen, setIsOpenAIConnectOpen] = useState(false);
+
+  useEffect(() => {
+    dispatch(getIntegrationStatus());
+  }, [dispatch]);
 
   return (
     <Card>
+      {loading && (
+        <div className="p-4 text-sm text-gray-500">Checking integrations...</div>
+      )}
+
       <IntegrationItem
         name="GoHighLevel"
         image_url="https://canny-assets.io/icons/5b918f2630865c174eaa9483fdedac22.png"
@@ -80,7 +90,8 @@ const IntegrationsContent = () => {
         onClick={() => dispatch(connectStripe())}
       />
 
-       <OpenAIConnectModal
+      {/* ✅ Modal for entering OpenAI API key */}
+      <OpenAIConnectModal
         isOpen={isOpenAIConnectOpen}
         onClose={() => setIsOpenAIConnectOpen(false)}
       />
