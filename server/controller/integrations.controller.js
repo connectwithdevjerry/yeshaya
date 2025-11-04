@@ -10,10 +10,13 @@ const Stripe = require("stripe");
 const { HighLevel } = require("@gohighlevel/api-client");
 const pLimit = require("p-limit").default;
 const https = require("https");
+const twilio = require("twilio");
 
 const SUB_PATH = "/integrations";
 const CLIENT_ID = process.env.GHL_APP_CLIENT_ID;
 const CLIENT_SECRET = process.env.GHL_APP_CLIENT_SECRET;
+const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const ACCOUNT_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
@@ -848,7 +851,89 @@ const chargeUserCustomers = async (req, res) => {
   }
 };
 
-// const check
+const buyUsPhoneNumber = async (accountSid, authToken) => {
+  if (!accountSid || !authToken) {
+    throw new Error("Twilio Account SID and Auth Token are required.");
+  }
+
+  // Initialize the Twilio client
+  const client = twilio(accountSid, authToken);
+
+  try {
+    const { numberToBuy, subaccount } = req.body;
+    console.log("1. Searching for an available US phone number...");
+
+    // Step 1: Search for an available US local number
+
+    // const numberToBuy = numbers[0].phoneNumber;
+    console.log(`Found available number: ${numberToBuy}`);
+
+    // Step 2: Purchase the number
+    console.log(`2. Attempting to purchase ${numberToBuy}...`);
+
+    const purchasedNumber = await client.incomingPhoneNumbers.create({
+      phoneNumber: numberToBuy,
+      // Optional: Configure webhook URLs for voice and SMS handling
+      voiceUrl: 'https://your-server.com/voice',
+      smsUrl: 'https://your-server.com/sms'
+    });
+
+    console.log("SUCCESS! Phone number purchased.");
+    console.log(`SID: ${purchasedNumber.sid}`);
+    console.log(`Number: ${purchasedNumber.phoneNumber}`);
+
+    return purchasedNumber;
+  } catch (error) {
+    console.error("An error occurred during the purchase process:");
+
+    // Check for specific Twilio error codes (e.g., insufficient funds, number already taken)
+    if (error.status === 400 && error.code === 21451) {
+      console.error(
+        "Error: The number is no longer available or there was a conflict."
+      );
+    } else if (error.status === 400 && error.code === 21608) {
+      console.error(
+        "Error: Insufficient funds in your Twilio account to purchase the number."
+      );
+    } else {
+      console.error(error.message);
+    }
+
+    throw error;
+  }
+};
+
+const getAvailableNumbers = async (req, res) => {
+  // Initialize the Twilio client
+  const client = twilio(ACCOUNT_SID, ACCOUNT_AUTH_TOKEN);
+
+  try {
+    console.log("1. Searching for an available US phone number...");
+
+    // Step 1: Search for an available US local number
+    const numbers = await client
+      .availablePhoneNumbers("US")
+      .local.list({ limit: 50 });
+
+    if (numbers.length === 0) {
+      return res.send({
+        status: false,
+        message: "No available numbers found. Exiting.",
+      });
+    }
+
+    return res.send({
+      status: true,
+      data: numbers,
+      message: `Successfully got ${numbers.length} numbers!`,
+    });
+  } catch (error) {
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
 
 module.exports = {
   ghlAuthorize,
@@ -864,4 +949,6 @@ module.exports = {
   importGhlSubaccounts,
   callGetSubaccounts,
   checkIntegrationStatus,
+  getAvailableNumbers,
+  buyUsPhoneNumber,
 };
