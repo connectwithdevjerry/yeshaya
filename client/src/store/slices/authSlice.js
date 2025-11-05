@@ -98,7 +98,6 @@ export const verifyToken = createAsyncThunk(
   "auth/verifyToken",
   async (tokenFromLink, { rejectWithValue }) => {
     try {
-      
       const token = tokenFromLink || localStorage.getItem("accessToken");
       if (!token) throw new Error("No token found");
       const response = await authAPI.verifyToken(token);
@@ -119,11 +118,49 @@ export const verifyToken = createAsyncThunk(
   }
 );
 
+export const refreshAccessToken = createAsyncThunk(
+  "auth/refreshToken",
+  async (refreshToken, { rejectWithValue }) => {
+    try {
+      const response = await authAPI.refreshToken(refreshToken);
+      const data = response.data;
+
+      if (data.status === false) {
+        return rejectWithValue(data.message || "Token refresh failed");
+      }
+
+      const newAccessToken = data.accessToken;
+      const newRefreshToken = data.refreshToken;
+
+      if (newAccessToken) {
+        localStorage.setItem("accessToken", newAccessToken);
+      }
+      if (newRefreshToken) {
+        localStorage.setItem("refreshToken", newRefreshToken);
+      }
+
+      console.log("✅ Token refreshed successfully");
+      return data;
+    } catch (error) {
+      console.error("❌ Token refresh failed:", error);
+
+      // Clear tokens on failure
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+
+      return rejectWithValue(
+        error.response?.data?.message || "Token refresh failed"
+      );
+    }
+  }
+);
+
 const authSlice = createSlice({
   name: "auth",
   initialState: {
     user: JSON.parse(localStorage.getItem("user")) || null,
     accessToken: localStorage.getItem("accessToken") || null,
+    refreshToken: localStorage.getItem("refreshToken") || null,
     isAuthenticated: !!localStorage.getItem("accessToken"),
     loading: false,
     error: null,
@@ -134,6 +171,7 @@ const authSlice = createSlice({
       success: false,
       error: null,
     },
+    refreshing: false,
   },
   reducers: {
     clearError: (state) => {
@@ -149,6 +187,11 @@ const authSlice = createSlice({
         success: false,
         error: null,
       };
+    },
+    setTokens: (state, action) => {
+      state.accessToken = action.payload.accessToken;
+      state.refreshToken = action.payload.refreshToken;
+      state.isAuthenticated = true;
     },
   },
   extraReducers: (builder) => {
@@ -205,7 +248,7 @@ const authSlice = createSlice({
       })
       .addCase(logout.rejected, (state, action) => {
         state.loading = false;
-        state.isAuthenticated = false; 
+        state.isAuthenticated = false;
         state.accessToken = null;
         state.refreshToken = null;
         state.error = action.payload;
@@ -249,10 +292,30 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         state.user = null;
         state.accessToken = null;
+      })
+
+      .addCase(refreshAccessToken.pending, (state) => {
+        state.refreshing = true;
+        state.error = null;
+      })
+      .addCase(refreshAccessToken.fulfilled, (state, action) => {
+        state.refreshing = false;
+        state.accessToken = action.payload.accessToken;
+        state.refreshToken = action.payload.refreshToken || state.refreshToken;
+        state.isAuthenticated = true;
+        state.error = null;
+      })
+      .addCase(refreshAccessToken.rejected, (state, action) => {
+        state.refreshing = false;
+        state.isAuthenticated = false;
+        state.accessToken = null;
+        state.refreshToken = null;
+        state.user = null;
+        state.error = action.payload || "Session expired. Please login again.";
       });
   },
 });
 
-export const { clearError, clearSuccessMessage, clearVerification } =
+export const { clearError, clearSuccessMessage, clearVerification, setTokens } =
   authSlice.actions;
 export default authSlice.reducer;

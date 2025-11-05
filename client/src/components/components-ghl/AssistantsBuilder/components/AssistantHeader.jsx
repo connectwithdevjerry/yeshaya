@@ -1,5 +1,5 @@
 // src/components/assistant/AssistantHeader.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Pencil,
   Save,
@@ -7,17 +7,18 @@ import {
   Users,
   Sparkles,
   AlertTriangle,
-  Database,
-  ArrowLeft,
-  Rocket,
   RotateCcw,
   Globe,
   Copy,
+  ArrowLeft,
+  Rocket,
 } from "lucide-react";
 import { AIModelModal } from "./AiModelModal";
 import { RenameAssistantModal } from "./RenameAssistantModal";
-import { useNavigate } from "react-router-dom";
 import IssuesModal from "./IssuesModal";
+import { useNavigate, useParams } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { getAssistantById } from "../../../../store/slices/assistantsSlice";
 
 const StatusBadge = ({
   text,
@@ -40,7 +41,6 @@ const StatusBadge = ({
   </button>
 );
 
-// --- Icon Button (toolbar) ---
 const IconButton = ({ icon: Icon, tooltip }) => (
   <button
     className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors duration-150"
@@ -51,10 +51,43 @@ const IconButton = ({ icon: Icon, tooltip }) => (
   </button>
 );
 
-export const AssistantHeader = ({ onSave }) => {
+export const AssistantHeader = ({
+  onSave,
+  subaccountId = "p0JBk5SQLtFmAlkf6f7q",
+}) => {
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [isIssuesModalOpen, setIsIssuesModalOpen] = useState(false);
+
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const { assistantId } = useParams();
+
+  const { selectedAssistant, loading } = useSelector(
+    (state) => state.assistants
+  );
+
+  // ✅ Fetch the assistant when component mounts
+  useEffect(() => {
+    if (assistantId) {
+      console.log("🧩 Route assistantId:", assistantId);
+      console.log(subaccountId)
+      dispatch(getAssistantById({ subaccountId, assistantId }))
+        .unwrap()
+        .then((data) => {
+          console.log("🎯 Redux fetched assistant ID:", data?.id);
+        })
+        .catch((error) => {
+          console.error("❌ Failed to fetch assistant:", error);
+        });
+    }
+  }, [dispatch, subaccountId, assistantId]);
+
+  const handleCopyId = () => {
+    if (selectedAssistant?.id) {
+      navigator.clipboard.writeText(selectedAssistant.id);
+    }
+  };
 
   const toggleModelModal = () => {
     setIsModelModalOpen((prev) => !prev);
@@ -72,10 +105,13 @@ export const AssistantHeader = ({ onSave }) => {
     setIsRenameModalOpen(false);
   };
 
-  const navigate = useNavigate();
+  const name = selectedAssistant?.name || "New Blank Assistant";
+  const model = selectedAssistant?.model || "GPT-4o";
+  const id = selectedAssistant?.id || assistantId;
 
   return (
     <header className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-200">
+      {/* --- Left Section --- */}
       <div className="flex items-center space-x-4">
         <button
           onClick={() => navigate("/assistants")}
@@ -88,7 +124,7 @@ export const AssistantHeader = ({ onSave }) => {
         <div>
           <div className="flex items-center space-x-2">
             <h1 className="text-lg font-semibold text-gray-900">
-              New Blank Assistant
+              {loading ? "Loading..." : name}
             </h1>
             <Pencil
               onClick={toggleRenameModal}
@@ -98,8 +134,9 @@ export const AssistantHeader = ({ onSave }) => {
           </div>
 
           <div className="flex items-center space-x-2 text-sm text-gray-500">
-            <span className="font-mono">ID: 1761_9400</span>
+            <span className="font-mono">ID: {id}</span>
             <button
+              onClick={handleCopyId}
               className="p-1 rounded hover:bg-gray-100"
               title="Copy Assistant ID"
             >
@@ -109,7 +146,7 @@ export const AssistantHeader = ({ onSave }) => {
         </div>
       </div>
 
-      {/* --- Middle: Status + Tools --- */}
+      {/* --- Middle Section --- */}
       <div className="flex items-center space-x-4">
         <StatusBadge
           text="Saved"
@@ -117,7 +154,7 @@ export const AssistantHeader = ({ onSave }) => {
           textColor="text-gray-600"
         />
         <StatusBadge
-          text="GPT-4o"
+          text={model}
           bgColor="bg-purple-100"
           textColor="text-purple-600"
           icon={Globe}
@@ -125,9 +162,8 @@ export const AssistantHeader = ({ onSave }) => {
           isInteractive={true}
         />
 
-        {/* Toolbar Actions */}
         <div className="flex items-center space-x-2">
-          <IconButton icon={FlaskConical} tooltip="" />
+          <IconButton icon={FlaskConical} tooltip="Experiments" />
           <IconButton icon={Users} tooltip="Users" />
           <IconButton icon={Rocket} tooltip="Testing Lab" />
           <IconButton icon={Sparkles} tooltip="Logs" />
@@ -135,9 +171,10 @@ export const AssistantHeader = ({ onSave }) => {
         </div>
       </div>
 
+      {/* --- Right Section --- */}
       <div className="flex items-center space-x-3">
         <button
-          onClick={toggleIssuesModal} 
+          onClick={toggleIssuesModal}
           className="flex items-center space-x-1 text-sm text-gray-700 cursor-pointer p-2 rounded-md hover:bg-gray-100 transition-colors duration-150 relative"
           title="View Issues"
         >
@@ -154,16 +191,13 @@ export const AssistantHeader = ({ onSave }) => {
         </button>
       </div>
 
+      {/* --- Modals --- */}
       <AIModelModal isOpen={isModelModalOpen} onClose={toggleModelModal} />
       <RenameAssistantModal
         isOpen={isRenameModalOpen}
         onClose={toggleRenameModal}
       />
-
-      <IssuesModal
-        isOpen={isIssuesModalOpen}
-        onClose={toggleIssuesModal}
-      />
+      <IssuesModal isOpen={isIssuesModalOpen} onClose={toggleIssuesModal} />
     </header>
   );
 };
