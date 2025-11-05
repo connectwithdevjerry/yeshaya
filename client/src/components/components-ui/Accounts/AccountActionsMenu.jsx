@@ -61,39 +61,37 @@ const AccountActionsMenu = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [onClose, anchorRef]);
 
-  console.log({ isOpen, account, position });
-
   if (!isOpen || !account || !position) return null;
 
-  const handleAction = (action) => {
-    console.log(`🟢 handleAction triggered for: ${action}`);
-    console.log("📦 Account data:", account);
+const handleAction = (action) => {
+  console.log(`🟢 handleAction triggered for: ${action}`);
+  console.log("📦 Account data:", account);
 
-    if (action === "Open") {
-      try {
-        const params = new URLSearchParams({
-          agencyid: account.companyId || "UNKNOWN_COMPANY",
-          subaccount: account.id || "NO_ID",
-          allow: "yes",
-          myname: account.name || "NoName",
-          myemail: account.email || "noemail@example.com",
-        });
+  if (action === "Open") {
+    try {
+      const params = new URLSearchParams({
+        agencyid: account.companyId || "UNKNOWN_COMPANY",
+        subaccount: account.id || "NO_ID",
+        allow: "yes",
+        myname: account.name || "NoName",
+        myemail: account.email || "noemail@example.com",
+      });
 
-        const route = `/app?${params.toString()}`;
-        console.log("➡️ Navigating to:", route);
-        navigate(route);
-      } catch (err) {
-        console.error("❌ Navigation error:", err);
-      }
+      const route = `/app?${params.toString()}`;
+      console.log("➡️ Navigating to:", route);
+      navigate(route);
+    } catch (err) {
+      console.error("❌ Navigation error:", err);
     }
+  }
 
-    onClose();
-  };
+  onClose();
+};
 
   return (
     <div
       ref={menuRef}
-      className="fixed w-60 bg-white border border-gray-200 rounded-lg shadow-xl z-[9999] overflow-hidden py-1"
+      className="fixed w-60 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden py-1"
       style={{ top: position.top, left: position.left }}
     >
       <ul className="divide-y divide-gray-100">
@@ -101,9 +99,7 @@ const AccountActionsMenu = ({
         <MenuItem
           icon={ExternalLink}
           text="Open account"
-          onClickCapture={() => {
-            console.log("🔥 Captured click before bubbling");
-          }}
+          onClick={() => handleAction("Open")}
         />
 
         <MenuItem icon={Pencil} text="Edit account" />
