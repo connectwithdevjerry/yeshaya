@@ -12,7 +12,6 @@ export const login = createAsyncThunk(
         return rejectWithValue(data.message || "Login failed");
       }
 
-      // ✅ Fix: use the correct property name from backend
       const accessToken = data.accessToken;
       const refreshToken = data.refreshToken;
 
@@ -23,8 +22,8 @@ export const login = createAsyncThunk(
         localStorage.setItem("refreshToken", refreshToken);
       }
 
-      console.log("Login success:", data);
-      return data; // will be passed to reducer
+      console.log("✅ Login success");
+      return data;
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || "Network or server error"
@@ -61,15 +60,19 @@ export const logout = createAsyncThunk(
     try {
       await authAPI.logout();
 
-      // ✅ Clear tokens on successful logout
+      // Clear tokens on successful logout
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
+      sessionStorage.removeItem("accessToken");
+      sessionStorage.removeItem("refreshToken");
 
       return { message: "Logged out successfully" };
     } catch (error) {
-      // ✅ Always clear tokens even if server logout fails
+      // Always clear tokens even if server logout fails
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
+      sessionStorage.removeItem("accessToken");
+      sessionStorage.removeItem("refreshToken");
 
       return rejectWithValue(error.response?.data?.message || "Logout failed");
     }
@@ -122,6 +125,7 @@ export const refreshAccessToken = createAsyncThunk(
   "auth/refreshToken",
   async (refreshToken, { rejectWithValue }) => {
     try {
+      console.log("🔄 Attempting to refresh token...");
       const response = await authAPI.refreshToken(refreshToken);
       const data = response.data;
 
@@ -132,25 +136,36 @@ export const refreshAccessToken = createAsyncThunk(
       const newAccessToken = data.accessToken;
       const newRefreshToken = data.refreshToken;
 
-      if (newAccessToken) {
-        localStorage.setItem("accessToken", newAccessToken);
+      if (!newAccessToken) {
+        throw new Error("No access token received");
       }
+
+      // Update localStorage with new tokens
+      localStorage.setItem("accessToken", newAccessToken);
       if (newRefreshToken) {
         localStorage.setItem("refreshToken", newRefreshToken);
       }
 
       console.log("✅ Token refreshed successfully");
-      return data;
+      return {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken || refreshToken,
+      };
     } catch (error) {
       console.error("❌ Token refresh failed:", error);
 
       // Clear tokens on failure
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
+      sessionStorage.removeItem("accessToken");
+      sessionStorage.removeItem("refreshToken");
 
-      return rejectWithValue(
-        error.response?.data?.message || "Token refresh failed"
-      );
+      const errorMessage =
+        error.response?.data?.message || 
+        error.message ||
+        "Token refresh failed";
+
+      return rejectWithValue(errorMessage);
     }
   }
 );
@@ -158,7 +173,7 @@ export const refreshAccessToken = createAsyncThunk(
 const authSlice = createSlice({
   name: "auth",
   initialState: {
-    user: JSON.parse(localStorage.getItem("user")) || null,
+    user: JSON.parse(localStorage.getItem("user") || "null"),
     accessToken: localStorage.getItem("accessToken") || null,
     refreshToken: localStorage.getItem("refreshToken") || null,
     isAuthenticated: !!localStorage.getItem("accessToken"),
@@ -192,6 +207,13 @@ const authSlice = createSlice({
       state.accessToken = action.payload.accessToken;
       state.refreshToken = action.payload.refreshToken;
       state.isAuthenticated = true;
+    },
+    clearAuth: (state) => {
+      state.user = null;
+      state.accessToken = null;
+      state.refreshToken = null;
+      state.isAuthenticated = false;
+      state.error = null;
     },
   },
   extraReducers: (builder) => {
@@ -240,6 +262,7 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         state.accessToken = null;
         state.refreshToken = null;
+        state.user = null;
         state.error = null;
         state.loading = false;
       })
@@ -251,6 +274,7 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         state.accessToken = null;
         state.refreshToken = null;
+        state.user = null;
         state.error = action.payload;
       })
 
@@ -294,6 +318,7 @@ const authSlice = createSlice({
         state.accessToken = null;
       })
 
+      // REFRESH TOKEN
       .addCase(refreshAccessToken.pending, (state) => {
         state.refreshing = true;
         state.error = null;
@@ -316,6 +341,12 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, clearSuccessMessage, clearVerification, setTokens } =
-  authSlice.actions;
+export const { 
+  clearError, 
+  clearSuccessMessage, 
+  clearVerification, 
+  setTokens,
+  clearAuth 
+} = authSlice.actions;
+
 export default authSlice.reducer;

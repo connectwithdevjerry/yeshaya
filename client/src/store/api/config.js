@@ -21,130 +21,145 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
+// ✅ Check if response contains JWT expired message
+const isJWTExpired = (response) => {
+  if (!response) return false;
+  
+  // Check in response data
+  if (response.data) {
+    const message = response.data.message || response.data.error || "";
+    if (typeof message === "string" && message.toLowerCase().includes("jwt expired")) {
+      return true;
+    }
+  }
+  
+  // Check in response status
+  if (response.status === 401) {
+    return true;
+  }
+  
+  return false;
+};
+
 // ✅ Attach access token to each request
 apiClient.interceptors.request.use(
   (config) => {
     const token =
       localStorage.getItem("accessToken") ||
       sessionStorage.getItem("accessToken");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// ✅ Handle expired JWT
+// ✅ Handle token refresh
+const handleTokenRefresh = async (originalRequest) => {
+  if (isRefreshing) {
+    // Wait for the ongoing refresh to complete
+    return new Promise((resolve, reject) => {
+      failedQueue.push({ resolve, reject });
+    })
+      .then((token) => {
+        originalRequest.headers.Authorization = `Bearer ${token}`;
+        return apiClient(originalRequest);
+      })
+      .catch((err) => Promise.reject(err));
+  }
+
+  isRefreshing = true;
+
+  try {
+    const refreshToken =
+      localStorage.getItem("refreshToken") ||
+      sessionStorage.getItem("refreshToken");
+
+    if (!refreshToken) {
+      throw new Error("No refresh token available");
+    }
+
+    // Dispatch refresh token action
+    const { payload, error } = await store.dispatch(
+      refreshAccessToken(refreshToken)
+    );
+
+    if (error || !payload?.accessToken) {
+      throw new Error("Failed to refresh token");
+    }
+
+    const newAccessToken = payload.accessToken;
+    
+    // Update tokens in storage
+    localStorage.setItem("accessToken", newAccessToken);
+    if (payload.refreshToken) {
+      localStorage.setItem("refreshToken", payload.refreshToken);
+    }
+
+    // Update axios default header
+    apiClient.defaults.headers.Authorization = `Bearer ${newAccessToken}`;
+
+    // Process queued requests
+    processQueue(null, newAccessToken);
+
+    // Retry original request
+    originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+    return apiClient(originalRequest);
+  } catch (err) {
+    console.error("❌ Token refresh failed:", err);
+    processQueue(err, null);
+    
+    // Clear tokens
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    sessionStorage.removeItem("accessToken");
+    sessionStorage.removeItem("refreshToken");
+    
+    // Redirect to login
+    window.location.href = "/login";
+    
+    return Promise.reject(err);
+  } finally {
+    isRefreshing = false;
+  }
+};
+
+// ✅ Response interceptor - handles both success and error responses
 apiClient.interceptors.response.use(
   async (response) => {
-    // Check if the API returns a "jwt expired" message even on success
-    if (
-      response?.data?.message &&
-      typeof response.data.message === "string" &&
-      response.data.message.toLowerCase().includes("jwt expired")
-    ) {
+    // Check if JWT expired even in successful responses
+    if (isJWTExpired(response)) {
+      console.log("⚠️ JWT expired detected in response");
       const originalRequest = response.config;
-
-      if (!isRefreshing) {
-        isRefreshing = true;
-        try {
-          const refreshToken =
-            localStorage.getItem("refreshToken") ||
-            sessionStorage.getItem("refreshToken");
-
-          if (!refreshToken) throw new Error("No refresh token available");
-
-          const { payload, error } = await store.dispatch(
-            refreshAccessToken(refreshToken)
-          );
-
-          if (error || !payload?.accessToken)
-            throw new Error("Failed to refresh token");
-
-          const newAccessToken = payload.accessToken;
-          localStorage.setItem("accessToken", newAccessToken);
-          apiClient.defaults.headers.Authorization = `Bearer ${newAccessToken}`;
-
-          processQueue(null, newAccessToken);
-          isRefreshing = false;
-
-          // Retry the original request with the new token
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-          return apiClient(originalRequest);
-        } catch (err) {
-          processQueue(err, null);
-          isRefreshing = false;
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("refreshToken");
-          window.location.href = "/login";
-          return Promise.reject(err);
-        }
-      } else {
-        // Wait until refresh finishes
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            response.config.headers.Authorization = `Bearer ${token}`;
-            return apiClient(response.config);
-          })
-          .catch((err) => Promise.reject(err));
+      
+      // Prevent infinite loops
+      if (originalRequest._retry) {
+        console.error("❌ Token refresh already attempted");
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        window.location.href = "/login";
+        return Promise.reject(new Error("Session expired"));
       }
+      
+      originalRequest._retry = true;
+      return handleTokenRefresh(originalRequest);
     }
 
     return response;
   },
   async (error) => {
-    // If the backend sends a 401, also handle refresh
     const originalRequest = error.config;
 
+    // Check if error is due to expired token
     if (
-      (error.response?.status === 401 ||
-        error.response?.data?.message === "jwt expired") &&
+      error.response &&
+      (error.response.status === 401 || isJWTExpired(error.response)) &&
       !originalRequest._retry
     ) {
+      console.log("⚠️ JWT expired detected in error response");
       originalRequest._retry = true;
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return apiClient(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
-      }
-
-      isRefreshing = true;
-
-      try {
-        const refreshToken =
-          localStorage.getItem("refreshToken") ||
-          sessionStorage.getItem("refreshToken");
-
-        if (!refreshToken) throw new Error("No refresh token available");
-
-        const { payload, error: refreshError } = await store.dispatch(
-          refreshAccessToken(refreshToken)
-        );
-
-        if (refreshError) throw refreshError;
-
-        const newAccessToken = payload?.accessToken;
-        localStorage.setItem("accessToken", newAccessToken);
-        apiClient.defaults.headers.Authorization = `Bearer ${newAccessToken}`;
-        processQueue(null, newAccessToken);
-
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        return apiClient(originalRequest);
-      } catch (err) {
-        processQueue(err, null);
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
-        window.location.href = "/login";
-        return Promise.reject(err);
-      } finally {
-        isRefreshing = false;
-      }
+      return handleTokenRefresh(originalRequest);
     }
 
     return Promise.reject(error);

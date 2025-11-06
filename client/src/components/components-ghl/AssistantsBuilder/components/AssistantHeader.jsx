@@ -66,10 +66,8 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
     (state) => state.assistants
   );
 
-  // ✅ Get assistant ID from props (passed from AssistantBuilderPage)
   const assistantId = propAssistantId;
-  
-  // ✅ Get subaccountId from URL params or current account
+
   const subaccountId = searchParams.get('subaccount') || account?.subaccount;
 
   // ✅ Fetch the assistant when component mounts

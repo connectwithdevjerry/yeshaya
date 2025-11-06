@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useSelector } from "react-redux";
 import {
   HelpCircle,
   ChevronsRight,
@@ -46,6 +47,10 @@ export const GlobalPromptEditor = () => {
   const maxChars = 8024;
   const charCount = promptContent.length;
   const navigate = useNavigate();
+  
+  // ✅ Get assistant data from Redux
+  const { selectedAssistant } = useSelector((state) => state.assistants);
+  const [voiceDisplay, setVoiceDisplay] = useState("Marrisa");
 
   const toggleToolkit = () => setIsToolkitOpen((prev) => !prev);
   const openGeneratePromptModal = () => setIsGeneratePromptModalOpen(true);
@@ -55,6 +60,28 @@ export const GlobalPromptEditor = () => {
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
   const openVoiceMenu = () => setIsVoiceMenuOpen(true);
   const closeVoiceMenu = () => setIsVoiceMenuOpen(false);
+
+  // ✅ Populate prompt content when assistant data loads
+  useEffect(() => {
+    if (selectedAssistant) {
+      const firstMessage = selectedAssistant.firstMessage || "";
+      const endCallPhrases = selectedAssistant.endCallPhrases || [];
+      
+      // Format the prompt content
+      let formattedContent = firstMessage;
+      
+      if (endCallPhrases.length > 0) {
+        formattedContent += `\n\nEnd Call Phrases:\n${endCallPhrases.map(phrase => `- ${phrase}`).join('\n')}`;
+      }
+      
+      setPromptContent(formattedContent);
+      
+      // Update voice display
+      if (selectedAssistant.voice?.voiceId) {
+        setVoiceDisplay(selectedAssistant.voice.voiceId);
+      }
+    }
+  }, [selectedAssistant]);
 
   useEffect(() => {
     if (activeTab !== "Builder") {
@@ -101,7 +128,7 @@ export const GlobalPromptEditor = () => {
               </button>
               <button
                 className="flex items-center space-x-1 hover:underline"
-                onClick={openGeneratePromptModal} // Added onClick to open modal
+                onClick={openGeneratePromptModal}
               >
                 <Sparkle className="w-4 h-4" />
                 <span>Generate Prompt</span>
@@ -183,7 +210,7 @@ export const GlobalPromptEditor = () => {
           <div onClick={openVoiceMenu} className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
             <Volume2 className="w-4 h-4 text-gray-400" />
             <span className="text-sm font-mono text-gray-700 truncate max-w-[150px]">
-              Marrisa
+              {voiceDisplay}
             </span>
             <div className="flex items-center space-x-2">
               <button
