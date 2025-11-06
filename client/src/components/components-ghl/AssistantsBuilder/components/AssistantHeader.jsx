@@ -1,4 +1,4 @@
-// src/components/assistant/AssistantHeader.jsx
+// src/components/components-ghl/AssistantsBuilder/components/AssistantHeader.jsx
 import React, { useState, useEffect } from "react";
 import {
   Pencil,
@@ -16,9 +16,10 @@ import {
 import { AIModelModal } from "./AiModelModal";
 import { RenameAssistantModal } from "./RenameAssistantModal";
 import IssuesModal from "./IssuesModal";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { getAssistantById } from "../../../../store/slices/assistantsSlice";
+import { useCurrentAccount } from "../../../../hooks/useCurrentAccount";
 
 const StatusBadge = ({
   text,
@@ -51,35 +52,40 @@ const IconButton = ({ icon: Icon, tooltip }) => (
   </button>
 );
 
-export const AssistantHeader = ({
-  onSave,
-  subaccountId = "p0JBk5SQLtFmAlkf6f7q",
-}) => {
+export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [isIssuesModalOpen, setIsIssuesModalOpen] = useState(false);
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { assistantId } = useParams();
+  const [searchParams] = useSearchParams();
+  const account = useCurrentAccount();
 
   const { selectedAssistant, loading } = useSelector(
     (state) => state.assistants
   );
 
+  // ✅ Get assistant ID from props (passed from AssistantBuilderPage)
+  const assistantId = propAssistantId;
+  
+  // ✅ Get subaccountId from URL params or current account
+  const subaccountId = searchParams.get('subaccount') || account?.subaccount;
+
   // ✅ Fetch the assistant when component mounts
   useEffect(() => {
-    if (assistantId) {
-      console.log("🧩 Route assistantId:", assistantId);
-      console.log(subaccountId)
+    if (assistantId && subaccountId) {
+      console.log("🧩 Fetching assistant:", { assistantId, subaccountId });
       dispatch(getAssistantById({ subaccountId, assistantId }))
         .unwrap()
         .then((data) => {
-          console.log("🎯 Redux fetched assistant ID:", data?.id);
+          console.log("🎯 Assistant fetched successfully:", data);
         })
         .catch((error) => {
           console.error("❌ Failed to fetch assistant:", error);
         });
+    } else {
+      console.warn("⚠️ Missing assistantId or subaccountId", { assistantId, subaccountId });
     }
   }, [dispatch, subaccountId, assistantId]);
 
@@ -105,8 +111,25 @@ export const AssistantHeader = ({
     setIsRenameModalOpen(false);
   };
 
+  // ✅ Navigate back with account context
+  const handleGoBack = () => {
+    if (account) {
+      const params = new URLSearchParams({
+        agencyid: account.agencyid,
+        subaccount: account.subaccount,
+        allow: account.allow,
+        myname: account.myname,
+        myemail: account.myemail,
+        route: '/assistants',
+      });
+      navigate(`/app?${params.toString()}`);
+    } else {
+      navigate('/assistants');
+    }
+  };
+
   const name = selectedAssistant?.name || "New Blank Assistant";
-  const model = selectedAssistant?.model || "GPT-4o";
+  const model = selectedAssistant?.model?.model || "GPT-4o";
   const id = selectedAssistant?.id || assistantId;
 
   return (
@@ -114,7 +137,7 @@ export const AssistantHeader = ({
       {/* --- Left Section --- */}
       <div className="flex items-center space-x-4">
         <button
-          onClick={() => navigate("/assistants")}
+          onClick={handleGoBack}
           className="p-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
           title="Go Back"
         >

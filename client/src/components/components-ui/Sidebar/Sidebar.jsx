@@ -1,3 +1,4 @@
+// src/components/components-ui/Sidebar/Sidebar.jsx
 import React from 'react';
 import { UserProfile } from './UserProfile';
 import { NavigationItem } from './NavigationItem';
@@ -7,6 +8,8 @@ export function Sidebar({ userInfo, navigationItems }) {
   const safeUserInfo = userInfo || {
     name: "Agency",
     users: "0",
+    balance: "$0.00",
+    numbers: 0,
     currentUser: {
       initial: "A",
       email: "user@agency.com",
@@ -35,6 +38,8 @@ export function Sidebar({ userInfo, navigationItems }) {
       </nav>
 
       <BottomInfo
+        balance={safeUserInfo.balance || "$0.00"}
+        numbers={safeUserInfo.numbers || 0}
         currentUser={safeUserInfo.currentUser}
       />
     </div>

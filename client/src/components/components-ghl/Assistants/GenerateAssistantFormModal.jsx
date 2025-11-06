@@ -1,19 +1,31 @@
-// src/components/assistants/GenerateAssistantFormModal.jsx
+// src/components/components-ghl/Assistants/GenerateAssistantFormModal.jsx
 import React, { useState } from "react";
 import { useDispatch } from "react-redux";
 import { X, Info } from "lucide-react";
 import { createAssistant } from "../../../store/slices/assistantsSlice";
+import { useCurrentAccount } from "../../../hooks/useCurrentAccount";
+import { useSearchParams } from "react-router-dom";
 
-const GenerateAssistantFormModal = ({ isOpen, onClose, subaccountId }) => {
+const GenerateAssistantFormModal = ({ isOpen, onClose }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const dispatch = useDispatch();
+  const [searchParams] = useSearchParams();
+  const account = useCurrentAccount();
+
+  // ✅ Get subaccountId dynamically
+  const subaccountId = searchParams.get('subaccount') || account?.subaccount;
 
   if (!isOpen) return null;
 
   const handleGenerate = async () => {
     if (!name.trim()) {
       alert("Assistant name is required");
+      return;
+    }
+
+    if (!subaccountId) {
+      alert("No subaccount selected");
       return;
     }
 
@@ -69,6 +81,13 @@ const GenerateAssistantFormModal = ({ isOpen, onClose, subaccountId }) => {
               className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-gray-800 resize-none"
             />
           </label>
+
+          {/* ✅ Show current subaccount */}
+          {subaccountId && (
+            <div className="text-xs text-gray-500">
+              <p>Sub-account: {subaccountId.slice(0, 8)}...</p>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end pt-4 border-t border-gray-200">
@@ -80,9 +99,9 @@ const GenerateAssistantFormModal = ({ isOpen, onClose, subaccountId }) => {
           </button>
           <button
             onClick={handleGenerate}
-            disabled={!name.trim()}
+            disabled={!name.trim() || !subaccountId}
             className={`px-4 py-2 text-sm font-medium text-white rounded-md shadow-sm transition ${
-              name.trim()
+              name.trim() && subaccountId
                 ? "bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700"
                 : "bg-gray-400 cursor-not-allowed"
             }`}

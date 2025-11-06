@@ -1,4 +1,4 @@
-// src/pages/AssistantsPage.jsx
+// src/pages/pages-ghl/Assistants.jsx
 import React, { useState, useEffect } from "react";
 import {
   Search,
@@ -15,15 +15,22 @@ import { fetchAssistants } from "../../store/slices/assistantsSlice";
 import TabButton from "../../components/components-ghl/TabButton";
 import CreateFolderModal from "../../components/components-ghl/Assistants/CreateFolderModal";
 import CreateAssistantModal from "../../components/components-ghl/Assistants/CreateAssistantModal";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { useCurrentAccount } from "../../hooks/useCurrentAccount";
 
-const Assistants = ({ subaccountId = "p0JBk5SQLtFmAlkf6f7q" }) => {
+const Assistants = () => {
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isAssistantModalOpen, setIsAssistantModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const account = useCurrentAccount();
+
+  // ✅ Get subaccountId from URL or current account
+  const subaccountId = searchParams.get('subaccount') || account?.subaccount;
 
   const { data: assistants, loading, error } = useSelector(
     (state) => state.assistants
@@ -31,9 +38,31 @@ const Assistants = ({ subaccountId = "p0JBk5SQLtFmAlkf6f7q" }) => {
 
   useEffect(() => {
     if (subaccountId) {
+      console.log("📍 Fetching assistants for subaccount:", subaccountId);
       dispatch(fetchAssistants(subaccountId));
+    } else {
+      console.warn("⚠️ No subaccountId found");
     }
   }, [dispatch, subaccountId]);
+
+  // ✅ Handle assistant click with account context
+  const handleAssistantClick = (assistant) => {
+    if (location.pathname === '/app' && account) {
+      // Navigate with account context
+      const params = new URLSearchParams({
+        agencyid: account.agencyid,
+        subaccount: account.subaccount,
+        allow: account.allow,
+        myname: account.myname,
+        myemail: account.myemail,
+        route: `/assistants/${assistant.id}`,
+      });
+      navigate(`/app?${params.toString()}`);
+    } else {
+      // Regular navigation
+      navigate(`/assistants/${assistant.id}`);
+    }
+  };
 
   const headers = ["NAME", "MODEL", "UPDATED", "CREATED", "ID"];
 
@@ -102,6 +131,14 @@ const Assistants = ({ subaccountId = "p0JBk5SQLtFmAlkf6f7q" }) => {
           <span>Home</span>
           <span className="text-gray-400">/</span>
           <span className="text-gray-400">{assistants.length}</span>
+          {subaccountId && (
+            <>
+              <span className="text-gray-400">/</span>
+              <span className="text-gray-500 text-xs">
+                {subaccountId.slice(0, 8)}...
+              </span>
+            </>
+          )}
         </div>
 
         {/* 🧾 Table */}
@@ -159,7 +196,7 @@ const Assistants = ({ subaccountId = "p0JBk5SQLtFmAlkf6f7q" }) => {
                   <tr
                     key={assistant.id}
                     className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => navigate(`/assistants/${assistant.id}`)}
+                    onClick={() => handleAssistantClick(assistant)}
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       <div className="flex items-center space-x-2">
@@ -181,10 +218,22 @@ const Assistants = ({ subaccountId = "p0JBk5SQLtFmAlkf6f7q" }) => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
-                        <button className="p-1 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Handle more options
+                          }}
+                          className="p-1 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100"
+                        >
                           <MoreVertical className="w-4 h-4" />
                         </button>
-                        <button className="p-1 text-red-400 hover:text-red-700 rounded-full hover:bg-red-50">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Handle delete
+                          }}
+                          className="p-1 text-red-400 hover:text-red-700 rounded-full hover:bg-red-50"
+                        >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>

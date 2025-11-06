@@ -74,9 +74,8 @@ const AppRouter = () => {
     '/dashboard': <DashboardPage />,
   };
 
-  // Handle dynamic routes like /assistants/:id
+  // ✅ Handle dynamic routes like /assistants/:id
   if (route.startsWith('/assistants/')) {
-    const id = route.split('/assistants/')[1];
     return <AssistantBuilderPage />;
   }
 
@@ -116,6 +115,12 @@ export default function MainContent() {
     // For /app routes, get title from route parameter
     if (location.pathname === '/app') {
       const route = searchParams.get('route') || '/assistants';
+      
+      // ✅ Handle dynamic assistant routes
+      if (route.startsWith('/assistants/')) {
+        return "Assistant Builder";
+      }
+      
       return pageTitles[route] || "Dashboard";
     }
     // For regular routes, use pathname
