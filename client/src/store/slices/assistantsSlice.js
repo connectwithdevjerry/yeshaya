@@ -2,7 +2,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../api/config";
 
-// ✅ Fetch assistants for a specific subaccount
+// ✅ Fetch assistants
 export const fetchAssistants = createAsyncThunk(
   "assistants/fetchAll",
   async (subaccountId, { rejectWithValue }) => {
@@ -15,9 +15,7 @@ export const fetchAssistants = createAsyncThunk(
         return rejectWithValue(response.data.message || "Failed to fetch");
       }
 
-      // ✅ Filter out null values
       const cleanedData = (response.data.data || []).filter(Boolean);
-
       return cleanedData;
     } catch (err) {
       return rejectWithValue(
@@ -27,6 +25,7 @@ export const fetchAssistants = createAsyncThunk(
   }
 );
 
+// ✅ Get single assistant
 export const getAssistantById = createAsyncThunk(
   "assistants/getAssistantById",
   async ({ subaccountId, assistantId }, { rejectWithValue }) => {
@@ -34,7 +33,7 @@ export const getAssistantById = createAsyncThunk(
       const response = await apiClient.get(
         `/assistants/get?subaccountId=${subaccountId}&assistantId=${assistantId}`
       );
-      return response.data.data; // The assistant object
+      return response.data.data;
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || "Failed to fetch assistant"
@@ -43,8 +42,7 @@ export const getAssistantById = createAsyncThunk(
   }
 );
 
-
-// ✅ Create a new assistant
+// ✅ Create assistant
 export const createAssistant = createAsyncThunk(
   "assistants/create",
   async ({ name, description, subaccountId }, { rejectWithValue }) => {
@@ -58,6 +56,23 @@ export const createAssistant = createAsyncThunk(
   }
 );
 
+// ✅ Update assistant
+export const updateAssistant = createAsyncThunk(
+  "assistants/update",
+  async ({ subaccountId, assistantId, updateData }, { rejectWithValue }) => {
+    try {
+      const payload = { subaccountId, assistantId, updateData };
+      const response = await apiClient.put("/assistants/update", payload);
+
+      // Return the updated assistant data
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to update assistant"
+      );
+    }
+  }
+);
 
 const assistantsSlice = createSlice({
   name: "assistants",
@@ -101,7 +116,7 @@ const assistantsSlice = createSlice({
         state.error = action.payload;
       })
 
-      // 🔹 Fetch single assistant
+      // 🔹 Get single
       .addCase(getAssistantById.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -113,10 +128,42 @@ const assistantsSlice = createSlice({
       .addCase(getAssistantById.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+
+      // 🔹 Update
+      .addCase(updateAssistant.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateAssistant.fulfilled, (state, action) => {
+        state.loading = false;
+
+        // ✅ Update the assistant inside the list
+        const index = state.data.findIndex(
+          (a) =>
+            a.id === action.payload.id ||
+            a.assistantId === action.payload.assistantId
+        );
+        if (index !== -1) {
+          state.data[index] = { ...state.data[index], ...action.payload };
+        }
+
+        // ✅ Update the selected assistant too
+        if (
+          state.selectedAssistant?.assistantId === action.payload.assistantId
+        ) {
+          state.selectedAssistant = {
+            ...state.selectedAssistant,
+            ...action.payload,
+          };
+        }
+      })
+      .addCase(updateAssistant.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
   },
 });
-
 
 export const { clearSelectedAssistant } = assistantsSlice.actions;
 export default assistantsSlice.reducer;
