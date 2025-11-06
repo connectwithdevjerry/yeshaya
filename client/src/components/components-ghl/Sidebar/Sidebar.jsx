@@ -24,7 +24,7 @@ export function SidebarGHL({ userInfo, navigationItems }) {
         users={safeUserInfo.users} 
       />
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 px-4">
         {safeNavigationItems.map((item) => (
           <NavigationItem
             key={item.name}

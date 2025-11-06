@@ -105,9 +105,9 @@ export function NavigationItem({ name, icon, link, children }) {
               : "text-gray-700 hover:bg-gray-100"
           }`}
         >
-          <div className="flex items-center space-x-3">
-            <Icon className="w-5 h-5" />
-            <span className="text-sm font-medium">{name}</span>
+          <div className="flex items-center space-x-2">
+            <Icon className="w-4 h-4" />
+            <span className="text-xs font-medium">{name}</span>
           </div>
           <ChevronDown
             className={`w-4 h-4 transition-transform ${
@@ -117,7 +117,7 @@ export function NavigationItem({ name, icon, link, children }) {
         </button>
 
         {isOpen && (
-          <div className="pl-8 pt-1 space-y-1">
+          <div className="pl-5 pt-1 space-y-1">
             {children.map((child) => {
               const isChildActiveNow = location.pathname === '/app' 
                 ? searchParams.get('route') === child.link
@@ -127,13 +127,13 @@ export function NavigationItem({ name, icon, link, children }) {
                 <button
                   key={child.name}
                   onClick={() => handleNavigation(child.link)}
-                  className={`flex items-center w-full px-3 py-2 rounded-lg transition-colors duration-200 text-sm ${
+                  className={`flex items-center w-full rounded-lg transition-colors duration-200 text-sm ${
                     isChildActiveNow
                       ? "text-blue-600"
                       : "text-gray-600 hover:text-gray-900"
                   }`}
                 >
-                  <span className="font-medium">{child.name}</span>
+                  <span className="font-medium text-xs">{child.name}</span>
                 </button>
               );
             })}
@@ -147,14 +147,14 @@ export function NavigationItem({ name, icon, link, children }) {
   return (
     <button
       onClick={() => handleNavigation(link)}
-      className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 w-full ${
+      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors duration-200 w-full ${
         isActiveRoute()
           ? "text-blue-600 bg-blue-50"
           : "text-gray-700 hover:bg-gray-100"
       }`}
     >
-      <Icon className="w-5 h-5" />
-      <span className="text-sm font-medium">{name}</span>
+      <Icon className="w-4 h-4" />
+      <span className="text-xs font-medium">{name}</span>
     </button>
   );
 }

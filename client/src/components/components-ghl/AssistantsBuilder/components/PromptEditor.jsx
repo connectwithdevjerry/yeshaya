@@ -24,10 +24,10 @@ import { VoiceMenuDrawer } from "./VoiceMenu";
 const TabButton = ({ text, isActive, onClick }) => (
   <button
     onClick={onClick}
-    className={`px-4 py-2 text-sm font-medium border-2 transition-colors duration-200 ${
+    className={`px-4 py-2 text-sm font-medium border transition-colors duration-200 ${
       isActive
-        ? "border-gray-300 text-black font-bold rounded-md text-[15px]"
-        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+        ? "border-gray-300 bg-gray-100 text-black font-bold rounded-md text-[15px]"
+        : "border-transparent rounded-md text-gray-500 hover:bg-gray-100 hover:border-gray-300"
     }`}
   >
     {text}
@@ -159,8 +159,8 @@ export const GlobalPromptEditor = () => {
   return (
     <div className="flex flex-col flex-1 bg-white relative">
       {/* Tabs Header */}
-      <div className="flex justify-between items-center py-2 px-4 border-b border-gray-200 bg-gray-50">
-        <div className="flex space-x-2">
+      <div className="flex justify-between items-center py-2 px-4 border-b border-gray-200 ">
+        <div className="flex space-x-1">
           {["Builder", "Voice Lab", "Chat Lab"].map((tab) => (
             <TabButton
               key={tab}
