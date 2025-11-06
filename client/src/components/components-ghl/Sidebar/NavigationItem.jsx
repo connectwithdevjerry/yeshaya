@@ -117,7 +117,7 @@ export function NavigationItem({ name, icon, link, children }) {
         </button>
 
         {isOpen && (
-          <div className="pl-5 pt-1 space-y-1">
+          <div className="pl-5 pt-1 space-y-2 pb-2">
             {children.map((child) => {
               const isChildActiveNow = location.pathname === '/app' 
                 ? searchParams.get('route') === child.link

@@ -21,15 +21,6 @@ const Numbers = () => {
         <div className="flex justify-end items-center mb-6">
           
           <div className="flex items-center space-x-3">
-            
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search for anything..."
-                className="pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-              />
-            </div>
 
             {/* Import Number Button */}
             <button

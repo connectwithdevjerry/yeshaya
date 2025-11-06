@@ -12,6 +12,8 @@ import {
   Pencil,
   Sparkle,
   Volume2,
+  AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import { ChatLabView } from "./ChatLab";
 import { VoiceLabView } from "./VoiceLab";
@@ -47,7 +49,7 @@ export const GlobalPromptEditor = () => {
   const maxChars = 8024;
   const charCount = promptContent.length;
   const navigate = useNavigate();
-  
+
   // ✅ Get assistant data from Redux
   const { selectedAssistant } = useSelector((state) => state.assistants);
   const [voiceDisplay, setVoiceDisplay] = useState("Marrisa");
@@ -66,16 +68,18 @@ export const GlobalPromptEditor = () => {
     if (selectedAssistant) {
       const firstMessage = selectedAssistant.firstMessage || "";
       const endCallPhrases = selectedAssistant.endCallPhrases || [];
-      
+
       // Format the prompt content
       let formattedContent = firstMessage;
-      
+
       if (endCallPhrases.length > 0) {
-        formattedContent += `\n\nEnd Call Phrases:\n${endCallPhrases.map(phrase => `- ${phrase}`).join('\n')}`;
+        formattedContent += `\n\nEnd Call Phrases:\n${endCallPhrases
+          .map((phrase) => `- ${phrase}`)
+          .join("\n")}`;
       }
-      
+
       setPromptContent(formattedContent);
-      
+
       // Update voice display
       if (selectedAssistant.voice?.voiceId) {
         setVoiceDisplay(selectedAssistant.voice.voiceId);
@@ -98,47 +102,51 @@ export const GlobalPromptEditor = () => {
       <div className="flex h-full">
         {/* Prompt Editor */}
         <div className="flex-1 bg-gray-50 border-r overflow-y-auto">
-          <div className="flex justify-between items-center bg-white px-6 py-3 border-b shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-800 flex items-center space-x-3">
+          <div className="flex flex-wrap justify-between items-center bg-white px-6 py-1 border-b shadow-sm gap-3">
+            {/* Left Section */}
+            <h2 className="text-md font-semibold text-gray-800 flex items-center space-x-2">
               <span>Global Prompt</span>
-              <span className="text-sm font-normal text-gray-500">
-                {charCount} / {maxChars}
+              <span className="text-[10px] font-normal text-gray-500">
+                {charCount} / {maxChars} characters
               </span>
-              <HelpCircle
+              <AlertCircle
                 className="w-4 h-4 text-gray-400 cursor-pointer"
                 title="Help"
               />
             </h2>
 
-            <div className="flex items-center space-x-4 text-sm text-blue-600">
+            {/* Middle Section */}
+            <div className="flex flex-wrap items-center space-x-4 text-sm text-blue-600 gap-y-2">
               <button
-                className="flex items-center space-x-1 hover:underline"
+                className="flex items-center p-2 space-x-1 hover:bg-blue-50"
                 onClick={openDynamicGreetingModal}
               >
                 <X className="w-3 h-3" />
                 <span>Dynamic Greeting</span>
               </button>
-              <button className="hover:underline flex items-center gap-1">
-                {" "}
+              <button className="hover:bg-blue-50 p-2 flex items-center gap-1">
                 <Tags size={15} /> Fields & Values
               </button>
-              <button className="hover:underline  flex items-center gap-1">
-                {" "}
+              <button className="hover:bg-blue-50 p-2 flex items-center gap-1">
                 <Pencil size={15} /> Add Snippet
               </button>
+            </div>
+
+            {/* Right Section */}
+            <div className="mt-2 sm:mt-0">
               <button
-                className="flex items-center space-x-1 hover:underline"
+                className="flex text-sm items-center p-2 rounded-md space-x-1 hover:bg-blue-50 text-blue-600"
                 onClick={openGeneratePromptModal}
               >
-                <Sparkle className="w-4 h-4" />
+                <Sparkles className="w-4 h-4" />
                 <span>Generate Prompt</span>
               </button>
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-2">
             <textarea
-              className="w-full min-h-[400px] p-4 text-gray-800 bg-gray-50 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full min-h-[400px] p-4 text-gray-800 bg-gray-50 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
               value={promptContent}
               onChange={(e) => setPromptContent(e.target.value)}
               placeholder="Enter your prompt here..."
@@ -207,7 +215,10 @@ export const GlobalPromptEditor = () => {
               </button>
             </div>
           </div>
-          <div onClick={openVoiceMenu} className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
+          <div
+            onClick={openVoiceMenu}
+            className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer"
+          >
             <Volume2 className="w-4 h-4 text-gray-400" />
             <span className="text-sm font-mono text-gray-700 truncate max-w-[150px]">
               {voiceDisplay}
