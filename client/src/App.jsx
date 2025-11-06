@@ -13,6 +13,7 @@ import { navigationGHLItems } from "./data/accountsData-ghl";
 import MainContent from "./MainContent";
 import ProtectedRoute from "./ProtectedRoutes";
 import { verifyToken } from "./store/slices/authSlice";
+import { useCurrentAccount } from "./hooks/useCurrentAccount";
 
 // Auth pages
 import Login from "./pages/pages-ui/Login";
@@ -27,13 +28,23 @@ function Layout() {
   const dispatch = useDispatch();
   const { token, isAuthenticated } = useSelector((state) => state.auth);
 
+  const account = useCurrentAccount();
+  const user = useSelector(state => state.auth.user); 
+  const userInfo = {
+    name: account ? decodeURIComponent(account.myname) : (user?.name || "Your Agency"),
+    users: "12",
+    currentUser: {
+      initial: user?.name?.charAt(0).toUpperCase() || "U",
+      email: user?.email || "user@example.com"
+    }
+  };
+
   useEffect(() => {
     if (token && !isAuthenticated) {
       dispatch(verifyToken());
     }
   }, [dispatch, token, isAuthenticated]);
 
-  // Paths where Sidebar should NOT appear
   const authPaths = [
     "/homepage",
     "/login",
@@ -95,7 +106,9 @@ function Layout() {
             path="/*"
             element={
               <ProtectedRoute>
-                <MainContent />
+                <div className="flex h-screen">
+                  <MainContent />
+                </div>
               </ProtectedRoute>
             }
           />

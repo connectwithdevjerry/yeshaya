@@ -1,15 +1,31 @@
+// src/components/components-ghl/Sidebar/Sidebar.jsx
 import React from 'react';
 import { UserProfile } from './UserProfile';
 import { NavigationItem } from './NavigationItem';
 import { BottomInfo } from './BottomInfo';
 
 export function SidebarGHL({ userInfo, navigationItems }) {
+  // ✅ Provide default values if props are missing
+  const safeUserInfo = userInfo || {
+    name: "Agency",
+    users: "0",
+    currentUser: {
+      initial: "A",
+      email: "user@agency.com"
+    }
+  };
+
+  const safeNavigationItems = navigationItems || [];
+
   return (
     <div className="w-56 h-screen bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
-      <UserProfile name={userInfo.name} users={userInfo.users} />
+      <UserProfile 
+        name={safeUserInfo.name} 
+        users={safeUserInfo.users} 
+      />
 
       <nav className="flex-1 p-4 space-y-1">
-        {navigationItems.map((item) => (
+        {safeNavigationItems.map((item) => (
           <NavigationItem
             key={item.name}
             name={item.name}
@@ -21,7 +37,7 @@ export function SidebarGHL({ userInfo, navigationItems }) {
         ))}
       </nav>
 
-      <BottomInfo currentUser={userInfo.currentUser} />
+      <BottomInfo currentUser={safeUserInfo.currentUser} />
     </div>
   );
 }

@@ -12,7 +12,7 @@ import {
   Link,
   Zap,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom"; // ✅ import navigate
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 
 const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false }) => {
   if (isSeparator) return <li className="my-1 border-t border-gray-200" />;
@@ -43,7 +43,9 @@ const AccountActionsMenu = ({
   position,
 }) => {
   const menuRef = useRef(null);
-  const navigate = useNavigate(); // ✅ setup navigate
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -63,30 +65,52 @@ const AccountActionsMenu = ({
 
   if (!isOpen || !account || !position) return null;
 
-const handleAction = (action) => {
-  console.log(`🟢 handleAction triggered for: ${action}`);
-  console.log("📦 Account data:", account);
+  const handleAction = (action) => {
+    console.log(`🟢 handleAction triggered for: ${action}`);
+    console.log("📦 Account data:", account);
 
-  if (action === "Open") {
-    try {
-      const params = new URLSearchParams({
-        agencyid: account.companyId || "UNKNOWN_COMPANY",
-        subaccount: account.id || "NO_ID",
-        allow: "yes",
-        myname: account.name || "NoName",
-        myemail: account.email || "noemail@example.com",
-      });
+    if (action === "Open") {
+      try {
+        // ✅ Determine target route
+        let targetRoute = '/assistants'; // Default
+        
+        // If already on /app, preserve the current route
+        if (location.pathname === '/app') {
+          targetRoute = searchParams.get('route') || '/assistants';
+        }
+        // If on a communication page without /app, use that route
+        else if (['/inbox', '/call', '/contacts', '/knowledge', '/assistants', '/activetags', '/numbers', '/pools', '/widgets', '/helps', '/ghl_settings'].includes(location.pathname)) {
+          targetRoute = location.pathname;
+        }
 
-      const route = `/app?${params.toString()}`;
-      console.log("➡️ Navigating to:", route);
-      navigate(route);
-    } catch (err) {
-      console.error("❌ Navigation error:", err);
+        // ✅ Build URL parameters
+        const params = new URLSearchParams({
+          agencyid: account.companyId || "UNKNOWN_COMPANY",
+          subaccount: account.id || "NO_ID",
+          allow: "yes",
+          myname: account.name || "NoName",
+          myemail: account.email || "noemail@example.com",
+          route: targetRoute, // ✅ Include the route as a parameter
+        });
+
+        const url = `/app?${params.toString()}`;
+        
+        console.log("➡️ Navigating to:", url);
+        
+        onClose();
+        
+        setTimeout(() => {
+          navigate(url);
+        }, 0);
+        
+        return;
+      } catch (err) {
+        console.error("❌ Navigation error:", err);
+      }
     }
-  }
 
-  onClose();
-};
+    onClose();
+  };
 
   return (
     <div

@@ -49,17 +49,17 @@ function SubAccounts() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsDropdownOpen(false);
       }
-      if (
-        menuAnchorRef.current &&
-        !menuAnchorRef.current.contains(event.target) &&
-        openMenuAccountId
-      ) {
-        setOpenMenuAccountId(null);
-      }
+      // if (
+      //   menuAnchorRef.current &&
+      //   !menuAnchorRef.current.contains(event.target) &&
+      //   openMenuAccountId
+      // ) {
+      //   setOpenMenuAccountId(null);
+      // }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [openMenuAccountId]);
+  }, []);
 
   const tabs = ["All", "Active", "Favorites", "Re-billed", "Archived"];
   const filtered =
@@ -268,7 +268,10 @@ function SubAccounts() {
                       </button>
 
                       <button
-                        onClick={(e) => handleOpenActionMenu(e, acc)}
+                        onClick={(e) => {
+                          e.stopPropagation(); // ✅ This stops the row click
+                          handleOpenActionMenu(e, acc);
+                        }}
                         ref={
                           openMenuAccountId === acc.id ? menuAnchorRef : null
                         }
@@ -278,7 +281,6 @@ function SubAccounts() {
                       >
                         <MoreVertical size={16} className="text-gray-500" />
                       </button>
-
                       <button
                         onClick={(e) => {
                           e.stopPropagation(); /* delete */

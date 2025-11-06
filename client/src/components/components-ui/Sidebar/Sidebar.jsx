@@ -4,12 +4,26 @@ import { NavigationItem } from './NavigationItem';
 import { BottomInfo } from './BottomInfo';
 
 export function Sidebar({ userInfo, navigationItems }) {
+  const safeUserInfo = userInfo || {
+    name: "Agency",
+    users: "0",
+    currentUser: {
+      initial: "A",
+      email: "user@agency.com",
+    },
+  };
+
+  const safeNavigationItems = navigationItems || [];
+
   return (
-    <div className=" w-56 h-screen left-0 top-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
-      <UserProfile name={userInfo.name} users={userInfo.users} />
+    <div className="w-56 h-screen left-0 top-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
+      <UserProfile
+        name={safeUserInfo.name}
+        users={safeUserInfo.users}
+      />
       
       <nav className="flex-1 p-4 space-y-1">
-        {navigationItems.map((item) => (
+        {safeNavigationItems.map((item) => (
           <NavigationItem
             key={item.name}
             name={item.name}
@@ -21,9 +35,7 @@ export function Sidebar({ userInfo, navigationItems }) {
       </nav>
 
       <BottomInfo
-        balance={userInfo.balance}
-        numbers={userInfo.numbers}
-        currentUser={userInfo.currentUser}
+        currentUser={safeUserInfo.currentUser}
       />
     </div>
   );
