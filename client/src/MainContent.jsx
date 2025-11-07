@@ -4,12 +4,12 @@ import { Routes, Route, useLocation, useSearchParams } from "react-router-dom";
 import { Header } from "./components/components-ui/Header";
 
 // ---- Pages from Agency section ----
-import Agency from "./pages/pages-ui/Agency"
-import Integrations from "./pages/pages-ui/Integrations"
-import Rebilling from "./pages/pages-ui/Rebilling"
-import Settings from "./pages/pages-ui/Settings"
-import SubAccounts from "./pages/pages-ui/SubAccounts"
-import DashboardPage from "./pages/pages-ui/Dashboard"
+import Agency from "./pages/pages-ui/Agency";
+import Integrations from "./pages/pages-ui/Integrations";
+import Rebilling from "./pages/pages-ui/Rebilling";
+import Settings from "./pages/pages-ui/Settings";
+import SubAccounts from "./pages/pages-ui/SubAccounts";
+import DashboardPage from "./pages/pages-ui/Dashboard";
 
 // ---- Integration Status Pages ----
 import GHLConnectionSuccess from "./pages/pages-ui/Integrationstatus/GHL/Sucess";
@@ -28,55 +28,60 @@ import Numbers from "./pages/pages-ghl/Number/Numbers";
 import { NumberPool } from "./pages/pages-ghl/Number/Pools";
 import Widgets from "./pages/pages-ghl/Widgets";
 import Helps from "./pages/pages-ghl/Helps";
-import GHLSettings from './pages/pages-ghl/Settings';
+import GHLSettings from "./pages/pages-ghl/Settings";
 import { AssistantBuilderPage } from "./components/components-ghl/AssistantsBuilder/AssistantsBuilder";
+import KnowledgeDetailPage from "./components/components-ghl/Knowledge/BlogEdit";
 
 // ✅ Component to render based on route parameter
 const AppRouter = () => {
   const [searchParams] = useSearchParams();
-  const route = searchParams.get('route') || '/assistants';
+  const route = searchParams.get("route") || "/assistants";
 
   // Store account data in sessionStorage
   useEffect(() => {
-    const agencyid = searchParams.get('agencyid');
-    const subaccount = searchParams.get('subaccount');
-    const allow = searchParams.get('allow');
-    const myname = searchParams.get('myname');
-    const myemail = searchParams.get('myemail');
-    
+    const agencyid = searchParams.get("agencyid");
+    const subaccount = searchParams.get("subaccount");
+    const allow = searchParams.get("allow");
+    const myname = searchParams.get("myname");
+    const myemail = searchParams.get("myemail");
+
     if (agencyid && subaccount) {
       const accountData = {
         agencyid,
         subaccount,
         allow,
         myname,
-        myemail
+        myemail,
       };
-      sessionStorage.setItem('currentAccount', JSON.stringify(accountData));
+      sessionStorage.setItem("currentAccount", JSON.stringify(accountData));
       console.log("✅ Account stored:", accountData);
     }
   }, [searchParams]);
 
   // Route mapping
   const routeComponents = {
-    '/assistants': <Assistants />,
-    '/inbox': <Inbox />,
-    '/call': <CallCenter />,
-    '/contacts': <Contacts />,
-    '/knowledge': <Knowledge />,
-    '/activetags': <Tags />,
-    '/numbers': <Numbers />,
-    '/pools': <NumberPool />,
-    '/widgets': <Widgets />,
-    '/helps': <Helps />,
-    '/ghl_settings': <GHLSettings />,
-    '/agency': <Agency />,
-    '/dashboard': <DashboardPage />,
+    "/assistants": <Assistants />,
+    "/inbox": <Inbox />,
+    "/call": <CallCenter />,
+    "/contacts": <Contacts />,
+    "/knowledge": <Knowledge />,
+    "/activetags": <Tags />,
+    "/numbers": <Numbers />,
+    "/pools": <NumberPool />,
+    "/widgets": <Widgets />,
+    "/helps": <Helps />,
+    "/ghl_settings": <GHLSettings />,
+    "/agency": <Agency />,
+    "/dashboard": <DashboardPage />,
   };
 
   // ✅ Handle dynamic routes like /assistants/:id
-  if (route.startsWith('/assistants/')) {
+  if (route.startsWith("/assistants/")) {
     return <AssistantBuilderPage />;
+  }
+
+  if (route.startsWith("/knowledge/")) {
+    return <KnowledgeDetailPage />;
   }
 
   return routeComponents[route] || <Assistants />;
@@ -87,40 +92,48 @@ export default function MainContent() {
   const [searchParams] = useSearchParams();
 
   // Get page title based on route parameter
-  const pageTitles = useMemo(() => ({
-    '/': "Accounts",
-    '/agency': "Agency",
-    '/integrations': "Integrations",
-    '/rebilling': "Rebilling",
-    '/settings': "Settings",
-    '/dashboard': "Dashboard",
-    '/inbox': "Inbox",
-    '/call': "Call Center",
-    '/contacts': "Contacts",
-    '/knowledge': "Knowledge",
-    '/assistants': "Assistants",
-    '/activetags': "Active Tags",
-    '/numbers': "Numbers",
-    '/pools': "Number Pools",
-    '/widgets': "Widgets",
-    '/helps': "Help Center",
-    '/ghl_settings': "Settings",
-    '/connection-success': "Integration Success",
-    '/connection-failed': "Integration Failed",
-    '/payment/connection-success': "Payment Success",
-    '/payment/connection-failed': "Payment Failed",
-  }), []);
+  const pageTitles = useMemo(
+    () => ({
+      "/": "Accounts",
+      "/agency": "Agency",
+      "/integrations": "Integrations",
+      "/rebilling": "Rebilling",
+      "/settings": "Settings",
+      "/dashboard": "Dashboard",
+      "/inbox": "Inbox",
+      "/call": "Call Center",
+      "/contacts": "Contacts",
+      "/knowledge": "Knowledge",
+      "/assistants": "Assistants",
+      "/blog": "Knowledge",
+      "/activetags": "Active Tags",
+      "/numbers": "Numbers",
+      "/pools": "Number Pools",
+      "/widgets": "Widgets",
+      "/helps": "Help Center",
+      "/ghl_settings": "Settings",
+      "/connection-success": "Integration Success",
+      "/connection-failed": "Integration Failed",
+      "/payment/connection-success": "Payment Success",
+      "/payment/connection-failed": "Payment Failed",
+    }),
+    []
+  );
 
   const getCurrentTitle = () => {
     // For /app routes, get title from route parameter
-    if (location.pathname === '/app') {
-      const route = searchParams.get('route') || '/assistants';
-      
+    if (location.pathname === "/app") {
+      const route = searchParams.get("route") || "/assistants";
+
       // ✅ Handle dynamic assistant routes
-      if (route.startsWith('/assistants/')) {
+      if (route.startsWith("/assistants/")) {
         return "Assistant Builder";
       }
-      
+
+      if (route.startsWith("/knowledge/")) {
+        return "Knowledge";
+      }
+
       return pageTitles[route] || "Dashboard";
     }
     // For regular routes, use pathname
@@ -149,10 +162,19 @@ export default function MainContent() {
           <Route path="/app" element={<AppRouter />} />
 
           {/* --- Integration Status Routes --- */}
-          <Route path="/connection-success/:message" element={<GHLConnectionSuccess />} />
+          <Route
+            path="/connection-success/:message"
+            element={<GHLConnectionSuccess />}
+          />
           <Route path="/connection-failed" element={<GHLConnectionFailed />} />
-          <Route path="/payment/connection-success/:message" element={<StripeConnectionSuccess/>} />
-          <Route path="/payment/connection-failed/:message" element={<StripeConnectionFailed />} />
+          <Route
+            path="/payment/connection-success/:message"
+            element={<StripeConnectionSuccess />}
+          />
+          <Route
+            path="/payment/connection-failed/:message"
+            element={<StripeConnectionFailed />}
+          />
         </Routes>
       </main>
     </div>

@@ -71,19 +71,29 @@ const AccountActionsMenu = ({
 
     if (action === "Open") {
       try {
-        // ✅ Determine target route
-        let targetRoute = '/assistants'; // Default
-        
-        // If already on /app, preserve the current route
-        if (location.pathname === '/app') {
-          targetRoute = searchParams.get('route') || '/assistants';
-        }
-        // If on a communication page without /app, use that route
-        else if (['/inbox', '/call', '/contacts', '/knowledge', '/assistants', '/activetags', '/numbers', '/pools', '/widgets', '/helps', '/ghl_settings'].includes(location.pathname)) {
+        let targetRoute = "/assistants";
+
+        if (location.pathname === "/app") {
+          targetRoute = searchParams.get("route") || "/assistants";
+        } else if (
+          [
+            "/inbox",
+            "/call",
+            "/contacts",
+            "/knowledge",
+            "/assistants",
+            "/activetags",
+            "/numbers",
+            "/pools",
+            "/widgets",
+            "/helps",
+            "/ghl_settings",
+            '/blog'
+          ].includes(location.pathname)
+        ) {
           targetRoute = location.pathname;
         }
 
-        // ✅ Build URL parameters
         const params = new URLSearchParams({
           agencyid: account.companyId || "UNKNOWN_COMPANY",
           subaccount: account.id || "NO_ID",
@@ -94,15 +104,15 @@ const AccountActionsMenu = ({
         });
 
         const url = `/app?${params.toString()}`;
-        
+
         console.log("➡️ Navigating to:", url);
-        
+
         onClose();
-        
+
         setTimeout(() => {
           navigate(url);
         }, 0);
-        
+
         return;
       } catch (err) {
         console.error("❌ Navigation error:", err);
@@ -119,25 +129,23 @@ const AccountActionsMenu = ({
       style={{ top: position.top, left: position.left }}
     >
       <ul className="divide-y divide-gray-100">
-        <MenuItem icon={Star} text="Add to Favorites" />
+        <MenuItem icon={Star} text="Add to Favorites" onClick={onClose} />
         <MenuItem
           icon={ExternalLink}
           text="Open account"
           onClick={() => handleAction("Open")}
         />
-
-        <MenuItem icon={Pencil} text="Edit account" />
-        <MenuItem icon={Scale} text="Manage limits" />
-        <MenuItem icon={Eye} text="Edit permissions" />
+        <MenuItem icon={Pencil} text="Edit account" onClick={onClose} />
+        <MenuItem icon={Scale} text="Manage limits" onClick={onClose} />
+        <MenuItem icon={Eye} text="Edit permissions" onClick={onClose} />
         <MenuItem isSeparator />
-        <MenuItem icon={UserPlus} text="Invite member" />
-        <MenuItem icon={Users} text="Manage access" />
-        <MenuItem icon={Lock} text="Lock account" />
-        <MenuItem icon={Link} text="Connect GHL" />
+        <MenuItem icon={UserPlus} text="Invite member" onClick={onClose} />
+        <MenuItem icon={Users} text="Manage access" onClick={onClose} />
+        <MenuItem icon={Lock} text="Lock account" onClick={onClose} />
+        <MenuItem icon={Link} text="Connect GHL" onClick={onClose} />
         <MenuItem isSeparator />
-        <MenuItem icon={Zap} text="Turn on rebilling" />
+        <MenuItem icon={Zap} text="Turn on rebilling" onClick={onClose} />
       </ul>
-
       <div className="pt-2 px-4 text-xs text-gray-500 border-t border-gray-100">
         <p className="font-semibold truncate">
           {account.name || "Unnamed Account"}

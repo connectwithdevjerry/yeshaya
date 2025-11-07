@@ -17,6 +17,7 @@ import {
   MoreVertical,
   ChevronLeft,
   ChevronRight,
+  MoreHorizontal,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchSubAccounts } from "../../store/slices/integrationSlice";
@@ -49,13 +50,6 @@ function SubAccounts() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsDropdownOpen(false);
       }
-      // if (
-      //   menuAnchorRef.current &&
-      //   !menuAnchorRef.current.contains(event.target) &&
-      //   openMenuAccountId
-      // ) {
-      //   setOpenMenuAccountId(null);
-      // }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -83,10 +77,15 @@ function SubAccounts() {
       setOpenMenuAccountId(null);
       return;
     } // Calculate button position relative to the viewport
-    const rect = e.currentTarget.getBoundingClientRect();
-
+    const rect = e.currentTarget.getBoundingClientRect(); // --- NEW LOGIC: Check viewport height and menu height (approx 300px) ---
+    const menuHeight = 350; // Approximate menu height, including padding
+    const viewportHeight = window.innerHeight;
+    let topPosition = rect.bottom + 5; 
+    if (topPosition + menuHeight > viewportHeight && rect.top > menuHeight) {
+      topPosition = rect.top - menuHeight - 5; 
+    } 
     setMenuPosition({
-      top: rect.bottom + 5,
+      top: topPosition, 
       left: rect.right - 240,
     });
 
@@ -275,17 +274,17 @@ function SubAccounts() {
                         ref={
                           openMenuAccountId === acc.id ? menuAnchorRef : null
                         }
-                        className="p-1 rounded-full hover:bg-gray-100"
+                        className="p-2 border rounded-md hover:bg-gray-100"
                         aria-label="more"
                         title="More"
                       >
-                        <MoreVertical size={16} className="text-gray-500" />
+                        <MoreHorizontal size={16} className="text-gray-500" />
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation(); /* delete */
                         }}
-                        className="p-1 rounded-full hover:bg-red-50"
+                        className="p-2 border rounded-md bg-red-50 hover:bg-red-200"
                         aria-label="delete"
                         title="Delete"
                       >
