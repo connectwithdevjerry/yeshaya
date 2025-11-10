@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { authAPI } from "../api/authApi";
+import axios from "axios";
 
 export const login = createAsyncThunk(
   "auth/login",
@@ -36,14 +37,21 @@ export const register = createAsyncThunk(
   "auth/signup",
   async (formData, { rejectWithValue }) => {
     try {
-      const response = await authAPI.register(formData);
+      const response = await axios.post(
+        "https://unscrutable-gallinulelike-ty.ngrok-free.dev/auth/signup",
+        formData
+      );
+
       console.log("Registration response:", response.data);
+
       if (response.data.status === false) {
         return rejectWithValue(response.data.message);
       }
+
       return response.data;
     } catch (error) {
       console.log("Error during registration:", error.response?.data);
+
       const errorMessage =
         error.response?.data?.message ||
         error.response?.data?.error ||
@@ -83,19 +91,27 @@ export const resetPassword = createAsyncThunk(
   "auth/forgot_password",
   async (email, { rejectWithValue }) => {
     try {
-      const response = await authAPI.resetPassword(email);
+      const response = await axios.post(
+        "https://unscrutable-gallinulelike-ty.ngrok-free.dev/auth/forgot_password",
+        { email } 
+      );
+
       return (
         response.data.message || "Reset link sent! Please check your email."
       );
     } catch (error) {
+      console.error("Error during password reset:", error.response?.data);
+
       const errorMessage =
         error.response?.data?.message ||
         error.response?.data ||
-        "Failed to send reset email";
+        "Failed to send reset email.";
+
       return rejectWithValue(errorMessage);
     }
   }
 );
+
 
 export const verifyToken = createAsyncThunk(
   "auth/verifyToken",
