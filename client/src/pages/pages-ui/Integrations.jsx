@@ -9,7 +9,6 @@ import APIKeysContent from '../../components/components-ui/Integration/Api.jsx';
 import WebhooksContent from '../../components/components-ui/Integration/Webhooks.jsx';
 
 
-
 // Shared Components
 const TabButton = ({ isActive, children, onClick }) => (
   <button

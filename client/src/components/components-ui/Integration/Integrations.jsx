@@ -5,7 +5,6 @@ import Card from "../ui/Card";
 import {
   connectGoHighLevel,
   connectStripe,
-  connectOpenAI,
   getIntegrationStatus, 
 } from "../../../store/slices/integrationSlice";
 import OpenAIConnectModal from "./OpenAiConnectModal";
