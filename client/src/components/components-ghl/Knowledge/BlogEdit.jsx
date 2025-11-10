@@ -3,10 +3,10 @@ import {
   ArrowLeft,
   Pencil,
   Search,
-  ListOrdered, // FAQ icon
-  FileText, // File icon
-  Globe, // URL icon
-  Type, // Text icon
+  ListOrdered, 
+  FileText, 
+  Globe, 
+  Type, 
   Trash2,
   MoreVertical,
   Home,
@@ -14,8 +14,9 @@ import {
   Copy,
   MoreHorizontal,
 } from "lucide-react";
+import EditNameModal from "./KnowledgeDetails/EditNameModal";
 
-// --- Mock Data ---
+
 const dataSources = [
   {
     id: 1,
@@ -50,9 +51,7 @@ const dataSources = [
     status: "Complete",
   },
 ];
-// --- End Mock Data ---
 
-// Helper function to get icon based on type
 const getSourceIcon = (type) => {
   switch (type) {
     case "faq":
@@ -88,12 +87,13 @@ const StatCard = ({ title, count, colorClass, isActive }) => (
   </div>
 );
 
-const KnowledgeDetailPage = () => {
+const KnowledgeDetailPage = ({isOpen, onClose}) => {
   const totalSources = dataSources.length;
   const completeSources = dataSources.filter(
     (d) => d.status === "Complete"
   ).length;
   const errorSources = dataSources.filter((d) => d.status === "Error").length;
+    const [OpenEditNameModal, setOpenEditNameModal] = useState(false)
 
   const headers = ["SOURCE", "DATA POINTS", "TYPE", "CREATED", "STATUS"];
 
@@ -101,7 +101,9 @@ const KnowledgeDetailPage = () => {
   const handleBack = () => console.log("Navigating back to KnowledgePage...");
   const handleTest = () => console.log("Testing knowledge base...");
   const handleNewData = () => console.log("Adding new data...");
-  const handleEditName = () => console.log("Editing knowledge base name...");
+  const handleEditName = () => {
+    setOpenEditNameModal(true)
+  };
 
   return (
     <div className="flex-grow  bg-gray-50">
@@ -255,7 +257,12 @@ const KnowledgeDetailPage = () => {
           </table>
         </div>
       </div>
+      <EditNameModal
+        isOpen={OpenEditNameModal}
+        onClose={() => setOpenEditNameModal(false)}
+      />
     </div>
+
   );
 };
 
