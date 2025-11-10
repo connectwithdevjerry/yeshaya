@@ -52,7 +52,9 @@ const signRefreshToken = (userId) => {
 };
 
 const verifyAccessToken = (req, res, next) => {
-  if (!req.headers["authorization"]) return next(createError.Unauthorized());
+  if (!req.headers["authorization"])
+    return { status: false, message: "Unauthorized" };
+  
   const authHeader = req.headers["authorization"];
   const bearerToken = authHeader.split(" ");
   const token = bearerToken[1];
@@ -65,7 +67,6 @@ const verifyAccessToken = (req, res, next) => {
     }
     console.log({ payload });
     req.payload = payload;
-    req.role = payload.permissionLev;
     req.user = payload.aud;
     next();
   });

@@ -11,12 +11,14 @@ const { HighLevel } = require("@gohighlevel/api-client");
 const pLimit = require("p-limit").default;
 const https = require("https");
 const twilio = require("twilio");
+const VoiceResponse = require("twilio").twiml.VoiceResponse;
 
 const SUB_PATH = "/integrations";
 const CLIENT_ID = process.env.GHL_APP_CLIENT_ID;
 const CLIENT_SECRET = process.env.GHL_APP_CLIENT_SECRET;
 const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const ACCOUNT_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const VAPI_API_KEY = process.env.VAPI_API_KEY;
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
@@ -851,55 +853,83 @@ const chargeUserCustomers = async (req, res) => {
   }
 };
 
-const buyUsPhoneNumber = async (accountSid, authToken) => {
-  if (!accountSid || !authToken) {
-    throw new Error("Twilio Account SID and Auth Token are required.");
-  }
-
-  // Initialize the Twilio client
-  const client = twilio(accountSid, authToken);
-
+const buyUsPhoneNumber = async (req, res) => {
   try {
-    const { numberToBuy, subaccount } = req.body;
-    console.log("1. Searching for an available US phone number...");
+    const { numberToBuy, subaccount, assistant } = req.body;
+    const userId = req.user;
 
-    // Step 1: Search for an available US local number
+    const user = await userModel.findById(userId);
 
-    // const numberToBuy = numbers[0].phoneNumber;
-    console.log(`Found available number: ${numberToBuy}`);
+    const getSubAccount = user.ghlSubAccountIds?.filter(
+      (account) => account.accountId === subaccount
+    );
 
-    // Step 2: Purchase the number
-    console.log(`2. Attempting to purchase ${numberToBuy}...`);
+    if (!getSubAccount.length) {
+      return res.send({
+        status: false,
+        message: "Subaccount ID do not match this account or not installed!",
+      });
+    }
+
+    const client = twilio(ACCOUNT_SID, ACCOUNT_AUTH_TOKEN);
+    console.log("Searching for an available US phone number...");
+
+    console.log(`Attempting to purchase ${numberToBuy}...`);
 
     const purchasedNumber = await client.incomingPhoneNumbers.create({
       phoneNumber: numberToBuy,
       // Optional: Configure webhook URLs for voice and SMS handling
-      voiceUrl: 'https://your-server.com/voice',
-      smsUrl: 'https://your-server.com/sms'
+      // voiceUrl: `${process.env.SERVER_URL}/integrations/voiceurl/${userId}/${subaccount}/${assistant}`,
+      // smsUrl: `${process.env.SERVER_URL}/integrations/smsurl/${userId}/${subaccount}/${assistant}`,
+      // voiceFallbackUrl: "",
+      // smsFallbackUrl: "",
     });
 
     console.log("SUCCESS! Phone number purchased.");
     console.log(`SID: ${purchasedNumber.sid}`);
     console.log(`Number: ${purchasedNumber.phoneNumber}`);
 
-    return purchasedNumber;
-  } catch (error) {
-    console.error("An error occurred during the purchase process:");
+    const getAssistant = getSubAccount.vapiAssistants.filter(
+      (massistant) => massistant.assistantId === assistant
+    );
 
-    // Check for specific Twilio error codes (e.g., insufficient funds, number already taken)
-    if (error.status === 400 && error.code === 21451) {
-      console.error(
-        "Error: The number is no longer available or there was a conflict."
-      );
-    } else if (error.status === 400 && error.code === 21608) {
-      console.error(
-        "Error: Insufficient funds in your Twilio account to purchase the number."
-      );
-    } else {
-      console.error(error.message);
+    if (!getAssistant.length) {
+      return res.send({
+        status: false,
+        message: "No assistant with this account for this number!",
+      });
     }
 
-    throw error;
+    getAssistant.numberDetails.push({
+      phoneNum: purchasedNumber.phoneNumber,
+      phoneSid: purchasedNumber.sid,
+    });
+
+    await user.save();
+
+    return res.send({ status: true, purchasedNumber });
+  } catch (error) {
+    console.error("An error occurred during the purchase process:");
+    // Check for specific Twilio error codes (e.g., insufficient funds, number already taken)
+    if (error.status === 400 && error.code === 21451) {
+      return res.send({
+        status: false,
+        message:
+          "Error: The number is no longer available or there was a conflict.",
+      });
+    } else if (error.status === 400 && error.code === 21608) {
+      return res.send({
+        status: false,
+        message:
+          "Error: Insufficient funds in your Twilio account to purchase the number.",
+      });
+    } else {
+      console.error(error.message);
+      return res.send({
+        status: false,
+        message: error.message,
+      });
+    }
   }
 };
 
@@ -935,6 +965,285 @@ const getAvailableNumbers = async (req, res) => {
   }
 };
 
+const twilioCallReceiver = async (req, res) => {
+  try {
+    const { userId, subaccount, assistant } = req.params;
+    // Twilio sends caller's number in req.body.From
+    const callerNumber = req.body.From;
+    const receiverNumber = req.body.To;
+
+    console.log(`Incoming call detected from: ${callerNumber}`);
+
+    const user = await userModel.findById(userId);
+
+    const targetSubaccount = user.ghlSubAccountIds.filter(
+      (account) => account.accountId === subaccount
+    );
+
+    const targetAssistant = targetSubaccount[0].vapiAssistants.filter(
+      (vapiAssistant) => vapiAssistant.assistantId === assistant
+    );
+
+    const targetPhoneNumber = targetAssistant.numberDetails.filter(
+      (number) => number.phoneNum === receiverNumber
+    );
+
+    const VAPI_PHONE_NUMBER_ID = targetPhoneNumber.vapiPhoneNumId;
+
+    // Call the Vapi API to start the AI conversation
+    const vapiResponse = await axios.post(
+      "https://api.vapi.ai/call",
+      {
+        // This ID is the unique Vapi ID for the Twilio number you imported
+        phoneNumberId: VAPI_PHONE_NUMBER_ID,
+        // Set to true to return TwiML instead of immediately dialing
+        phoneCallProviderBypassEnabled: true,
+        customer: {
+          number: callerNumber,
+        },
+        assistantId: assistant,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${VAPI_PRIVATE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    // Vapi returns the TwiML needed to transfer control back to Vapi's SIP server
+    const returnedTwiml = vapiResponse.data.phoneCallProviderDetails.twiml;
+
+    // Respond to Twilio with the Vapi-generated TwiML
+    console.log("Responding to Twilio with Vapi TwiML.");
+    return res.type("text/xml").send(returnedTwiml);
+  } catch (error) {
+    console.error(
+      "Error handling Twilio incoming call:",
+      error.response?.data || error.message
+    );
+    // Send a default TwiML response to Twilio to avoid connection errors
+    const twimlError =
+      "<Response><Say>An error occurred connecting your call. Please try again later.</Say></Response>";
+    return res.status(500).type("text/xml").send(twimlError);
+  }
+};
+
+const twilioSmsReceiver = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Twilio sends caller's number in req.body.From
+    const callerNumber = req.body.From;
+
+    console.log(`Incoming call detected from: ${callerNumber}`);
+
+    // Call the Vapi API to start the AI conversation
+    const vapiResponse = await axios.post(
+      "https://api.vapi.ai/call",
+      {
+        // This ID is the unique Vapi ID for the Twilio number you imported
+        phoneNumberId: VAPI_PHONE_NUMBER_ID,
+        // Set to true to return TwiML instead of immediately dialing
+        phoneCallProviderBypassEnabled: true,
+        customer: {
+          number: callerNumber,
+        },
+        assistantId: YOUR_ASSISTANT_ID,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${VAPI_PRIVATE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    // Vapi returns the TwiML needed to transfer control back to Vapi's SIP server
+    const returnedTwiml = vapiResponse.data.phoneCallProviderDetails.twiml;
+
+    // Respond to Twilio with the Vapi-generated TwiML
+    console.log("Responding to Twilio with Vapi TwiML.");
+    return res.type("text/xml").send(returnedTwiml);
+  } catch (error) {
+    console.error(
+      "Error handling Twilio incoming call:",
+      error.response?.data || error.message
+    );
+    // Send a default TwiML response to Twilio to avoid connection errors
+    const twimlError =
+      "<Response><Say>An error occurred connecting your call. Please try again later.</Say></Response>";
+    return res.status(500).type("text/xml").send(twimlError);
+  }
+};
+
+const importTwilioNumberToVapi = async (req, res) => {
+  // what happens here;
+  // we link the phone to vapi ai
+  // we save the importation id, phoneSid
+  // we update the sms and phone webhook url
+  // if the number is bought from us, the user doesn't need to give us a phoneSid
+  // this only supports twilio, we can always extend to other services
+  // try {
+  const { subaccountId, assistantId, phoneSid, twilioNumber } = req.body;
+  const userId = req.user;
+
+  const VAPI_IMPORT_URL = "https://api.vapi.ai/phone-number";
+
+  const response = await axios.post(
+    VAPI_IMPORT_URL,
+    {
+      // Specify the provider
+      provider: "twilio",
+      // The number to import (must be in E.164 format)
+      number: twilioNumber,
+      // Your Twilio credentials
+      twilioAccountSid: ACCOUNT_SID,
+      twilioAuthToken: ACCOUNT_AUTH_TOKEN,
+      // The API may also accept twilioApiKey and twilioApiSecret for some users
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${VAPI_API_KEY}`,
+        // "Content-Type": "application/json",
+      },
+    }
+  );
+
+  // The response data contains the newly created phone number object
+  const newPhoneNumberId = response.data.id;
+
+  if (newPhoneNumberId) {
+    const user = await userModel.findById(userId);
+    const getSubAccount = user.ghlSubAccountIds.filter(
+      (subaccount) => subaccount.accountId === subaccountId
+    );
+
+    const getAssistant = getSubAccount.vapiAssistants.filter(
+      (assistant) => assistant.assistantId === assistantId
+    );
+
+    if (!getAssistant.length) {
+      return res.send({
+        status: false,
+        message: "No assistant with this account for this number!",
+      });
+    }
+
+    const getPhoneNumber = getAssistant.numberDetails.filter(
+      (number) => number.phoneNum === twilioNumber
+    );
+
+    // const targetPhoneSid = getPhoneNumber[0].phoneSid;
+    // const inputPhoneSid = targetPhoneSid ? targetPhoneSid : phoneSid;
+
+    if (!inputPhoneSid) {
+      return res.send({ status: false, message: "Invalid phone sid!" });
+    }
+
+    // update twilio to add voice, sms
+    const client = twilio(ACCOUNT_SID, ACCOUNT_AUTH_TOKEN);
+    const incomingPhoneNumber = await client
+      .incomingPhoneNumbers(phoneSid)
+      .update({
+        voiceUrl: `${process.env.SERVER_URL}/integrations/voiceurl/${userId}/${subaccountId}/${assistantId}`,
+        smsUrl: `${process.env.SERVER_URL}/integrations/smsurl/${userId}/${subaccountId}/${assistantId}`,
+      });
+
+    // save the id
+    if (!getPhoneNumber.length) {
+      getAssistant.numberDetails.push({
+        phoneNum: twilioNumber,
+        vapiPhoneNumId: newPhoneNumberId,
+        phoneSid,
+      });
+    } else {
+      getPhoneNumber[0].vapiPhoneNumId = newPhoneNumberId;
+    }
+
+    await user.save();
+
+    console.log(
+      `Successfully imported Twilio number. VAPI_PHONE_NUMBER_ID: ${newPhoneNumberId}`
+    );
+    return res.send({
+      status: true,
+      newPhoneNumberId,
+      incomingPhoneNumber,
+      message: `Successfully imported Twilio number. VAPI_PHONE_NUMBER_ID: ${newPhoneNumberId}`,
+    });
+  } else {
+    throw new Error(
+      "Import successful, but Vapi did not return a phone number ID."
+    );
+  }
+  // } catch (error) {
+  //   console.error(
+  //     "Error importing Twilio number:",
+  //     error.response?.data || error.message
+  //   );
+  //   return res.send({
+  //     status: false,
+  //     message:
+  //       "Error importing Twilio number:" + error.response?.data ||
+  //       error.message,
+  //   });
+  // }
+};
+
+const getPurchasedNumbers = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId, assistantId } = req.query;
+
+    const user = await userModel.findById(userId);
+
+    const targetSubaccount = user.ghlSubAccountIds.filter(
+      (account) => account.accountId === subaccountId
+    );
+
+    const targetAssistant = targetSubaccount[0].vapiAssistants.filter(
+      (vapiAssistant) => vapiAssistant.assistantId === assistantId
+    );
+
+    console.log({ targetAssistant });
+
+    const limit = pLimit(5); // 5 at a time
+    const promises = targetAssistant.numberDetails.map((number) =>
+      limit(async () => {
+        try {
+          const client = twilio(ACCOUNT_SID, ACCOUNT_AUTH_TOKEN);
+          const phoneNumberDetails = await client
+            .incomingPhoneNumbers(number.phoneSid)
+            .fetch();
+
+          // The object contains all data, including webhooks, capabilities, etc.
+          return { status: true, phoneNumberDetails };
+        } catch (error) {
+          return {
+            status: false,
+            message: error.message,
+            phoneNumber: number.phoneNum,
+          };
+        }
+      })
+    );
+
+    const phoneNumbers = await Promise.all(promises);
+    console.log({ phoneNumbers });
+
+    return res.send({
+      status: true,
+      data: phoneNumbers,
+    });
+  } catch (error) {
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   ghlAuthorize,
   ghlOauthCallback,
@@ -951,4 +1260,8 @@ module.exports = {
   checkIntegrationStatus,
   getAvailableNumbers,
   buyUsPhoneNumber,
+  twilioCallReceiver,
+  twilioSmsReceiver,
+  importTwilioNumberToVapi,
+  getPurchasedNumbers,
 };

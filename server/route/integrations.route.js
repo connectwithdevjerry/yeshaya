@@ -15,6 +15,10 @@ const {
   checkIntegrationStatus,
   getAvailableNumbers,
   buyUsPhoneNumber,
+  twilioCallReceiver,
+  twilioSmsReceiver,
+  importTwilioNumberToVapi,
+  getPurchasedNumbers,
   // admin_super_signup,
 } = require("../controller/integrations.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
@@ -34,6 +38,10 @@ const {
   CHECK_INTEGRATION_STATUS,
   GET_AVAILABLE_NUMBERS,
   BUY_NUMBER,
+  TWILIO_CALL_RECEIVER,
+  TWILIO_SMS_RECEIVER,
+  IMPORT_PHONE_NUM_TO_VAPI,
+  GET_PURCHASED_NUMBER,
 } = require("../constants");
 
 router.get(GHL_AUTHORIZE, verifyAccessToken, ghlAuthorize);
@@ -50,5 +58,13 @@ router.get(GET_GHL_SUB_ACCOUNTS, verifyAccessToken, callGetSubaccounts);
 router.get(CHECK_INTEGRATION_STATUS, verifyAccessToken, checkIntegrationStatus);
 router.get(GET_AVAILABLE_NUMBERS, verifyAccessToken, getAvailableNumbers);
 router.post(BUY_NUMBER, verifyAccessToken, buyUsPhoneNumber);
+router.post(TWILIO_CALL_RECEIVER, twilioCallReceiver);
+router.post(TWILIO_SMS_RECEIVER, twilioSmsReceiver);
+router.post(
+  IMPORT_PHONE_NUM_TO_VAPI,
+  verifyAccessToken,
+  importTwilioNumberToVapi
+);
+router.get(GET_PURCHASED_NUMBER, verifyAccessToken, getPurchasedNumbers);
 
 module.exports = router;
