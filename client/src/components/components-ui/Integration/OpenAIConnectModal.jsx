@@ -14,11 +14,11 @@ const ConnectOpenAIModal = ({ onClose, isOpen }) => {
     dispatch(connectOpenAI(apiKey));
   };
 
-  useEffect(() => {
-    if (connected && !loading && !error) {
-      onClose(); 
-    }
-  }, [connected, loading, error, onClose]);
+  // useEffect(() => {
+  //   if (connected && !loading && !error) {
+  //     onClose(); 
+  //   }
+  // }, [connected, loading, error, onClose]);
 
   if (!isOpen) return null;
 

@@ -62,6 +62,21 @@ export const connectOpenAI = createAsyncThunk(
   }
 );
 
+export const testOpenAiKey = createAsyncThunk(
+  "/integrations/test/openai-key",
+  async (apiKey, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/integrations/test/openai-key");
+
+      console.log("✅ OpenAI Response:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("❌ OpenAI Error:", error.response?.data || error.message);
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
 // 🔹 Get Integration Status
 export const getIntegrationStatus = createAsyncThunk(
   "integrations/getStatus",
@@ -99,6 +114,7 @@ const integrationSlice = createSlice({
     goHighLevel: { connected: false, loading: false, error: null },
     stripe: { connected: false, loading: false, error: null },
     openAI: { connected: false, loading: false, error: null, message: "" },
+    testOpenAi: { connected: false, loading: false, error: null, message: "" },
     subAccounts: [],
     loading: false,
     error: null,
@@ -163,6 +179,24 @@ const integrationSlice = createSlice({
           action.payload?.message || action.payload || "Connection failed";
       });
 
+    builder
+      .addCase(testOpenAiKey.pending, (state) => {
+        state.openAI.loading = true;
+        state.openAI.error = null;
+      })
+      .addCase(testOpenAiKey.fulfilled, (state, action) => {
+        state.openAI.loading = false;
+        state.openAI.connected = !!action.payload?.status;
+        state.openAI.message =
+          action.payload?.message || "Connected successfully";
+        state.openAI.error = null;
+      })
+      .addCase(testOpenAiKey.rejected, (state, action) => {
+        state.openAI.loading = false;
+        state.openAI.error =
+          action.payload?.message || action.payload || "Connection failed";
+      });
+
     // GET INTEGRATION STATUS
     builder
       .addCase(getIntegrationStatus.pending, (state) => {
@@ -203,7 +237,7 @@ const integrationSlice = createSlice({
         state.subAccounts = action.payload;
       })
       .addCase(fetchSubAccounts.rejected, (state, action) => {
-        state.loading = false;  
+        state.loading = false;
         state.error = action.payload;
       });
   },

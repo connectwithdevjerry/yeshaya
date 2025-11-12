@@ -10,7 +10,10 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { Sidebar } from "./components/components-ui/Sidebar/Sidebar";
 import { SidebarGHL } from "./components/components-ghl/Sidebar/Sidebar";
-import { userInfo as defaultUserInfo, navigationItems } from "./data/accountsData-ui";
+import {
+  userInfo as defaultUserInfo,
+  navigationItems,
+} from "./data/accountsData-ui";
 import { navigationGHLItems } from "./data/accountsData-ghl";
 import MainContent from "./MainContent";
 import ProtectedRoute from "./ProtectedRoutes";
@@ -40,14 +43,18 @@ function Layout() {
 
   // ✅ Define userInfo at the top, before any conditionals
   const userInfo = {
-    name: account 
-      ? decodeURIComponent(account.myname) 
-      : (user?.name || defaultUserInfo.name || "Your Agency"),
+    name: account
+      ? decodeURIComponent(account.myname)
+      : user?.name || defaultUserInfo.name || "Your Agency",
     users: defaultUserInfo.users || "0",
     currentUser: {
-      initial: user?.name?.charAt(0).toUpperCase() || defaultUserInfo.currentUser?.initial || "U",
-      email: user?.email || defaultUserInfo.currentUser?.email || "user@example.com"
-    }
+      initial:
+        user?.name?.charAt(0).toUpperCase() ||
+        defaultUserInfo.currentUser?.initial ||
+        "U",
+      email:
+        user?.email || defaultUserInfo.currentUser?.email || "user@example.com",
+    },
   };
 
   const authPaths = [
@@ -74,10 +81,10 @@ function Layout() {
   ];
 
   const isAuthPage = authPaths.includes(location.pathname);
-  
+
   // ✅ Check if we're on a GHL page OR on /app route
-  const isGHLPage = 
-    location.pathname === '/app' || 
+  const isGHLPage =
+    location.pathname === "/app" ||
     ghlPaths.some((path) => location.pathname.startsWith(path));
 
   return (
@@ -129,6 +136,32 @@ function Layout() {
 }
 
 export default function App() {
+  // const confirmAuthStatus = () => {
+  //   // Implement authentication logic here and return true or false based on authentication status
+  //   const accessToken = localStorage.getItem("accessToken");
+  //   const refreshToken = localStorage.getItem("refreshToken");
+
+  //   if (accessToken && refreshToken) {
+  //     const decoded_accessToken = jwtDecode(accessToken);
+  //     const expirationDate = decoded_accessToken.exp * 1000;
+  //     const currentTime = Date.now();
+
+  //     // console.log({ decoded_accessToken });
+
+  //     // Check if access token is expired
+  //     if (expirationDate >= currentTime) {
+  //       // console.log("Access token active!", expirationDate >= new Date());
+  //       dispatch(setMyProfile(decoded_accessToken));
+  //     } else {
+  //       console.log("Access token expired!", expirationDate < new Date());
+  //     }
+  //   }
+  // };
+
+  // useEffect(() => {
+  //   confirmAuthStatus();
+  // }, []);
+
   return (
     <Router>
       <Layout />

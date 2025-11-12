@@ -5,9 +5,15 @@ import Card from "../ui/Card";
 import {
   connectGoHighLevel,
   connectStripe,
-  getIntegrationStatus, 
+  getIntegrationStatus,
 } from "../../../store/slices/integrationSlice";
 import ConnectOpenAIModal from "./OpenAiConnectModal";
+// import { connectOpenAI } from "../../../store/slices/integrationSlice";
+
+// const handleSubmit = (e) => {
+//   e.preventDefault();
+//   dispatch(connectOpenAI(apiKey));
+// };
 
 const IntegrationItem = ({
   name,
@@ -19,7 +25,7 @@ const IntegrationItem = ({
 }) => (
   <button
     onClick={onClick}
-    disabled={loading}
+    // disabled={isConnected}
     className="flex justify-between items-center w-full py-4 border-b last:border-b-0 text-left hover:bg-gray-50 transition disabled:opacity-50"
   >
     <div className="flex items-center">
@@ -53,13 +59,22 @@ const IntegrationsContent = () => {
   const [isOpenAIConnectOpen, setIsOpenAIConnectOpen] = useState(false);
 
   useEffect(() => {
-    dispatch(getIntegrationStatus());
+    dispatch(
+      getIntegrationStatus()
+      // .unwrap()
+      // .then((payload) => {
+      //   // setNameImage({ ...payload.data });
+      //   console.log({ payload });
+      // })
+    );
   }, [dispatch]);
 
   return (
     <Card>
       {loading && (
-        <div className="p-4 text-sm text-gray-500">Checking integrations...</div>
+        <div className="p-4 text-sm text-gray-500">
+          Checking integrations...
+        </div>
       )}
 
       <IntegrationItem
@@ -68,7 +83,9 @@ const IntegrationsContent = () => {
         description="Connect GoHighLevel to import your sub-accounts, manage connections & more"
         isConnected={goHighLevel?.connected}
         loading={goHighLevel?.loading}
-        onClick={() => dispatch(connectGoHighLevel())}
+        onClick={() =>
+          !goHighLevel?.connected && dispatch(connectGoHighLevel())
+        }
       />
 
       <IntegrationItem
@@ -77,7 +94,7 @@ const IntegrationsContent = () => {
         description="Connect OpenAI to use our assistant / agent framework using your own keys"
         isConnected={openAI?.connected}
         loading={openAI?.loading}
-        onClick={() => setIsOpenAIConnectOpen(true)}
+        onClick={() => !openAI?.connected && setIsOpenAIConnectOpen(true)}
       />
 
       <IntegrationItem
@@ -86,14 +103,16 @@ const IntegrationsContent = () => {
         description="Connect Stripe to re-bill or resell AI voice minutes using your own Stripe"
         isConnected={stripe?.connected}
         loading={stripe?.loading}
-        onClick={() => dispatch(connectStripe())}
+        onClick={() => !stripe?.connected && dispatch(connectStripe())}
       />
 
       {/* ✅ Modal for entering OpenAI API key */}
-      <ConnectOpenAIModal
-        isOpen={isOpenAIConnectOpen}
-        onClose={() => setIsOpenAIConnectOpen(false)}
-      />
+      {!openAI && (
+        <ConnectOpenAIModal
+          isOpen={isOpenAIConnectOpen}
+          onClose={() => setIsOpenAIConnectOpen(false)}
+        />
+      )}
     </Card>
   );
 };
