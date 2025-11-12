@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { connectOpenAI } from "../../../store/slices/integrationSlice";
 
-const ConnectOpenAIModal = ({ onClose, isOpen }) => {
+const OpenAIModal = ({ onClose, isOpen }) => {
   const [apiKey, setApiKey] = useState("");
   const dispatch = useDispatch();
   const { loading, error, connected, message } = useSelector(
@@ -72,4 +72,4 @@ const ConnectOpenAIModal = ({ onClose, isOpen }) => {
   );
 };
 
-export default ConnectOpenAIModal;
+export default OpenAIModal;
