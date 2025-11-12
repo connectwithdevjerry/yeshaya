@@ -8,12 +8,6 @@ import {
   getIntegrationStatus,
 } from "../../../store/slices/integrationSlice";
 import ConnectOpenAIModal from "./OpenAiConnectModal";
-// import { connectOpenAI } from "../../../store/slices/integrationSlice";
-
-// const handleSubmit = (e) => {
-//   e.preventDefault();
-//   dispatch(connectOpenAI(apiKey));
-// };
 
 const IntegrationItem = ({
   name,
@@ -107,12 +101,10 @@ const IntegrationsContent = () => {
       />
 
       {/* ✅ Modal for entering OpenAI API key */}
-      {!openAI && (
-        <ConnectOpenAIModal
-          isOpen={isOpenAIConnectOpen}
-          onClose={() => setIsOpenAIConnectOpen(false)}
-        />
-      )}
+      <ConnectOpenAIModal
+        isOpen={isOpenAIConnectOpen}
+        onClose={() => setIsOpenAIConnectOpen(false)}
+      />
     </Card>
   );
 };
