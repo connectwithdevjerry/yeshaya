@@ -17,11 +17,13 @@ import {
   MoreVertical,
   ChevronLeft,
   ChevronRight,
+  MoreHorizontal,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchSubAccounts } from "../../store/slices/integrationSlice";
 import FolderModal from "../../components/components-ui/Modals/FolderModal";
 import { AccountDetailSidebar } from "../../components/components-ui/Modals/AccountDetailSidebar";
+import AccountActionsMenu from "../../components/components-ui/Accounts/AccountActionsMenu";
 
 function SubAccounts() {
   const [activeTab, setActiveTab] = useState("All");
@@ -29,6 +31,9 @@ function SubAccounts() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
+  const [openMenuAccountId, setOpenMenuAccountId] = useState(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const menuAnchorRef = useRef(null);
   const dropdownRef = useRef(null);
 
   const dispatch = useDispatch();
@@ -57,11 +62,39 @@ function SubAccounts() {
   const handleAccountClick = (account) => {
     setSelectedAccount(account);
     setIsSidebarOpen(true);
+    setOpenMenuAccountId(null);
   };
 
   const handleCloseSidebar = () => {
     setIsSidebarOpen(false);
     setSelectedAccount(null);
+  };
+
+  const handleOpenActionMenu = (e, account) => {
+    e.stopPropagation();
+
+    if (openMenuAccountId === account.id) {
+      setOpenMenuAccountId(null);
+      return;
+    } // Calculate button position relative to the viewport
+    const rect = e.currentTarget.getBoundingClientRect(); // --- NEW LOGIC: Check viewport height and menu height (approx 300px) ---
+    const menuHeight = 350; // Approximate menu height, including padding
+    const viewportHeight = window.innerHeight;
+    let topPosition = rect.bottom + 5; 
+    if (topPosition + menuHeight > viewportHeight && rect.top > menuHeight) {
+      topPosition = rect.top - menuHeight - 5; 
+    } 
+    setMenuPosition({
+      top: topPosition, 
+      left: rect.right - 240,
+    });
+
+    setSelectedAccount(account);
+    setOpenMenuAccountId(account.id);
+  };
+
+  const handleCloseActionMenu = () => {
+    setOpenMenuAccountId(null);
   };
 
   const DropdownItem = ({ icon: Icon, text }) => (
@@ -152,7 +185,9 @@ function SubAccounts() {
             Loading subaccounts...
           </p>
         ) : error ? (
-          <p className="text-center p-6 text-red-500">Error: {error}</p>
+          <p className="text-center p-6 text-red-500">
+            Error: {error.message || JSON.stringify(error)}
+          </p>
         ) : filtered.length === 0 ? (
           <p className="text-center p-6 text-gray-400">
             No subaccounts available.
@@ -212,7 +247,6 @@ function SubAccounts() {
                   {/* CONNECTION STATUS */}
                   <td className="p-3 align-middle">
                     <div className="flex items-center gap-2 text-green-600 whitespace-nowrap">
-                      
                       <Link size={18} />
                       <span className="text-sm">Connected</span>
                     </div>
@@ -223,7 +257,7 @@ function SubAccounts() {
                     <div className="flex items-center justify-center gap-3">
                       <button
                         onClick={(e) => {
-                          e.stopPropagation(); 
+                          e.stopPropagation();
                         }}
                         className="p-1 rounded-full hover:bg-gray-100"
                         aria-label="users"
@@ -234,20 +268,23 @@ function SubAccounts() {
 
                       <button
                         onClick={(e) => {
-                          e.stopPropagation(); /* more */
+                          e.stopPropagation(); // ✅ This stops the row click
+                          handleOpenActionMenu(e, acc);
                         }}
-                        className="p-1 rounded-full hover:bg-gray-100"
+                        ref={
+                          openMenuAccountId === acc.id ? menuAnchorRef : null
+                        }
+                        className="p-2 border rounded-md hover:bg-gray-100"
                         aria-label="more"
                         title="More"
                       >
-                        <MoreVertical size={16} className="text-gray-500" />
+                        <MoreHorizontal size={16} className="text-gray-500" />
                       </button>
-
                       <button
                         onClick={(e) => {
                           e.stopPropagation(); /* delete */
                         }}
-                        className="p-1 rounded-full hover:bg-red-50"
+                        className="p-2 border rounded-md bg-red-50 hover:bg-red-200"
                         aria-label="delete"
                         title="Delete"
                       >
@@ -290,6 +327,15 @@ function SubAccounts() {
         onClose={handleCloseSidebar}
         account={selectedAccount}
       />
+      {openMenuAccountId && selectedAccount && (
+        <AccountActionsMenu
+          isOpen={true}
+          onClose={handleCloseActionMenu}
+          account={selectedAccount}
+          position={menuPosition}
+          anchorRef={menuAnchorRef}
+        />
+      )}
     </div>
   );
 }

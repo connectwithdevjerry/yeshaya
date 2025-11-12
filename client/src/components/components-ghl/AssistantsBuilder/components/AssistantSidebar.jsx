@@ -60,7 +60,7 @@ const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal }) => {
 
       {/* Expandable content */}
       {isSelected && item.type === "panel" && (
-        <div className="overflow-hidden bg-white">{renderPanel()}</div>
+        <div className="overflow-hidden w-[250px] bg-white">{renderPanel()}</div>
       )}
     </div>
   );
@@ -69,7 +69,7 @@ const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal }) => {
 export const ToolkitSidebar = ({ isOpen, onToggle, activeTab }) => {
   const [expandedItem, setExpandedItem] = useState(null);
   const [isToolsModalOpen, setIsToolsModalOpen] = useState(false);
-  const sidebarWidth = "w-80";
+  const sidebarWidth = "w-[250px]";
 
   const handleItemSelect = (title) => {
     setExpandedItem((prev) => (prev === title ? null : title));
@@ -93,14 +93,14 @@ export const ToolkitSidebar = ({ isOpen, onToggle, activeTab }) => {
 
   return (
     <div
-      className={`max-h-[550px] border-l border-gray-200 bg-white flex-shrink-0 flex flex-col relative transition-all duration-300 ease-in-out ${
+      className={`max-h-full border-l border-gray-200 bg-white flex-shrink-0 flex flex-col relative transition-all duration-300 ease-in-out ${
         isOpen ? sidebarWidth : "w-0 overflow-hidden"
       }`}
     >
       {isOpen && (
         <>
           {/* Header */}
-          <div className="px-4 pb-3 border-b border-gray-200 mb-2 flex justify-between items-center sticky top-0 bg-white z-10">
+          <div className="px-4 py-2 border-b border-gray-200  flex justify-between items-center sticky top-0 bg-white z-10">
             <h4 className="text-lg font-semibold text-gray-800 flex items-center space-x-2">
               <Settings className="w-5 h-5 text-blue-600" />
               <span>Tool Kit</span>

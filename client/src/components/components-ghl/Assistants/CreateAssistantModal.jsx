@@ -1,6 +1,8 @@
 // src/components/assistants/CreateAssistantModal.jsx
-import React from 'react';
+import React, {useState} from 'react';
 import { X, Info, FileText, Upload, Layout, GitBranch } from 'lucide-react'; 
+import GenerateAssistantFormModal from './GenerateAssistantFormModal';
+
 const CreateAssistantOption = ({ icon: Icon, title, description, isBeta = false, onClick }) => (
   <button
     className="flex flex-col items-start p-4 border border-gray-200 rounded-md text-left cursor-pointer hover:bg-gray-50 transition-colors h-full"
@@ -23,10 +25,14 @@ const CreateAssistantOption = ({ icon: Icon, title, description, isBeta = false,
 );
 
 const CreateAssistantModal = ({ isOpen, onClose }) => {
+  const [isGenerateFormModalOpen, setIsGenerateFormModalOpen] = useState(false);
   if (!isOpen) return null;
 
   const handleOptionClick = (option) => {
     console.log('Selected Assistant Creation Option:', option);
+    if (option === 'generate') {
+      setIsGenerateFormModalOpen(true);
+    }
     
   };
 
@@ -97,6 +103,11 @@ const CreateAssistantModal = ({ isOpen, onClose }) => {
           </button>
         </div>
       </div>
+      <GenerateAssistantFormModal 
+        isOpen={isGenerateFormModalOpen}
+        onClose={() => setIsGenerateFormModalOpen(false)}
+        // onCreate={handleGenerateAssistant}
+      />
     </div>
   );
 };

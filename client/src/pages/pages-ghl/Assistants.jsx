@@ -1,5 +1,5 @@
-// src/pages/AssistantsPage.jsx
-import React, { useState } from "react";
+// src/pages/pages-ghl/Assistants.jsx
+import React, { useState, useEffect } from "react";
 import {
   Search,
   ChevronLeft,
@@ -9,91 +9,93 @@ import {
   Trash2,
   MoreVertical,
   Settings,
+  MoreHorizontal,
 } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchAssistants } from "../../store/slices/assistantsSlice";
 import TabButton from "../../components/components-ghl/TabButton";
 import CreateFolderModal from "../../components/components-ghl/Assistants/CreateFolderModal";
 import CreateAssistantModal from "../../components/components-ghl/Assistants/CreateAssistantModal";
-import {useNavigate} from 'react-router-dom';
-
-// Dummy data
-const DUMMY_ASSISTANTS_DATA = [
-  {
-    name: "New Blank Assistant",
-    meta: "GPT-4o",
-    updated: "Oct 28, 2025 11:31 pm",
-    created: "Oct 21, 2025 3:24 pm",
-    id: "1761...9400",
-    icon: Settings,
-  },
-  {
-    name: "Sarah Livechat, SMS...",
-    meta: "GPT-4o",
-    updated: "Oct 21, 2025 4:33 pm",
-    created: "Oct 7, 2025 2:14 pm",
-    id: "1759...9200",
-    icon: Settings,
-  },
-  {
-    name: "Sarah",
-    meta: "GPT-4o",
-    updated: "Oct 21, 2025 4:30 pm",
-    created: "Oct 7, 2025 1:52 pm",
-    id: "1759...6500",
-    icon: Settings,
-  },
-];
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { useCurrentAccount } from "../../hooks/useCurrentAccount";
 
 const Assistants = () => {
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isAssistantModalOpen, setIsAssistantModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
+
+  const dispatch = useDispatch();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const account = useCurrentAccount();
 
-  const assistants = DUMMY_ASSISTANTS_DATA;
-  const totalResults = assistants.length;
+  // ✅ Get subaccountId from URL or current account
+  const subaccountId = searchParams.get('subaccount') || account?.subaccount;
 
-  const headers = ["NAME", "META DATA", "UPDATED", "CREATED", "ID"];
+  const { data: assistants, loading, error } = useSelector(
+    (state) => state.assistants
+  );
+
+  useEffect(() => {
+    if (subaccountId) {
+      console.log("📍 Fetching assistants for subaccount:", subaccountId);
+      dispatch(fetchAssistants(subaccountId));
+    } else {
+      console.warn("⚠️ No subaccountId found");
+    }
+  }, [dispatch, subaccountId]);
+
+  // ✅ Handle assistant click with account context
+  const handleAssistantClick = (assistant) => {
+    if (location.pathname === '/app' && account) {
+      // Navigate with account context
+      const params = new URLSearchParams({
+        agencyid: account.agencyid,
+        subaccount: account.subaccount,
+        allow: account.allow,
+        myname: account.myname,
+        myemail: account.myemail,
+        route: `/assistants/${assistant.id}`,
+      });
+      navigate(`/app?${params.toString()}`);
+    } else {
+      // Regular navigation
+      navigate(`/assistants/${assistant.id}`);
+    }
+  };
+
+  const headers = ["NAME", "MODEL", "UPDATED", "CREATED", "ID"];
 
   return (
-    <div className="flex-grow bg-gray-50 p-8">
+    <div className="flex-grow bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Top Bar */}
+        {/* 🔍 Top Bar */}
         <div className="flex justify-end items-center mb-6">
           <div className="flex items-center space-x-3">
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search for an assistant..."
-                className="pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-              />
-            </div>
-
-            {/* Create Buttons */}
             <button
               onClick={() => setIsFolderModalOpen(true)}
-              className="px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors flex items-center"
+              className="px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors"
             >
               + Create Folder
             </button>
 
             <button
               onClick={() => setIsAssistantModalOpen(true)}
-              className="px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors flex items-center"
+              className="px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors"
             >
               + Create Assistant
             </button>
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* 🗂 Tabs */}
         <div className="flex border-b border-gray-200 mb-6 bg-white rounded-t-lg shadow-sm">
           <TabButton
             isActive={activeTab === "all"}
             onClick={() => setActiveTab("all")}
           >
-            All {totalResults}
+            All {assistants.length}
           </TabButton>
           <TabButton
             isActive={activeTab === "favorites"}
@@ -119,35 +121,48 @@ const Assistants = () => {
         <div className="text-sm font-medium text-gray-600 mb-4 flex items-center space-x-2">
           <Home className="w-4 h-4" />
           <span>Home</span>
-          <span className="text-gray-400">/</span>
-          <span className="text-gray-400">{totalResults}</span>
+      
         </div>
 
-        {/* Table */}
+        {/* 🧾 Table */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full divide-y border divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 {headers.map((header) => (
                   <th
                     key={header}
-                    scope="col"
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
                     {header}
                   </th>
                 ))}
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  ACTIONS
+                <th className=" px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  
                 </th>
               </tr>
             </thead>
 
             <tbody className="bg-white divide-y divide-gray-200">
-              {assistants.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={headers.length + 1}
+                    className="px-6 py-8 text-center text-gray-500"
+                  >
+                    Loading assistants...
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td
+                    colSpan={headers.length + 1}
+                    className="px-6 py-8 text-center text-red-500"
+                  >
+                    {error}
+                  </td>
+                </tr>
+              ) : assistants.length === 0 ? (
                 <tr>
                   <td
                     colSpan={headers.length + 1}
@@ -164,50 +179,43 @@ const Assistants = () => {
                   <tr
                     key={assistant.id}
                     className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => navigate(`/assistants/${assistant.id}`)}
+                    onClick={() => handleAssistantClick(assistant)}
                   >
-                    {/* NAME */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      <div className="flex items-center space-x-2">
-                        {React.createElement(assistant.icon, {
-                          className: "w-5 h-5 text-gray-700",
-                        })}
+                    <td className="px-1 py-1 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <div className="flex items-center space-x-1">
+                        <img src="https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg" alt="OpenAi" className="w-[25px]" />
                         <span>{assistant.name}</span>
                       </div>
                     </td>
-
-                    {/* META DATA */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {assistant.meta}
+                    <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-500">
+                      {assistant.model?.model || "N/A"}
                     </td>
-
-                    {/* UPDATED */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {assistant.updated}
+                    <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(assistant.updatedAt).toLocaleString()}
                     </td>
-
-                    {/* CREATED */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {assistant.created}
+                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(assistant.createdAt).toLocaleString()}
                     </td>
-
-                    {/* ID */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {assistant.id}
+                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                      {assistant.id.slice(0, 6)}...{assistant.id.slice(-4)}
                     </td>
-
-                    {/* ACTIONS */}
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-6 py-2 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
-                        <button
-                          className="p-1 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100"
-                          title="More"
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Handle more options
+                          }}
+                          className="p-1 text-gray-400 hover:text-gray-100 rounded-md bg-gray-100 hover:bg-gray-300"
                         >
-                          <MoreVertical className="w-4 h-4" />
+                          <MoreHorizontal className="w-4 h-4" />
                         </button>
-                        <button
-                          className="p-1 text-red-400 hover:text-red-700 rounded-full hover:bg-red-50"
-                          title="Delete"
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Handle delete
+                          }}
+                          className="p-1 text-red-400 bg-red-100 rounded-md hover:bg-red-400 hover:text-red-50 duration-75"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -218,37 +226,6 @@ const Assistants = () => {
               )}
             </tbody>
           </table>
-        </div>
-
-        {/* Pagination */}
-        <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-          <div className="flex items-center space-x-2 text-sm text-gray-700">
-            <div className="relative">
-              <select className="pl-3 pr-8 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
-                <option>10</option>
-              </select>
-            </div>
-            <span>Showing 1-10</span>
-            <span className="font-medium text-gray-500">
-              {totalResults} Results
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-2 text-sm">
-            <div className="text-gray-500">Page 1 of 1</div>
-            <button
-              className="p-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-              disabled={totalResults <= 10}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              className="p-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-              disabled={totalResults <= 10}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
         </div>
       </div>
 

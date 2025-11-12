@@ -1,18 +1,21 @@
+// src/App.jsx
 import React, { useEffect } from "react";
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   useLocation,
+  useSearchParams,
 } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { Sidebar } from "./components/components-ui/Sidebar/Sidebar";
 import { SidebarGHL } from "./components/components-ghl/Sidebar/Sidebar";
-import { userInfo, navigationItems } from "./data/accountsData-ui";
+import { userInfo as defaultUserInfo, navigationItems } from "./data/accountsData-ui";
 import { navigationGHLItems } from "./data/accountsData-ghl";
 import MainContent from "./MainContent";
 import ProtectedRoute from "./ProtectedRoutes";
 import { verifyToken } from "./store/slices/authSlice";
+import { useCurrentAccount } from "./hooks/useCurrentAccount";
 
 // Auth pages
 import Login from "./pages/pages-ui/Login";
@@ -25,7 +28,9 @@ import ResetPassword from "./pages/pages-ui/ForgotPassword";
 function Layout() {
   const location = useLocation();
   const dispatch = useDispatch();
-  const { token, isAuthenticated } = useSelector((state) => state.auth);
+  const [searchParams] = useSearchParams();
+  const { token, isAuthenticated, user } = useSelector((state) => state.auth);
+  const account = useCurrentAccount();
 
   useEffect(() => {
     if (token && !isAuthenticated) {
@@ -33,7 +38,18 @@ function Layout() {
     }
   }, [dispatch, token, isAuthenticated]);
 
-  // Paths where Sidebar should NOT appear
+  // ✅ Define userInfo at the top, before any conditionals
+  const userInfo = {
+    name: account 
+      ? decodeURIComponent(account.myname) 
+      : (user?.name || defaultUserInfo.name || "Your Agency"),
+    users: defaultUserInfo.users || "0",
+    currentUser: {
+      initial: user?.name?.charAt(0).toUpperCase() || defaultUserInfo.currentUser?.initial || "U",
+      email: user?.email || defaultUserInfo.currentUser?.email || "user@example.com"
+    }
+  };
+
   const authPaths = [
     "/homepage",
     "/login",
@@ -54,10 +70,15 @@ function Layout() {
     "/widgets",
     "/helps",
     "/ghl_settings",
+    "/app", // ✅ Add /app to GHL paths
   ];
 
   const isAuthPage = authPaths.includes(location.pathname);
-  const isGHLPage = ghlPaths.some((path) => location.pathname.startsWith(path));
+  
+  // ✅ Check if we're on a GHL page OR on /app route
+  const isGHLPage = 
+    location.pathname === '/app' || 
+    ghlPaths.some((path) => location.pathname.startsWith(path));
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -95,7 +116,9 @@ function Layout() {
             path="/*"
             element={
               <ProtectedRoute>
-                <MainContent />
+                <div className="flex h-screen">
+                  <MainContent />
+                </div>
               </ProtectedRoute>
             }
           />

@@ -2,13 +2,16 @@
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './slices/authSlice';
 import integrationReducer from './slices/integrationSlice';
+import assistantsReducer from "./slices/assistantsSlice";
+import numbersReducer from './slices/numberSlice'
 
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
     integrations: integrationReducer,
-   
+    assistants: assistantsReducer,
+    numbers: numbersReducer
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
