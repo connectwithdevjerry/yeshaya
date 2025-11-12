@@ -7,7 +7,7 @@ import {
   connectStripe,
   getIntegrationStatus,
 } from "../../../store/slices/integrationSlice";
-// import OpenAIModel from './OpenAIConnectModal'
+import OpenAIModel from './OpenAIConnectModal'
 // import { connectOpenAI } from "../../../store/slices/integrationSlice";
 
 // const handleSubmit = (e) => {
@@ -107,7 +107,7 @@ const IntegrationsContent = () => {
       />
 
       {/* ✅ Modal for entering OpenAI API key */}
-      <ConnectOpenAIModal
+      <OpenAIModel
         isOpen={isOpenAIConnectOpen}
         onClose={() => setIsOpenAIConnectOpen(false)}
       />
