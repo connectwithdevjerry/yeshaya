@@ -28,6 +28,10 @@ const GET_GHL_SUB_ACCOUNTS = "/get-subaccounts";
 const CHECK_INTEGRATION_STATUS = "/status";
 const GET_AVAILABLE_NUMBERS = "/get-available-phone-numbers";
 const BUY_NUMBER = "/buy-number";
+const TWILIO_CALL_RECEIVER = "/voiceurl/:userId/:subaccount/:assistant";
+const TWILIO_SMS_RECEIVER = "/smsurl/:userId/:subaccount/:assistant";
+const IMPORT_PHONE_NUM_TO_VAPI = "/import-number-to-vapi";
+const GET_PURCHASED_NUMBER = "/purchased-numbers";
 
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
@@ -63,4 +67,8 @@ module.exports = {
   CHECK_INTEGRATION_STATUS,
   GET_AVAILABLE_NUMBERS,
   BUY_NUMBER,
+  TWILIO_CALL_RECEIVER,
+  TWILIO_SMS_RECEIVER,
+  IMPORT_PHONE_NUM_TO_VAPI,
+  GET_PURCHASED_NUMBER,
 };

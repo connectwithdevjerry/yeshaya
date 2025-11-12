@@ -17,11 +17,17 @@ const userSchema = mongoose.Schema({
       accountId: String,
       connected: { type: Boolean, default: false },
       installationType: String,
-      vapiAssistants: [{ assistantId: String, description: String }],
-      numberDetails: [
+      vapiAssistants: [
         {
-          phone: String,
-          phoneId: String,
+          assistantId: String,
+          description: String,
+          numberDetails: [
+            {
+              phoneNum: String,
+              vapiPhoneNumId: String,
+              phoneSid: String
+            },
+          ],
         },
       ],
     },
