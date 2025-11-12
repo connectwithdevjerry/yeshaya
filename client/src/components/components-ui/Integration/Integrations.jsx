@@ -7,7 +7,13 @@ import {
   connectStripe,
   getIntegrationStatus,
 } from "../../../store/slices/integrationSlice";
-import ConnectOpenAIModal from "./OpenAiConnectModal";
+// import OpenAIModel from './OpenAIConnectModal'
+// import { connectOpenAI } from "../../../store/slices/integrationSlice";
+
+// const handleSubmit = (e) => {
+//   e.preventDefault();
+//   dispatch(connectOpenAI(apiKey));
+// };
 
 const IntegrationItem = ({
   name,
