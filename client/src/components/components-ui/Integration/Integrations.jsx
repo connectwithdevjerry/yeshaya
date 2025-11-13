@@ -81,7 +81,7 @@ const IntegrationsContent = () => {
         name="GoHighLevel"
         image_url="https://canny-assets.io/icons/5b918f2630865c174eaa9483fdedac22.png"
         description="Connect GoHighLevel to import your sub-accounts, manage connections & more"
-        isConnected={goHighLevel?.connected}
+        isConnected={goHighLevel?.presence}
         loading={goHighLevel?.loading}
         onClick={() =>
           !goHighLevel?.connected && dispatch(connectGoHighLevel())
@@ -92,7 +92,7 @@ const IntegrationsContent = () => {
         name="OpenAI"
         image_url="https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg"
         description="Connect OpenAI to use our assistant / agent framework using your own keys"
-        isConnected={openAI?.connected}
+        isConnected={openAI?.status}
         loading={openAI?.loading}
         onClick={() => !openAI?.connected && setIsOpenAIConnectOpen(true)}
       />
@@ -101,7 +101,7 @@ const IntegrationsContent = () => {
         name="Stripe"
         image_url="https://freelogopng.com/images/all_img/1685814539stripe-icon-png.png"
         description="Connect Stripe to re-bill or resell AI voice minutes using your own Stripe"
-        isConnected={stripe?.connected}
+        isConnected={stripe?.presence}
         loading={stripe?.loading}
         onClick={() => !stripe?.connected && dispatch(connectStripe())}
       />
