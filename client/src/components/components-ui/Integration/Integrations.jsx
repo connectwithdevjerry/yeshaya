@@ -84,7 +84,7 @@ const IntegrationsContent = () => {
         isConnected={goHighLevel?.presence}
         loading={goHighLevel?.loading}
         onClick={() =>
-          !goHighLevel?.connected && dispatch(connectGoHighLevel())
+          !goHighLevel?.presence && dispatch(connectGoHighLevel())
         }
       />
 
@@ -103,7 +103,7 @@ const IntegrationsContent = () => {
         description="Connect Stripe to re-bill or resell AI voice minutes using your own Stripe"
         isConnected={stripe?.presence}
         loading={stripe?.loading}
-        onClick={() => !stripe?.connected && dispatch(connectStripe())}
+        onClick={() => !stripe?.presence && dispatch(connectStripe())}
       />
 
       {/* ✅ Modal for entering OpenAI API key */}
