@@ -8,8 +8,7 @@ const userModel = require("../model/user.model");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Stripe = require("stripe");
 const { HighLevel } = require("@gohighlevel/api-client");
-const mIm = await import('p-limit')
-const pLimit = mIm.default;
+
 const https = require("https");
 const twilio = require("twilio");
 const VoiceResponse = require("twilio").twiml.VoiceResponse;
@@ -395,6 +394,9 @@ const importGhlSubaccounts = async (req, res) => {
   const values = await getGhlTokens(userId);
 
   const { access_token, refresh_token, expires_in } = values;
+
+  const mIm = await import("p-limit");
+  const pLimit = mIm.default;
 
   const limit = pLimit(5); // 5 at a time
   const promises = missing.map((id) =>
@@ -1208,6 +1210,9 @@ const getPurchasedNumbers = async (req, res) => {
     );
 
     console.log({ targetAssistant });
+
+    const mIm = await import("p-limit");
+    const pLimit = mIm.default;
 
     const limit = pLimit(5); // 5 at a time
     const promises = targetAssistant.numberDetails.map((number) =>
