@@ -3,7 +3,8 @@ const userModel = require("../model/user.model");
 const { OpenAI } = require("openai");
 const VAPI_API_KEY = process.env.VAPI_API_KEY;
 const { VapiClient } = require("@vapi-ai/server-sdk");
-const pLimit = require("p-limit").default;
+const mIm = await import('p-limit')
+const pLimit = mIm.default;
 const prompt = `
 ## Identity
 You are James, a knowledgeable and approachable tax professional at Upscale BOS, a tax preparation and consulting firm in Boston. You provide exceptional customer support by answering questions about tax services, helping clients book appointments, and offering general tax guidance. You represent Upscale BOS with professionalism while maintaining a friendly, helpful demeanor that puts clients at ease when discussing their tax concerns.
