@@ -1,6 +1,6 @@
 import apiClient from "./config";
 
-const API_BASE_URL = import.meta.env.VITE_API_D_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export const authAPI = {
   login: (formData) => {

@@ -2,8 +2,7 @@ import axios from "axios";
 import store from "../store";
 import { refreshAccessToken } from "../slices/authSlice";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_D_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -24,20 +23,23 @@ const processQueue = (error, token = null) => {
 // ✅ Check if response contains JWT expired message
 const isJWTExpired = (response) => {
   if (!response) return false;
-  
+
   // Check in response data
   if (response.data) {
     const message = response.data.message || response.data.error || "";
-    if (typeof message === "string" && message.toLowerCase().includes("jwt expired")) {
+    if (
+      typeof message === "string" &&
+      message.toLowerCase().includes("jwt expired")
+    ) {
       return true;
     }
   }
-  
+
   // Check in response status
   if (response.status === 401) {
     return true;
   }
-  
+
   return false;
 };
 
@@ -90,7 +92,7 @@ const handleTokenRefresh = async (originalRequest) => {
     }
 
     const newAccessToken = payload.accessToken;
-    
+
     // Update tokens in storage
     localStorage.setItem("accessToken", newAccessToken);
     if (payload.refreshToken) {
@@ -109,16 +111,16 @@ const handleTokenRefresh = async (originalRequest) => {
   } catch (err) {
     console.error("❌ Token refresh failed:", err);
     processQueue(err, null);
-    
+
     // Clear tokens
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     sessionStorage.removeItem("accessToken");
     sessionStorage.removeItem("refreshToken");
-    
+
     // Redirect to login
     window.location.href = "/login";
-    
+
     return Promise.reject(err);
   } finally {
     isRefreshing = false;
@@ -132,7 +134,7 @@ apiClient.interceptors.response.use(
     if (isJWTExpired(response)) {
       console.log("⚠️ JWT expired detected in response");
       const originalRequest = response.config;
-      
+
       // Prevent infinite loops
       if (originalRequest._retry) {
         console.error("❌ Token refresh already attempted");
@@ -141,7 +143,7 @@ apiClient.interceptors.response.use(
         window.location.href = "/login";
         return Promise.reject(new Error("Session expired"));
       }
-      
+
       originalRequest._retry = true;
       return handleTokenRefresh(originalRequest);
     }

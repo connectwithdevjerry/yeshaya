@@ -38,7 +38,7 @@ export const register = createAsyncThunk(
   async (formData, { rejectWithValue }) => {
     try {
       const response = await axios.post(
-        "https://unscrutable-gallinulelike-ty.ngrok-free.dev/auth/signup",
+        "https://api.yashayah.cloud/auth/signup",
         formData
       );
 
