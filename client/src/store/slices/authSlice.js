@@ -92,7 +92,7 @@ export const resetPassword = createAsyncThunk(
   async (email, { rejectWithValue }) => {
     try {
       const response = await axios.post(
-        "https://unscrutable-gallinulelike-ty.ngrok-free.dev/auth/forgot_password",
+        "https://api.yashayah.cloud/auth/forgot_password",
         { email } 
       );
 
