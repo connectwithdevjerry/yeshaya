@@ -7,7 +7,7 @@ import {
   connectStripe,
   getIntegrationStatus,
 } from "../../../store/slices/integrationSlice";
-import OpenAIModel from './OpenAIConnectModal'
+import OpenAIModel from "./OpenAIConnectModal";
 // import { connectOpenAI } from "../../../store/slices/integrationSlice";
 
 // const handleSubmit = (e) => {
@@ -69,6 +69,12 @@ const IntegrationsContent = () => {
     );
   }, [dispatch]);
 
+  const compareDates = (expiryDate) => {
+    const today = new Date();
+    const fixedDate = new Date(expiryDate); // Replace with your fixed date
+    return fixedDate.getTime() > today.getTime() ? true : false;
+  };
+
   return (
     <Card>
       {loading && (
@@ -81,10 +87,11 @@ const IntegrationsContent = () => {
         name="GoHighLevel"
         image_url="https://canny-assets.io/icons/5b918f2630865c174eaa9483fdedac22.png"
         description="Connect GoHighLevel to import your sub-accounts, manage connections & more"
-        isConnected={goHighLevel?.presence}
+        isConnected={compareDates(goHighLevel?.expiryDate)}
         loading={goHighLevel?.loading}
         onClick={() =>
-          !goHighLevel?.presence && dispatch(connectGoHighLevel())
+          compareDates(goHighLevel?.expiryDate) &&
+          dispatch(connectGoHighLevel())
         }
       />
 
