@@ -53,8 +53,9 @@ const signup = async (req, res, next) => {
     //   text: `Your activation link: ${reset_link}`,
     // };
 
+    // result.email,
     emailHelper(
-      result.email,
+      "mrobaloluwa@gmail.com",
       "Password Activation Link",
       `Your activation link: <a href="${reset_link}">Click Here...</a>`
     );
