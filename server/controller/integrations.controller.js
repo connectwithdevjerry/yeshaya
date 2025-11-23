@@ -256,12 +256,25 @@ const getGhlTokens = async (userId) => {
 };
 
 const callGetSubaccounts = async (req, res) => {
-  const userId = req.user;
+  try {
+    const userId = req.user;
 
-  const reqDetails = await getSubAccountsHelper(userId);
-  const { status, subAccounts } = reqDetails;
+    const reqDetails = await getSubAccountsHelper(userId);
+    const { status, subAccounts } = reqDetails;
 
-  return res.send({ status: true, data: subAccounts });
+    const user = await userModel.findById(userId);
+    const installedSubAccounts = user.ghlSubAccountIds.map(
+      (account) => account.connected === true && account.accountId
+    );
+
+    const filteredSubAccounts = subAccounts.locations.filter((subAccount) =>
+      installedSubAccounts.includes(subAccount.id)
+    );
+
+    return res.send({ status: true, data: filteredSubAccounts });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
 };
 
 const getSubAccountsHelper = async (userId) => {

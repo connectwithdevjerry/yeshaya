@@ -12,7 +12,7 @@ const PORT = 6000;
 
 const corsOptions = {
   origin: true, // Accepts all origins
-  credentials: true,
+  credentials: false,
   optionsSuccessStatus: 200, // Fixed typo: optionSuccessStatus -> optionsSuccessStatus
 };
 
