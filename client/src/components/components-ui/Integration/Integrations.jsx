@@ -90,7 +90,7 @@ const IntegrationsContent = () => {
         isConnected={compareDates(goHighLevel?.expiryDate)}
         loading={goHighLevel?.loading}
         onClick={() =>
-          compareDates(goHighLevel?.expiryDate) &&
+          !compareDates(goHighLevel?.expiryDate) &&
           dispatch(connectGoHighLevel())
         }
       />
