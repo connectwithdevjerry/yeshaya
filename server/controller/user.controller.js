@@ -16,12 +16,6 @@ const {
 const { REFRESH_TOKEN } = require("../constants");
 const client = require("../jwt_db_access");
 
-emailHelper(
-  "drjerry000@gmail.com",
-  "Test Email, Please Ignore!",
-  `Your activation link: <a href="https://google.com">Click Here...</a>`
-);
-
 const myPayload = (user) => ({
   firstName: user.firstName,
   lastName: user.lastName,
@@ -61,7 +55,7 @@ const signup = async (req, res, next) => {
 
     // result.email,
     emailHelper(
-      "mrobaloluwa@gmail.com",
+      result.email,
       "Password Activation Link",
       `Your activation link: <a href="${reset_link}">Click Here...</a>`
     );
