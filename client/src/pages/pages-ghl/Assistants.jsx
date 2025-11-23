@@ -31,11 +31,13 @@ const Assistants = () => {
   const account = useCurrentAccount();
 
   // ✅ Get subaccountId from URL or current account
-  const subaccountId = searchParams.get('subaccount') || account?.subaccount;
+  const subaccountId = searchParams.get("subaccount") || account?.subaccount;
 
-  const { data: assistants, loading, error } = useSelector(
-    (state) => state.assistants
-  );
+  const {
+    data: assistants,
+    loading,
+    error,
+  } = useSelector((state) => state.assistants);
 
   useEffect(() => {
     if (subaccountId) {
@@ -48,7 +50,7 @@ const Assistants = () => {
 
   // ✅ Handle assistant click with account context
   const handleAssistantClick = (assistant) => {
-    if (location.pathname === '/app' && account) {
+    if (location.pathname === "/app" && account) {
       // Navigate with account context
       const params = new URLSearchParams({
         agencyid: account.agencyid,
@@ -58,6 +60,10 @@ const Assistants = () => {
         myemail: account.myemail,
         route: `/assistants/${assistant.id}`,
       });
+      console.log(
+        "📍 Navigating to assistant with account context:",
+        `/app?${params.toString()}`
+      );
       navigate(`/app?${params.toString()}`);
     } else {
       // Regular navigation
@@ -121,7 +127,6 @@ const Assistants = () => {
         <div className="text-sm font-medium text-gray-600 mb-4 flex items-center space-x-2">
           <Home className="w-4 h-4" />
           <span>Home</span>
-      
         </div>
 
         {/* 🧾 Table */}
@@ -137,9 +142,7 @@ const Assistants = () => {
                     {header}
                   </th>
                 ))}
-                <th className=" px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  
-                </th>
+                <th className=" px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
               </tr>
             </thead>
 
@@ -183,7 +186,11 @@ const Assistants = () => {
                   >
                     <td className="px-1 py-1 whitespace-nowrap text-sm font-medium text-gray-900">
                       <div className="flex items-center space-x-1">
-                        <img src="https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg" alt="OpenAi" className="w-[25px]" />
+                        <img
+                          src="https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg"
+                          alt="OpenAi"
+                          className="w-[25px]"
+                        />
                         <span>{assistant.name}</span>
                       </div>
                     </td>
@@ -201,7 +208,7 @@ const Assistants = () => {
                     </td>
                     <td className="px-6 py-2 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             // Handle more options
@@ -210,7 +217,7 @@ const Assistants = () => {
                         >
                           <MoreHorizontal className="w-4 h-4" />
                         </button>
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             // Handle delete

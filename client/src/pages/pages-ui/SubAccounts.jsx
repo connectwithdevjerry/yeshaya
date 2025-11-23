@@ -24,6 +24,7 @@ import { fetchSubAccounts } from "../../store/slices/integrationSlice";
 import FolderModal from "../../components/components-ui/Modals/FolderModal";
 import { AccountDetailSidebar } from "../../components/components-ui/Modals/AccountDetailSidebar";
 import AccountActionsMenu from "../../components/components-ui/Accounts/AccountActionsMenu";
+import { copyTextToClipboard } from "../../helper";
 
 function SubAccounts() {
   const [activeTab, setActiveTab] = useState("All");
@@ -80,12 +81,12 @@ function SubAccounts() {
     const rect = e.currentTarget.getBoundingClientRect(); // --- NEW LOGIC: Check viewport height and menu height (approx 300px) ---
     const menuHeight = 350; // Approximate menu height, including padding
     const viewportHeight = window.innerHeight;
-    let topPosition = rect.bottom + 5; 
+    let topPosition = rect.bottom + 5;
     if (topPosition + menuHeight > viewportHeight && rect.top > menuHeight) {
-      topPosition = rect.top - menuHeight - 5; 
-    } 
+      topPosition = rect.top - menuHeight - 5;
+    }
     setMenuPosition({
-      top: topPosition, 
+      top: topPosition,
       left: rect.right - 240,
     });
 
@@ -97,9 +98,12 @@ function SubAccounts() {
     setOpenMenuAccountId(null);
   };
 
-  const DropdownItem = ({ icon: Icon, text }) => (
+  const DropdownItem = ({ icon: Icon, text, handleClick }) => (
     <li>
-      <button className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+      <button
+        onClick={handleClick}
+        className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+      >
         <div className="flex items-center gap-3">
           <Icon size={18} className="text-gray-600" />
           <span>{text}</span>
@@ -108,6 +112,9 @@ function SubAccounts() {
       </button>
     </li>
   );
+
+  const linkToCopy = (agencyid) =>
+    `https://www.yashayah.cloud/app?agencyid=${agencyid}&subaccount={{location.id}}&allow=yes&myname={{user.name}}&myemail={{user.email}}&route=%2Fassistants`;
 
   return (
     <div className="text-gray-800 p-6">
@@ -150,7 +157,13 @@ function SubAccounts() {
             {isDropdownOpen && (
               <div className="absolute right-0 top-full mt-2 w-60 bg-white border border-gray-200 rounded-lg shadow-xl z-20 overflow-hidden py-1">
                 <ul>
-                  <DropdownItem icon={Link2} text="Custom menu link" />
+                  <DropdownItem
+                    icon={Link2}
+                    handleClick={() =>
+                      copyTextToClipboard(linkToCopy("myagencyid"))
+                    }
+                    text="Custom menu link"
+                  />
                   <DropdownItem icon={UploadCloud} text="Import installed" />
                   <DropdownItem icon={Zap} text="Direct connection" />
                   <DropdownItem icon={ArrowRightLeft} text="Transfer account" />
