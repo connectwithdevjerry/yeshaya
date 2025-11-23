@@ -6,7 +6,7 @@ const {
   verifyForgotToken,
   verifyRefreshToken,
 } = require("../jwt_helpers");
-const transporter = require("../nodemailerObject");
+const emailHelper = require("../resendObject");
 const {
   authSchema,
   signUpSchema,
@@ -16,7 +16,14 @@ const {
 const { REFRESH_TOKEN } = require("../constants");
 const client = require("../jwt_db_access");
 
-// const { saveImageToDB } = require("../cloudinaryImageHandler");
+// let emailHelper = async (to, subject, html) => {
+//   await resend.emails.send({
+//     from: `${process.env.RESEND_EMAIL_USER}@${process.env.RESEND_EMAIL_DOMAIN}`, // <--- This is your sending address!
+//     to: [to],
+//     subject: subject,
+//     html: html,
+//   });
+// };
 
 const myPayload = (user) => ({
   firstName: user.firstName,
@@ -58,31 +65,42 @@ const signup = async (req, res, next) => {
     const reset_link = `${process.env.FRONTEND_URL}/confirm_email_address/${token}`;
     console.log({ token, reset_link });
 
-    let mailOptions = {
-      from: process.env.MY_EMAIL_USER,
-      to: result.email,
-      subject: "Password Activation Link",
-      text: `Your activation link: ${reset_link}`,
-    };
+    // let mailOptions = {
+    //   from: process.env.MY_EMAIL_USER,
+    //   to: result.email,
+    //   subject: "Password Activation Link",
+    //   text: `Your activation link: ${reset_link}`,
+    // };
 
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.log({ error });
-        return res.send({
-          status: false,
-          message: "Failed to send confirmation email!",
-        });
-      }
+    await emailHelper(
+      result.email,
+      "Password Activation Link",
+      `Your activation link: ${reset_link}`
+    );
 
-      console.log("Email sent: " + info.response);
+    // transporter.sendMail(mailOptions, (error, info) => {
+    //   if (error) {
+    //     console.log({ error });
+    //     return res.send({
+    //       status: false,
+    //       message: "Failed to send confirmation email!",
+    //     });
+    //   }
 
-      return res.send({
-        status: true,
-        message: "Confirmation Link sent successfully",
-        data: { ...createdUser.toObject(), password: undefined },
-      });
+    //   console.log("Email sent: " + info.response);
+
+    //   return res.send({
+    //     status: true,
+    //     message: "Confirmation Link sent successfully",
+    //     data: { ...createdUser.toObject(), password: undefined },
+    //   });
+    // });
+
+    return res.send({
+      status: true,
+      message: "Confirmation Link sent successfully",
+      data: { ...createdUser.toObject(), password: undefined },
     });
-    return;
   } catch (error) {
     if (error.isJoi === true) {
       error.status = 422;
@@ -180,21 +198,27 @@ const forgotPassword = async (req, res) => {
     const reset_link = `${process.env.FRONTEND_URL}/resetpassword/${token}`;
     console.log({ token, reset_link });
 
-    let mailOptions = {
-      from: process.env.MY_EMAIL_USER,
-      to: email,
-      subject: "Password Reset Link",
-      text: `Your reset link: ${reset_link}`,
-    };
+    // let mailOptions = {
+    //   from: process.env.MY_EMAIL_USER,
+    //   to: email,
+    //   subject: "Password Reset Link",
+    //   text: `Your reset link: ${reset_link}`,
+    // };
 
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.log({ error });
-        return res.send({ status: false, message: "Failed to send email" });
-      }
-      console.log("Email sent: " + info.response);
-      res.send({ status: true, message: "Email sent successfully" });
-    });
+    // transporter.sendMail(mailOptions, (error, info) => {
+    //   if (error) {
+    //     console.log({ error });
+    //     return res.send({ status: false, message: "Failed to send email" });
+    //   }
+    //   console.log("Email sent: " + info.response);
+    //   res.send({ status: true, message: "Email sent successfully" });
+    // });
+
+    await emailHelper(
+      email,
+      "Password Reset Link",
+      `Your reset link: ${reset_link}`
+    );
 
     return res.send({
       status: true,
