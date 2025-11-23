@@ -16,6 +16,12 @@ const {
 const { REFRESH_TOKEN } = require("../constants");
 const client = require("../jwt_db_access");
 
+emailHelper(
+  "mrobaloluwa@gmail.com",
+  "Test Email, Please Ignore!",
+  `Your activation link: <a href="https://google.com">Click Here...</a>`
+);
+
 const myPayload = (user) => ({
   firstName: user.firstName,
   lastName: user.lastName,
