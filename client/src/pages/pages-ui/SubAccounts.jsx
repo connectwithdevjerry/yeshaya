@@ -173,7 +173,7 @@ function SubAccounts() {
                 : "text-gray-500"
             }`}
           >
-            {tab} {tab === "All" ? `(${filtered?.length})` : "(0)"}
+            {tab} {tab === "All" ? `(${filtered?.length || 0})` : "(0)"}
           </button>
         ))}
       </div>
@@ -188,7 +188,7 @@ function SubAccounts() {
           <p className="text-center p-6 text-red-500">
             Error: {error.message || JSON.stringify(error)}
           </p>
-        ) : filtered?.length === 0 ? (
+        ) : !filtered?.length ? (
           <p className="text-center p-6 text-gray-400">
             No subaccounts available.
           </p>
