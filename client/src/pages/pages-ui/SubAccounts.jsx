@@ -57,7 +57,7 @@ function SubAccounts() {
 
   const tabs = ["All", "Active", "Favorites", "Re-billed", "Archived"];
   const filtered =
-    activeTab === "All" ? subAccounts : subAccounts.filter(() => false);
+    activeTab === "All" ? subAccounts : subAccounts?.filter(() => false);
 
   const handleAccountClick = (account) => {
     setSelectedAccount(account);
@@ -173,7 +173,7 @@ function SubAccounts() {
                 : "text-gray-500"
             }`}
           >
-            {tab} {tab === "All" ? `(${filtered.length})` : "(0)"}
+            {tab} {tab === "All" ? `(${filtered?.length})` : "(0)"}
           </button>
         ))}
       </div>
@@ -188,7 +188,7 @@ function SubAccounts() {
           <p className="text-center p-6 text-red-500">
             Error: {error.message || JSON.stringify(error)}
           </p>
-        ) : filtered.length === 0 ? (
+        ) : filtered?.length === 0 ? (
           <p className="text-center p-6 text-gray-400">
             No subaccounts available.
           </p>
@@ -207,7 +207,7 @@ function SubAccounts() {
             </thead>
 
             <tbody>
-              {filtered.map((acc) => (
+              {filtered?.map((acc) => (
                 <tr
                   key={acc.id}
                   className="border-b hover:bg-gray-50 transition text-sm text-gray-700"
