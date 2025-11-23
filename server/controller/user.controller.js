@@ -16,15 +16,6 @@ const {
 const { REFRESH_TOKEN } = require("../constants");
 const client = require("../jwt_db_access");
 
-// let emailHelper = async (to, subject, html) => {
-//   await resend.emails.send({
-//     from: `${process.env.RESEND_EMAIL_USER}@${process.env.RESEND_EMAIL_DOMAIN}`, // <--- This is your sending address!
-//     to: [to],
-//     subject: subject,
-//     html: html,
-//   });
-// };
-
 const myPayload = (user) => ({
   firstName: user.firstName,
   lastName: user.lastName,
@@ -45,16 +36,6 @@ const signup = async (req, res, next) => {
     if (isUser)
       return res.send({ status: false, message: "Email already exist" });
 
-    // console.log("Saving profile picture...");
-
-    // const pic = await saveImageToDB(
-    //   "data:image/jpeg;base64," + result.companyLogo,
-    //   "brand-logo",
-    //   "image"
-    // );
-
-    // console.log({ pic });
-
     const user = await new userModel({
       ...result,
       // companyLogo: pic.secure_url,
@@ -72,10 +53,10 @@ const signup = async (req, res, next) => {
     //   text: `Your activation link: ${reset_link}`,
     // };
 
-    await emailHelper(
+    emailHelper(
       result.email,
       "Password Activation Link",
-      `Your activation link: ${reset_link}`
+      `Your activation link: <a href="${reset_link}">Click Here...</a>`
     );
 
     // transporter.sendMail(mailOptions, (error, info) => {
@@ -214,10 +195,10 @@ const forgotPassword = async (req, res) => {
     //   res.send({ status: true, message: "Email sent successfully" });
     // });
 
-    await emailHelper(
+    emailHelper(
       email,
       "Password Reset Link",
-      `Your reset link: ${reset_link}`
+      `Your reset link: <a href="${reset_link}">Click Here...</a>`
     );
 
     return res.send({
