@@ -38,7 +38,7 @@ function SubAccounts() {
   const dropdownRef = useRef(null);
 
   const dispatch = useDispatch();
-  const { subAccounts, loading, error } = useSelector(
+  const { subAccounts, loading, error, agencyId } = useSelector(
     (state) => state.integrations
   );
 
@@ -160,7 +160,7 @@ function SubAccounts() {
                   <DropdownItem
                     icon={Link2}
                     handleClick={() =>
-                      copyTextToClipboard(linkToCopy("myagencyid"))
+                      copyTextToClipboard(linkToCopy(agencyId))
                     }
                     text="Custom menu link"
                   />

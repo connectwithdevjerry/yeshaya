@@ -116,6 +116,7 @@ const integrationSlice = createSlice({
     openAI: { connected: false, loading: false, error: null, message: "" },
     testOpenAi: { connected: false, loading: false, error: null, message: "" },
     subAccounts: [],
+    agencyId: null,
     loading: false,
     error: null,
   },
