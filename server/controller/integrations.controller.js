@@ -258,6 +258,7 @@ const getGhlTokens = async (userId) => {
 const callGetSubaccounts = async (req, res) => {
   try {
     const userId = req.user;
+    const userType = req.userType;
 
     const reqDetails = await getSubAccountsHelper(userId);
     const { status, subAccounts } = reqDetails;
@@ -266,6 +267,13 @@ const callGetSubaccounts = async (req, res) => {
     const installedSubAccounts = user.ghlSubAccountIds.map(
       (account) => account.connected === true && account.accountId
     );
+
+    if (userType == "anon") {
+      return res.send({
+        status: true,
+        data: subAccounts,
+      });
+    }
 
     const filteredSubAccounts = subAccounts.locations.filter((subAccount) =>
       installedSubAccounts.includes(subAccount.id)
@@ -386,9 +394,9 @@ const importGhlSubaccounts = async (req, res) => {
   const { accountIds } = req.body;
   const userId = req.user;
 
-  console.log({ subAccountIds: JSON.parse(accountIds) });
+  console.log({ accountIds });
 
-  const subAccountIds = JSON.parse(accountIds);
+  const subAccountIds = accountIds;
 
   const user = await userModel.findById(userId);
 
