@@ -95,17 +95,23 @@ export const getIntegrationStatus = createAsyncThunk(
 // ✅ Fetch all GoHighLevel Subaccounts
 export const fetchSubAccounts = createAsyncThunk(
   "integrations/fetchSubAccounts",
-  async (_, { rejectWithValue }) => {
+  async ({ userType = "anon" } = {}, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get("/integrations/get-subaccounts");
-      console.log("✅ Subaccounts fetched:", response.data);
-      return response.data.data.locations;
+      const response = await apiClient.get(
+        `/integrations/get-subaccounts?userType=${userType}`
+      );
+
+      const locations = response.data?.data || [];
+      const agencyId = response.data?.agencyId || null;
+      return { locations, agencyId };
     } catch (error) {
       console.error("🔴 Failed to fetch subaccounts:", error);
       return rejectWithValue(error.response?.data || error.message);
     }
   }
 );
+
+//import new Subaccounts
 
 // 🔹 Slice
 const integrationSlice = createSlice({
@@ -235,11 +241,12 @@ const integrationSlice = createSlice({
       })
       .addCase(fetchSubAccounts.fulfilled, (state, action) => {
         state.loading = false;
-        state.subAccounts = action.payload;
+        state.subAccounts = action.payload.locations || [];
+        state.agencyId = action.payload.agencyId || null;
       })
       .addCase(fetchSubAccounts.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload;
+        state.error = action.payload || action.error;
       });
   },
 });

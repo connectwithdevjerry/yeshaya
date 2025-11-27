@@ -39,9 +39,10 @@ function SubAccounts() {
 
   const dispatch = useDispatch();
   const { subAccounts, loading, error, agencyId } = useSelector(
-    (state) => state.integrations
+    (state) => state.integrations || {}
   );
 
+  // fetch on mount
   useEffect(() => {
     dispatch(fetchSubAccounts());
   }, [dispatch]);
@@ -159,9 +160,11 @@ function SubAccounts() {
                 <ul>
                   <DropdownItem
                     icon={Link2}
-                    handleClick={() =>
-                      copyTextToClipboard(linkToCopy(agencyId))
-                    }
+                    handleClick={() => {
+                      const url = linkToCopy(agencyId);
+                      copyTextToClipboard(url);
+                      console.log("ID copied:", agencyId);
+                    }}
                     text="Custom menu link"
                   />
                   <DropdownItem icon={UploadCloud} text="Import installed" />

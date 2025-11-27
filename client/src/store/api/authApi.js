@@ -32,4 +32,8 @@ export const authAPI = {
   refreshToken: (refreshToken) => {
     return apiClient.post("/auth/refresh", { refreshToken });
   },
+
+  exchangeToken: (refreshToken) => {
+    return apiClient.post("/auth/exchange-token", { refreshToken });
+  },
 };
