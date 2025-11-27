@@ -1,6 +1,4 @@
 import axios from "axios";
-import store from "../store";
-import { refreshAccessToken } from "../slices/authSlice";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -21,133 +19,128 @@ const processQueue = (error, token = null) => {
 };
 
 // ✅ Check if token is expired by decoding JWT
-const isTokenExpired = (token) => {
+const isTokenExpired = (token, bufferSeconds = 60) => {
   if (!token) return true;
   
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
-    const expiryTime = payload.exp * 1000; // Convert to milliseconds
+    const expiryTime = payload.exp * 1000;
     const currentTime = Date.now();
     
-    // Add 30 second buffer to refresh before actual expiry
-    return currentTime >= (expiryTime - 30000);
+    // ✅ Increased buffer to 60 seconds for better reliability
+    return currentTime >= (expiryTime - (bufferSeconds * 1000));
   } catch (error) {
     console.error("Error checking token expiry:", error);
     return true;
   }
 };
 
-// ✅ Check if response contains JWT expired message
-const isJWTExpired = (response) => {
-  if (!response) return false;
+// ✅ Centralized token refresh function
+const refreshTokens = async () => {
+  const refreshToken =
+    localStorage.getItem("refreshToken") ||
+    sessionStorage.getItem("refreshToken");
 
-  // Check in response data
-  if (response.data) {
-    const message = response.data.message || response.data.error || "";
-    if (
-      typeof message === "string" &&
-      message.toLowerCase().includes("jwt expired")
-    ) {
-      return true;
+  if (!refreshToken) {
+    throw new Error("No refresh token available");
+  }
+
+  // ✅ Check if refresh token is also expired
+  if (isTokenExpired(refreshToken, 0)) {
+    throw new Error("Refresh token expired");
+  }
+
+  try {
+    const response = await axios.post(`${API_BASE_URL}/auth/exchange-token`, {
+      refreshToken
+    });
+
+    if (response.data.status && response.data.accessToken) {
+      const newAccessToken = response.data.accessToken;
+      const newRefreshToken = response.data.refreshToken;
+
+      // Update tokens
+      localStorage.setItem("accessToken", newAccessToken);
+      if (newRefreshToken) {
+        localStorage.setItem("refreshToken", newRefreshToken);
+      }
+
+      return newAccessToken;
+    } else {
+      throw new Error("Token exchange failed");
     }
+  } catch (error) {
+    console.error("❌ Token refresh failed:", error);
+    throw error;
   }
-
-  // Check in response status
-  if (response.status === 401) {
-    return true;
-  }
-
-  return false;
 };
 
-// ✅ Attach access token to each request and check expiry
+// ✅ Clear auth and redirect to login
+const clearAuthAndRedirect = () => {
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
+  sessionStorage.removeItem("accessToken");
+  sessionStorage.removeItem("refreshToken");
+  
+  // Only redirect if not already on login page
+  if (!window.location.pathname.includes('/login')) {
+    window.location.href = "/login";
+  }
+};
+
+// ✅ Attach access token to each request
 apiClient.interceptors.request.use(
   async (config) => {
+    // Skip token check for auth endpoints
+    if (config.url?.includes('/auth/')) {
+      return config;
+    }
+
     const token =
       localStorage.getItem("accessToken") ||
       sessionStorage.getItem("accessToken");
     
-    if (token) {
-      // Check if token is expired before making request
-      if (isTokenExpired(token)) {
-        console.log("⚠️ Access token expired before request, refreshing...");
-        
-        const refreshToken =
-          localStorage.getItem("refreshToken") ||
-          sessionStorage.getItem("refreshToken");
+    if (!token) {
+      return config;
+    }
 
-        if (!refreshToken) {
-          console.error("❌ No refresh token available");
-          window.location.href = "/login";
-          return Promise.reject(new Error("No refresh token"));
-        }
-
-        // Check if refresh token is also expired
-        if (isTokenExpired(refreshToken)) {
-          console.error("❌ Both tokens expired, redirecting to login");
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("refreshToken");
-          sessionStorage.removeItem("accessToken");
-          sessionStorage.removeItem("refreshToken");
-          window.location.href = "/login";
-          return Promise.reject(new Error("Session expired"));
-        }
-
-        try {
-          // Wait if already refreshing
-          if (isRefreshing) {
-            const newToken = await new Promise((resolve, reject) => {
-              failedQueue.push({ resolve, reject });
-            });
-            config.headers.Authorization = `Bearer ${newToken}`;
-            return config;
-          }
-
-          isRefreshing = true;
-
-          // Call exchange-token endpoint
-          const response = await axios.post(`${API_BASE_URL}/auth/exchange-token`, {
-            refreshToken
+    // ✅ Check if token will expire soon (within 60 seconds)
+    if (isTokenExpired(token, 60)) {
+      console.log("⚠️ Access token expiring soon, refreshing...");
+      
+      try {
+        // Wait if already refreshing
+        if (isRefreshing) {
+          const newToken = await new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
           });
-
-          if (response.data.status && response.data.accessToken) {
-            const newAccessToken = response.data.accessToken;
-            const newRefreshToken = response.data.refreshToken;
-
-            // Update tokens
-            localStorage.setItem("accessToken", newAccessToken);
-            if (newRefreshToken) {
-              localStorage.setItem("refreshToken", newRefreshToken);
-            }
-
-            // Update config with new token
-            config.headers.Authorization = `Bearer ${newAccessToken}`;
-            
-            // Process queued requests
-            processQueue(null, newAccessToken);
-            
-            isRefreshing = false;
-            return config;
-          } else {
-            throw new Error("Token exchange failed");
-          }
-        } catch (error) {
-          console.error("❌ Token refresh in request interceptor failed:", error);
-          isRefreshing = false;
-          processQueue(error, null);
-          
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("refreshToken");
-          sessionStorage.removeItem("accessToken");
-          sessionStorage.removeItem("refreshToken");
-          
-          window.location.href = "/login";
-          return Promise.reject(error);
+          config.headers.Authorization = `Bearer ${newToken}`;
+          return config;
         }
-      } else {
-        // Token is valid, attach it
-        config.headers.Authorization = `Bearer ${token}`;
+
+        isRefreshing = true;
+
+        const newAccessToken = await refreshTokens();
+        
+        // Update config with new token
+        config.headers.Authorization = `Bearer ${newAccessToken}`;
+        
+        // Process queued requests
+        processQueue(null, newAccessToken);
+        
+        isRefreshing = false;
+        return config;
+      } catch (error) {
+        console.error("❌ Token refresh in request interceptor failed:", error);
+        isRefreshing = false;
+        processQueue(error, null);
+        
+        clearAuthAndRedirect();
+        return Promise.reject(error);
       }
+    } else {
+      // Token is valid, attach it
+      config.headers.Authorization = `Bearer ${token}`;
     }
     
     return config;
@@ -155,116 +148,53 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ✅ Handle token refresh
-const handleTokenRefresh = async (originalRequest) => {
-  if (isRefreshing) {
-    // Wait for the ongoing refresh to complete
-    return new Promise((resolve, reject) => {
-      failedQueue.push({ resolve, reject });
-    })
-      .then((token) => {
-        originalRequest.headers.Authorization = `Bearer ${token}`;
-        return apiClient(originalRequest);
-      })
-      .catch((err) => Promise.reject(err));
-  }
-
-  isRefreshing = true;
-
-  try {
-    const refreshToken =
-      localStorage.getItem("refreshToken") ||
-      sessionStorage.getItem("refreshToken");
-
-    if (!refreshToken) {
-      throw new Error("No refresh token available");
-    }
-
-    // Check if refresh token is expired
-    if (isTokenExpired(refreshToken)) {
-      throw new Error("Refresh token expired");
-    }
-
-    // Dispatch refresh token action using exchange-token
-    const { payload, error } = await store.dispatch(
-      refreshAccessToken(refreshToken)
-    );
-
-    if (error || !payload?.accessToken) {
-      throw new Error("Failed to refresh token");
-    }
-
-    const newAccessToken = payload.accessToken;
-
-    // Update tokens in storage
-    localStorage.setItem("accessToken", newAccessToken);
-    if (payload.refreshToken) {
-      localStorage.setItem("refreshToken", payload.refreshToken);
-    }
-
-    // Update axios default header
-    apiClient.defaults.headers.Authorization = `Bearer ${newAccessToken}`;
-
-    // Process queued requests
-    processQueue(null, newAccessToken);
-
-    // Retry original request
-    originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-    return apiClient(originalRequest);
-  } catch (err) {
-    console.error("❌ Token refresh failed:", err);
-    processQueue(err, null);
-
-    // Clear tokens
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    sessionStorage.removeItem("accessToken");
-    sessionStorage.removeItem("refreshToken");
-
-    // Redirect to login
-    window.location.href = "/login";
-
-    return Promise.reject(err);
-  } finally {
-    isRefreshing = false;
-  }
-};
-
-// ✅ Response interceptor - handles both success and error responses
+// ✅ Response interceptor - only handles 401 errors
 apiClient.interceptors.response.use(
-  async (response) => {
-    // Check if JWT expired even in successful responses
-    if (isJWTExpired(response)) {
-      console.log("⚠️ JWT expired detected in response");
-      const originalRequest = response.config;
-
-      // Prevent infinite loops
-      if (originalRequest._retry) {
-        console.error("❌ Token refresh already attempted");
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
-        window.location.href = "/login";
-        return Promise.reject(new Error("Session expired"));
-      }
-
-      originalRequest._retry = true;
-      return handleTokenRefresh(originalRequest);
-    }
-
-    return response;
-  },
+  (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    // Check if error is due to expired token
+    // Check if error is 401 and we haven't already tried to refresh
     if (
-      error.response &&
-      (error.response.status === 401 || isJWTExpired(error.response)) &&
-      !originalRequest._retry
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/auth/')
     ) {
-      console.log("⚠️ JWT expired detected in error response");
+      console.log("⚠️ 401 error detected, attempting token refresh");
+      
+      // Prevent infinite loops
       originalRequest._retry = true;
-      return handleTokenRefresh(originalRequest);
+
+      try {
+        // Wait if already refreshing
+        if (isRefreshing) {
+          const newToken = await new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          });
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return apiClient(originalRequest);
+        }
+
+        isRefreshing = true;
+
+        const newAccessToken = await refreshTokens();
+
+        // Process queued requests
+        processQueue(null, newAccessToken);
+
+        // Retry original request with new token
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        
+        isRefreshing = false;
+        return apiClient(originalRequest);
+      } catch (err) {
+        console.error("❌ Token refresh failed in response interceptor:", err);
+        processQueue(err, null);
+        isRefreshing = false;
+        
+        clearAuthAndRedirect();
+        return Promise.reject(err);
+      }
     }
 
     return Promise.reject(error);
