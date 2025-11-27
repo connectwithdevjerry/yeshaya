@@ -128,22 +128,15 @@ const NumbersActionsMenu = ({
       style={{ top: position.top, left: position.left }}
     >
       <ul className="divide-y divide-gray-100">
-        <MenuItem icon={Star} text="Add to Favorites" onClick={onClose} />
+        <MenuItem icon={Star} text="Rename" onClick={onClose} />
         <MenuItem
           icon={ExternalLink}
-          text="Open account"
+          text="Connect to Vapi"
           onClick={() => handleAction("Open")}
         />
         <MenuItem icon={Pencil} text="Edit account" onClick={onClose} />
         <MenuItem icon={Scale} text="Manage limits" onClick={onClose} />
         <MenuItem icon={Eye} text="Edit permissions" onClick={onClose} />
-        <MenuItem isSeparator />
-        <MenuItem icon={UserPlus} text="Invite member" onClick={onClose} />
-        <MenuItem icon={Users} text="Manage access" onClick={onClose} />
-        <MenuItem icon={Lock} text="Lock account" onClick={onClose} />
-        <MenuItem icon={Link} text="Connect GHL" onClick={onClose} />
-        <MenuItem isSeparator />
-        <MenuItem icon={Zap} text="Turn on rebilling" onClick={onClose} />
       </ul>
       <div className="pt-2 px-4 text-xs text-gray-500 border-t border-gray-100">
         <p className="font-semibold truncate">

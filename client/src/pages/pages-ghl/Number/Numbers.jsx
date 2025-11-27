@@ -122,27 +122,44 @@ const Numbers = () => {
     return caps.join(", ") || "N/A";
   };
 
-  const handleOpenActionMenu = (e, account) => {
+  const handleOpenActionMenu = (e, numberItem) => {
     e.stopPropagation();
 
-    if (openMenuAccountId === account.id) {
+    const details = numberItem.phoneNumberDetails;
+
+    if (openMenuAccountId === details.sid) {
       setOpenMenuAccountId(null);
       return;
-    } // Calculate button position relative to the viewport
-    const rect = e.currentTarget.getBoundingClientRect(); // --- NEW LOGIC: Check viewport height and menu height (approx 300px) ---
-    const menuHeight = 350; // Approximate menu height, including padding
+    }
+
+    // Calculate button position relative to the viewport
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuHeight = 350;
     const viewportHeight = window.innerHeight;
     let topPosition = rect.bottom + 5;
+
     if (topPosition + menuHeight > viewportHeight && rect.top > menuHeight) {
       topPosition = rect.top - menuHeight - 5;
     }
+
     setMenuPosition({
       top: topPosition,
       left: rect.right - 240,
     });
 
-    setSelectedAccount(account);
-    setOpenMenuAccountId(account.id);
+    // Create account object with proper structure for the menu
+    const accountData = {
+      id: details.sid,
+      companyId: subaccountId, // Use the subaccount ID from URL params
+      name: details.friendlyName || "Unknown Number",
+      email: "", // Numbers don't have emails
+      phoneNumber: details.phoneNumber,
+      assistantId: numberItem.assistantId,
+      assistantName: numberItem.assistantName,
+    };
+
+    setSelectedAccount(accountData);
+    setOpenMenuAccountId(details.sid);
   };
 
   const handleCloseActionMenu = () => {
@@ -306,8 +323,8 @@ const Numbers = () => {
                         <div className="flex items-center justify-center gap-3">
                           <button
                             onClick={(e) => {
-                              e.stopPropagation(); // ✅ This stops the row click
-                              handleOpenActionMenu(e, details.sid);
+                              e.stopPropagation();
+                              handleOpenActionMenu(e, item); 
                             }}
                             ref={
                               openMenuAccountId === details.sid

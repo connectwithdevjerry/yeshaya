@@ -72,6 +72,35 @@ export const buyNumber = createAsyncThunk(
   }
 );
 
+// 🚀 Async thunk to connect to Vapi
+export const vapiConnect = createAsyncThunk(
+  "numbers/vapiConnect",
+  async ({ subaccountId, assistantId, number, phoneSid }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post('/integrations/import-number-to-vapi', {
+        subaccount: subaccountId,
+        assistant: assistantId,
+        numberSid: phoneSid,
+        twilioNumber: number
+      });
+
+      console.log("✅vapiConnection response:", response.data);
+      
+      if (response.data.status) {
+        return response.data.data; 
+      } else {
+        return rejectWithValue(response.data.message || "Failed to Connect to vapi");
+      }
+    } catch (error) {
+      console.error("❌ vapi Connection:", error);
+      return rejectWithValue(
+        error.response?.data?.message || error.message || "Network error"
+      );
+    }
+  }
+);
+
+
 const numberSlice = createSlice({
   name: "numbers",
   initialState: {
