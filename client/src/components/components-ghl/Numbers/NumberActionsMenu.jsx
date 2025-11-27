@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import {
   Star,
   ExternalLink,
@@ -10,10 +10,13 @@ import {
   Lock,
   Link,
   Zap,
+  Loader2,
 } from "lucide-react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import { vapiConnect } from "../../../store/slices/numberSlice";
 
-const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false }) => {
+const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false, disabled = false, loading = false }) => {
   if (isSeparator) return <li className="my-1 border-t border-gray-200" />;
 
   return (
@@ -25,9 +28,14 @@ const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false }) => {
           console.log("🔹 MenuItem clicked:", text);
           onClick?.(e);
         }}
-        className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+        disabled={disabled || loading}
+        className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <Icon size={18} className="text-gray-500 mr-3" />
+        {loading ? (
+          <Loader2 size={18} className="text-gray-500 mr-3 animate-spin" />
+        ) : (
+          <Icon size={18} className="text-gray-500 mr-3" />
+        )}
         {text}
       </button>
     </li>
@@ -45,6 +53,9 @@ const NumbersActionsMenu = ({
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const dispatch = useDispatch();
+  
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -64,9 +75,62 @@ const NumbersActionsMenu = ({
 
   if (!isOpen || !account || !position) return null;
 
-  const handleAction = (action) => {
+  const handleAction = async (action) => {
     console.log(`🟢 handleAction triggered for: ${action}`);
     console.log("📦 Account data:", account);
+
+    if (action === "ConnectVapi") {
+      try {
+        setIsConnecting(true);
+        
+        // Validate required fields
+        if (!account.companyId || !account.assistantId || !account.phoneNumber || !account.id) {
+          console.error("❌ Missing required fields:", {
+            companyId: account.companyId,
+            assistantId: account.assistantId,
+            phoneNumber: account.phoneNumber,
+            id: account.id
+          });
+          alert("Missing required information to connect to Vapi");
+          setIsConnecting(false);
+          return;
+        }
+
+        console.log("🚀 Attempting to connect to Vapi with:", {
+          subaccountId: account.companyId,
+          assistantId: account.assistantId,
+          number: account.phoneNumber,
+          phoneSid: account.id,
+        });
+        
+        const result = await dispatch(
+          vapiConnect({
+            subaccountId: account.companyId,
+            assistantId: account.assistantId,
+            number: account.phoneNumber,
+            phoneSid: account.id, // This is the Twilio SID
+          })
+        ).unwrap();
+
+        console.log("✅ Successfully connected to Vapi:", result);
+        alert("Successfully connected to Vapi!");
+        
+        onClose();
+      } catch (error) {
+        console.error("❌ Failed to connect to Vapi:", error);
+        console.error("❌ Error details:", JSON.stringify(error, null, 2));
+        
+        // Extract meaningful error message
+        const errorMessage = typeof error === 'string' 
+          ? error 
+          : error?.message || error?.error || "Unknown error occurred";
+        
+        alert(`Failed to connect to Vapi: ${errorMessage}`);
+      } finally {
+        setIsConnecting(false);
+      }
+      return;
+    }
 
     if (action === "Open") {
       try {
@@ -99,7 +163,7 @@ const NumbersActionsMenu = ({
           allow: "yes",
           myname: account.name || "NoName",
           myemail: account.email || "noemail@example.com",
-          route: targetRoute, // ✅ Include the route as a parameter
+          route: targetRoute,
         });
 
         const url = `/app?${params.toString()}`;
@@ -132,7 +196,9 @@ const NumbersActionsMenu = ({
         <MenuItem
           icon={ExternalLink}
           text="Connect to Vapi"
-          onClick={() => handleAction("Open")}
+          onClick={() => handleAction("ConnectVapi")}
+          loading={isConnecting}
+          disabled={isConnecting}
         />
         <MenuItem icon={Pencil} text="Edit account" onClick={onClose} />
         <MenuItem icon={Scale} text="Manage limits" onClick={onClose} />
