@@ -1240,15 +1240,27 @@ const getPurchasedNumbers = async (req, res) => {
     const userId = req.user;
     const { subaccountId, assistantId } = req.query;
 
+    console.log({ subaccountId, assistantId });
+
     const user = await userModel.findById(userId);
 
     const targetSubaccount = user.ghlSubAccountIds.filter(
       (account) => account.accountId === subaccountId
     );
 
+    console.log({ targetSubaccount });
+    console.log({ m: targetSubaccount[0].vapiAssistants });
+
     const targetAssistant = targetSubaccount[0].vapiAssistants.filter(
       (vapiAssistant) => vapiAssistant.assistantId === assistantId
     );
+
+    if (!targetAssistant.length) {
+      return res.send({
+        status: false,
+        message: "No assistant with this account!",
+      });
+    }
 
     console.log({ targetAssistant });
 
