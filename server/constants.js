@@ -35,6 +35,7 @@ const GET_PURCHASED_NUMBER = "/purchased-numbers";
 const GET_COMPANY_DETAILS = "/company-details";
 const REGISTER_COMPANY = "/register-company";
 const GET_VAPI_NUMBER_IMPORT_STATUS = "/vapi-number-import-status";
+const DELETE_NUM_FROM_VAPI = "/delete-number-from-vapi";
 
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
@@ -77,4 +78,5 @@ module.exports = {
   GET_PURCHASED_NUMBER,
   GET_COMPANY_DETAILS,
   REGISTER_COMPANY,
+  DELETE_NUM_FROM_VAPI,
 };

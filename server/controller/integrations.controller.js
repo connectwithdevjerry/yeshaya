@@ -11,6 +11,7 @@ const { HighLevel } = require("@gohighlevel/api-client");
 
 const https = require("https");
 const twilio = require("twilio");
+const { getVapiPhoneId } = require("./assistant.controller");
 const VoiceResponse = require("twilio").twiml.VoiceResponse;
 
 const SUB_PATH = "/integrations";
@@ -258,7 +259,9 @@ const getGhlTokens = async (userId) => {
 const callGetSubaccounts = async (req, res) => {
   try {
     const userId = req.user;
-    const userType = req.userType;
+    const userType = req.query.userType;
+
+    console.log({ userType });
 
     const reqDetails = await getSubAccountsHelper(userId);
     const { status, subAccounts } = reqDetails;
@@ -1122,6 +1125,27 @@ const importTwilioNumberToVapi = async (req, res) => {
     const { subaccountId, assistantId, phoneSid, twilioNumber } = req.body;
     const userId = req.user;
 
+    // if (newPhoneNumberId) {
+    const user = await userModel.findById(userId);
+    const getSubAccount = user.ghlSubAccountIds.filter(
+      (subaccount) => subaccount.accountId === subaccountId
+    );
+
+    const getAssistant = getSubAccount[0]?.vapiAssistants.filter(
+      (assistant) => assistant.assistantId === assistantId
+    );
+
+    if (!getAssistant.length) {
+      return res.send({
+        status: false,
+        message: "No assistant with this account for this number!",
+      });
+    }
+
+    const getPhoneNumber = getAssistant[0]?.numberDetails.filter(
+      (number) => number.phoneNum === twilioNumber
+    );
+
     const VAPI_IMPORT_URL = "https://api.vapi.ai/phone-number";
 
     const response = await axios.post(
@@ -1151,34 +1175,6 @@ const importTwilioNumberToVapi = async (req, res) => {
     console.log(
       `Imported Twilio number. VAPI_PHONE_NUMBER_ID: ${newPhoneNumberId}`
     );
-
-    // if (newPhoneNumberId) {
-    const user = await userModel.findById(userId);
-    const getSubAccount = user.ghlSubAccountIds.filter(
-      (subaccount) => subaccount.accountId === subaccountId
-    );
-
-    const getAssistant = getSubAccount[0]?.vapiAssistants.filter(
-      (assistant) => assistant.assistantId === assistantId
-    );
-
-    if (!getAssistant.length) {
-      return res.send({
-        status: false,
-        message: "No assistant with this account for this number!",
-      });
-    }
-
-    const getPhoneNumber = getAssistant[0]?.numberDetails.filter(
-      (number) => number.phoneNum === twilioNumber
-    );
-
-    // const targetPhoneSid = getPhoneNumber[0].phoneSid;
-    // const inputPhoneSid = targetPhoneSid ? targetPhoneSid : phoneSid;
-
-    // if (!inputPhoneSid) {
-    //   return res.send({ status: false, message: "Invalid phone sid!" });
-    // }
 
     console.log(getPhoneNumber);
 
@@ -1305,8 +1301,20 @@ const getPurchasedNumbers = async (req, res) => {
 
 const getVapiNumberImportStatus = async (req, res) => {
   try {
-    const { vapiPhoneNumId } = req.query;
-    const VAPI_IMPORT_STATUS_URL = `https://api.vapi.ai/phone-number/${vapiPhoneNumId}`;
+    const { phoneNum } = req.query;
+    const getPhoneNumId = await getVapiPhoneId(phoneNum);
+
+    console.log({ getPhoneNumId });
+
+    if (!getPhoneNumId.status) {
+      return res.send({
+        status: false,
+        message: getPhoneNumId.message,
+      });
+    }
+
+    const phoneNumId = getPhoneNumId.vapiPhoneNumId;
+    const VAPI_IMPORT_STATUS_URL = `https://api.vapi.ai/phone-number/${phoneNumId}`;
 
     const response = await axios.get(VAPI_IMPORT_STATUS_URL, {
       headers: {

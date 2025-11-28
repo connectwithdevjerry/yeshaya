@@ -3,6 +3,7 @@ const userModel = require("../model/user.model");
 const { OpenAI } = require("openai");
 const VAPI_API_KEY = process.env.VAPI_API_KEY;
 const { VapiClient } = require("@vapi-ai/server-sdk");
+
 const prompt = `
 ## Identity
 You are James, a knowledgeable and approachable tax professional at Upscale BOS, a tax preparation and consulting firm in Boston. You provide exceptional customer support by answering questions about tax services, helping clients book appointments, and offering general tax guidance. You represent Upscale BOS with professionalism while maintaining a friendly, helpful demeanor that puts clients at ease when discussing their tax concerns.
@@ -86,7 +87,7 @@ const VAPI_ASSISTANT_CONFIG = ({
     voiceId,
     provider: v_provider,
   },
-  firstMessage: `Hello! Thank you for calling '${name}'. How can I help you today?`,
+  firstMessage: prompt,
   language: "en",
   endCallPhrases: ["goodbye", "thanks, that's all"],
   transcriber: {
@@ -411,6 +412,93 @@ const deleteAssistant = async () => {
   }
 };
 
+const deleteNumberFromAssistant = async (req, res) => {
+  const userId = req.user;
+  const { phoneNum } = req.query;
+
+  console.log({ phoneNum });
+
+  const getPhoneNumId = await getVapiPhoneId(phoneNum);
+
+  if (!getPhoneNumId.status) {
+    return res.send({
+      status: false,
+      message: getPhoneNumId.message,
+    });
+  }
+
+  const phoneNumId = getPhoneNumId.vapiPhoneNumId;
+
+  const url = `https://api.vapi.ai/phone-number/${phoneNumId}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (response.ok) {
+      console.log(`Successfully deleted Vapi Phone Number ID: ${phoneNumId}`);
+      // A successful DELETE usually returns 200 OK or 204 No Content.
+      return res.send({
+        status: true,
+        message: "Phone number deleted successfully.",
+      });
+    } else {
+      const errorBody = await response.json();
+      console.error(
+        `Failed to delete Vapi Phone Number. Status: ${response.status}`,
+        errorBody
+      );
+      return res.send({
+        status: false,
+        message: "Failed to delete phone number.",
+        details: errorBody,
+      });
+    }
+  } catch (error) {
+    console.error("An error occurred during the DELETE request:", error);
+    return res.send({
+      status: false,
+      message: "An error occurred during the DELETE request.",
+      details: error.message,
+    });
+  }
+};
+
+const getVapiPhoneId = async (phoneNum) => {
+  // console.log(assistantId, phoneNum);
+  try {
+    // const VAPI_ASSISTANT_URL = `https://api.vapi.ai/assistant/${assistantId}/phone-numbers`;
+    const VAPI_ASSISTANT_URL = `https://api.vapi.ai/phone-number`;
+
+    const response = await axios.get(VAPI_ASSISTANT_URL, {
+      headers: {
+        Authorization: `Bearer ${VAPI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const phoneNumbers = await response.data; // Assuming the response data is an array of phone number objects
+    console.log({ phoneNumbers });
+
+    const targetNumber = phoneNumbers.find(
+      (num) => num.number === phoneNum.replace(" ", "+")
+    );
+
+    if (targetNumber) {
+      return { status: true, vapiPhoneNumId: targetNumber.id };
+    } else {
+      return { status: false, message: "Phone number not found." };
+    }
+  } catch (error) {
+    return { status: false, message: error.message };
+  }
+};
+
 // Execute the main function
 module.exports = {
   createAssistantAndSave,
@@ -419,4 +507,6 @@ module.exports = {
   updateAssistant,
   deleteAssistant,
   generatePrompt,
+  deleteNumberFromAssistant,
+  getVapiPhoneId,
 };

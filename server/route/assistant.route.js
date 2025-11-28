@@ -7,6 +7,7 @@ const {
   getAssistants,
   updateAssistant,
   generatePrompt,
+  deleteNumberFromAssistant,
 } = require("../controller/assistant.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
 
@@ -17,6 +18,7 @@ const {
   GET_ASSISTANTS,
   UPDATE_ASSISTANT,
   GENERATE_PROMPT,
+  DELETE_NUM_FROM_VAPI,
 } = require("../constants");
 
 router.post(CREATE_ASSISTANT, verifyAccessToken, createAssistantAndSave);
@@ -25,5 +27,10 @@ router.get(GET_ASSISTANT, verifyAccessToken, getAssistant);
 router.get(GET_ASSISTANTS, verifyAccessToken, getAssistants);
 router.put(UPDATE_ASSISTANT, verifyAccessToken, updateAssistant);
 router.put(GENERATE_PROMPT, verifyAccessToken, generatePrompt);
+router.delete(
+  DELETE_NUM_FROM_VAPI,
+  verifyAccessToken,
+  deleteNumberFromAssistant
+);
 
 module.exports = router;
