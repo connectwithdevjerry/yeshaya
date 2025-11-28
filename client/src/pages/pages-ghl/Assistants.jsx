@@ -33,6 +33,27 @@ const Assistants = () => {
   // ✅ Get subaccountId from URL or current account
   const subaccountId = searchParams.get("subaccount") || account?.subaccount;
 
+  const hasAlerted = React.useRef(false);
+
+  useEffect(() => {
+    if (hasAlerted.current) return;
+
+    const agencyid = searchParams.get("agencyid");
+    const subaccount = searchParams.get("subaccount");
+    const myemail = searchParams.get("myemail");
+    const myname = searchParams.get("myname");
+
+    if (agencyid || subaccount || myemail || myname) {
+      alert(
+        `Agency ID: ${agencyid}\n` +
+          `Subaccount: ${subaccount}\n` +
+          `My Email: ${myemail}\n` +
+          `My Name: ${myname}`
+      );
+      hasAlerted.current = true;
+    }
+  }, [searchParams]);
+
   const {
     data: assistants,
     loading,

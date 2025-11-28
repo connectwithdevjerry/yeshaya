@@ -72,6 +72,51 @@ export const buyNumber = createAsyncThunk(
   }
 );
 
+// 🚀 Async thunk to connect to Vapi
+export const vapiConnect = createAsyncThunk(
+  "numbers/vapiConnect",
+  async ({ subaccountId, assistantId, number, phoneSid }, { rejectWithValue }) => {
+    try {
+      console.log("📤 Sending vapiConnect request with:", {
+        subaccount: subaccountId,
+        assistant: assistantId,
+        numberSid: phoneSid,
+        twilioNumber: number
+      });
+
+      const response = await apiClient.post('/integrations/import-number-to-vapi', {
+        subaccountId: subaccountId,
+        assistantId: assistantId,
+        phoneSid: phoneSid,
+        twilioNumber: number
+      });
+
+      console.log("✅ vapiConnection full response:", response);
+      console.log("✅ vapiConnection response.data:", response.data);
+      
+      if (response.data && response.data.status) {
+        return response.data.data || response.data; 
+      } else {
+        const errorMsg = response.data?.message || "Failed to Connect to vapi";
+        console.error("❌ API returned error:", errorMsg);
+        return rejectWithValue(errorMsg);
+      }
+    } catch (error) {
+      console.error("❌ vapi Connection error:", error);
+      console.error("❌ Error response:", error.response);
+      console.error("❌ Error data:", error.response?.data);
+      
+      const errorMessage = error.response?.data?.message 
+        || error.response?.data?.error
+        || error.message 
+        || "Network error";
+      
+      return rejectWithValue(errorMessage);
+    }
+  }
+);
+
+
 const numberSlice = createSlice({
   name: "numbers",
   initialState: {
@@ -80,9 +125,11 @@ const numberSlice = createSlice({
     loading: false,
     loadingPurchased: false,
     buyingNumber: false,
+    connectingVapi: false,
     error: null,
     purchasedError: null,
     buyError: null,
+    vapiError: null,
   },
   reducers: {
     clearNumbers: (state) => {
@@ -95,6 +142,9 @@ const numberSlice = createSlice({
     },
     clearBuyError: (state) => {
       state.buyError = null;
+    },
+    clearVapiError: (state) => {
+      state.vapiError = null;
     },
   },
   extraReducers: (builder) => {
@@ -135,14 +185,28 @@ const numberSlice = createSlice({
       .addCase(buyNumber.fulfilled, (state, action) => {
         state.buyingNumber = false;
         state.purchasedNumbers.push(action.payload);
-        
       })
       .addCase(buyNumber.rejected, (state, action) => {
         state.buyingNumber = false;
         state.buyError = action.payload;
+      })
+      
+      // Connect to Vapi
+      .addCase(vapiConnect.pending, (state) => {
+        state.connectingVapi = true;
+        state.vapiError = null;
+      })
+      .addCase(vapiConnect.fulfilled, (state, action) => {
+        state.connectingVapi = false;
+        // Optionally update the number's status in purchasedNumbers
+        console.log("✅ Vapi connection successful:", action.payload);
+      })
+      .addCase(vapiConnect.rejected, (state, action) => {
+        state.connectingVapi = false;
+        state.vapiError = action.payload;
       });
   },
 });
 
-export const { clearNumbers, clearPurchasedNumbers, clearBuyError } = numberSlice.actions;
+export const { clearNumbers, clearPurchasedNumbers, clearBuyError, clearVapiError } = numberSlice.actions;
 export default numberSlice.reducer;

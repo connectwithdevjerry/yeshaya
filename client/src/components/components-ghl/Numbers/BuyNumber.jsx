@@ -1,49 +1,66 @@
 // src/components/components-ghl/Numbers/BuyNumber.jsx
-import React, { useState, useEffect } from 'react';
-import { X, MessageSquare, Phone, Volume2, Loader2, Truck, ChevronDown } from 'lucide-react';
-import { useDispatch, useSelector } from 'react-redux';
-import { fetchAvailableNumbers, buyNumber } from '../../../store/slices/numberSlice';
-import { fetchAssistants } from '../../../store/slices/assistantsSlice';
+import React, { useState, useEffect } from "react";
+import {
+  X,
+  MessageSquare,
+  Phone,
+  Volume2,
+  Loader2,
+  Truck,
+  ChevronDown,
+} from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  fetchAvailableNumbers,
+  buyNumber,
+} from "../../../store/slices/numberSlice";
+import { fetchAssistants } from "../../../store/slices/assistantsSlice";
 
 // Helper function to get capability icons
 const getCapabilityIcons = (capabilities) => {
   const icons = [];
-  
+
   if (capabilities.SMS) {
-    icons.push({ Icon: MessageSquare, name: 'SMS', key: 'sms' });
+    icons.push({ Icon: MessageSquare, name: "SMS", key: "sms" });
   }
 
   if (capabilities.MMS) {
-    icons.push({ Icon: Truck, name: 'MMS', key: 'mms' });
+    icons.push({ Icon: Truck, name: "MMS", key: "mms" });
   }
-  
+
   if (capabilities.voice) {
-    icons.push({ Icon: Phone, name: 'Voice Call', key: 'phone' });
-    icons.push({ Icon: Volume2, name: 'Audio', key: 'audio' });
+    icons.push({ Icon: Phone, name: "Voice Call", key: "phone" });
+    icons.push({ Icon: Volume2, name: "Audio", key: "audio" });
   }
-  
+
   return icons;
 };
 
 const BuyNumberModal = ({ isOpen, onClose }) => {
-  const [areaCode, setAreaCode] = useState('');
+  const [areaCode, setAreaCode] = useState("");
   const [selectedNumber, setSelectedNumber] = useState(null);
-  const [selectedAssistant, setSelectedAssistant] = useState('');
+  const [selectedAssistant, setSelectedAssistant] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [buyingNumber, setBuyingNumber] = useState(false);
 
   const dispatch = useDispatch();
-  const { data: availableNumbers, loading, error } = useSelector((state) => state.numbers);
-  const { data: assistants, loading: assistantsLoading } = useSelector((state) => state.assistants);
+  const {
+    data: availableNumbers,
+    loading,
+    error,
+  } = useSelector((state) => state.numbers);
+  const { data: assistants, loading: assistantsLoading } = useSelector(
+    (state) => state.assistants
+  );
 
   // ✅ Fetch numbers and assistants when modal opens
   useEffect(() => {
     if (isOpen) {
       dispatch(fetchAvailableNumbers());
-      
+
       // Get subaccountId from localStorage or your auth state
-      const subaccountId = localStorage.getItem('selectedSubaccountId');
+      const subaccountId = localStorage.getItem("selectedSubaccountId");
       if (subaccountId) {
         dispatch(fetchAssistants(subaccountId));
       }
@@ -51,14 +68,14 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
   }, [isOpen, dispatch]);
 
   const searchParams = new URLSearchParams(window.location.search);
-  const subaccountId = searchParams.get('subaccount');
+  const subaccountId = searchParams.get("subaccount");
 
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setAreaCode('');
+      setAreaCode("");
       setSelectedNumber(null);
-      setSelectedAssistant('');
+      setSelectedAssistant("");
       setCurrentPage(1);
     }
   }, [isOpen]);
@@ -68,14 +85,17 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
   // ✅ Filter numbers by area code
   const filteredNumbers = areaCode.trim()
     ? availableNumbers.filter((num) =>
-        num.phoneNumber.includes(areaCode.replace(/\D/g, ''))
+        num.phoneNumber.includes(areaCode.replace(/\D/g, ""))
       )
     : availableNumbers;
 
   // ✅ Pagination
   const totalPages = Math.ceil(filteredNumbers.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedNumbers = filteredNumbers.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedNumbers = filteredNumbers.slice(
+    startIndex,
+    startIndex + itemsPerPage
+  );
 
   const handleSearch = () => {
     setCurrentPage(1); // Reset to first page on search
@@ -85,7 +105,7 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
   const handleBuy = async () => {
     if (selectedNumber && selectedAssistant && subaccountId) {
       setBuyingNumber(true);
-      
+
       try {
         const resultAction = await dispatch(
           buyNumber({
@@ -96,31 +116,34 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
         );
 
         if (buyNumber.fulfilled.match(resultAction)) {
-          console.log('✅ Number purchased successfully:', resultAction.payload);
+          console.log(
+            "✅ Number purchased successfully:",
+            resultAction.payload
+          );
           // Optionally refresh the available numbers list
           dispatch(fetchAvailableNumbers());
           onClose();
         } else {
-          console.error('❌ Failed to buy number:', resultAction.payload);
+          console.error("❌ Failed to buy number:", resultAction.payload);
           alert(`Failed to buy number: ${resultAction.payload}`);
         }
       } catch (error) {
-        console.error('❌ Error buying number:', error);
-        alert('An error occurred while buying the number');
+        console.error("❌ Error buying number:", error);
+        alert("An error occurred while buying the number");
       } finally {
         setBuyingNumber(false);
       }
     } else {
       if (!subaccountId) {
-        alert('Subaccount ID is missing. Please select a subaccount.');
+        alert("Subaccount ID is missing. Please select a subaccount.");
       }
     }
   };
 
   const handlePageChange = (direction) => {
-    if (direction === 'next' && currentPage < totalPages) {
+    if (direction === "next" && currentPage < totalPages) {
       setCurrentPage(currentPage + 1);
-    } else if (direction === 'prev' && currentPage > 1) {
+    } else if (direction === "prev" && currentPage > 1) {
       setCurrentPage(currentPage - 1);
     }
   };
@@ -130,8 +153,13 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
       <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl p-6 relative max-h-[90vh] flex flex-col">
         {/* Modal Header */}
         <div className="flex justify-between items-center pb-4 border-b border-gray-200 mb-6">
-          <h3 className="text-xl font-semibold text-gray-800">Buy phone number</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <h3 className="text-xl font-semibold text-gray-800">
+            Buy phone number
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -140,7 +168,10 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
         <div className="space-y-4 mb-6">
           {/* Assistant Dropdown */}
           <div>
-            <label htmlFor="assistant-select" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="assistant-select"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Select Assistant <span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -152,7 +183,9 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
                 disabled={assistantsLoading}
               >
                 <option value="">
-                  {assistantsLoading ? 'Loading assistants...' : 'Choose an assistant'}
+                  {assistantsLoading
+                    ? "Loading assistants..."
+                    : "Choose an assistant"}
                 </option>
                 {assistants.map((assistant) => (
                   <option key={assistant.id} value={assistant.id}>
@@ -172,7 +205,10 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
           {/* Area Code Search */}
           <div className="flex items-end gap-3">
             <div className="flex-grow">
-              <label htmlFor="area-code" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="area-code"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Desired area code (US only)
               </label>
               <input
@@ -180,7 +216,7 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
                 id="area-code"
                 value={areaCode}
                 onChange={(e) => setAreaCode(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                onKeyPress={(e) => e.key === "Enter" && handleSearch()}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                 placeholder="e.g., 217"
                 maxLength="3"
@@ -191,7 +227,7 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
               disabled={loading}
               className="px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-sm hover:bg-gray-800 transition-colors disabled:bg-gray-400"
             >
-              {loading ? 'Searching...' : 'Search'}
+              {loading ? "Searching..." : "Search"}
             </button>
           </div>
         </div>
@@ -199,7 +235,9 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
         {/* Results Count */}
         <div className="text-sm font-medium text-gray-600 mb-2 flex justify-between items-center">
           <span>Available Numbers</span>
-          <span className="text-gray-400">{filteredNumbers.length} numbers</span>
+          <span className="text-gray-400">
+            {filteredNumbers.length} numbers
+          </span>
         </div>
 
         {/* Table/List of Available Numbers */}
@@ -238,29 +276,40 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {paginatedNumbers.map((item, index) => {
                   const capabilityIcons = getCapabilityIcons(item.capabilities);
-                  const isSelected = selectedNumber?.phoneNumber === item.phoneNumber;
+                  const isSelected =
+                    selectedNumber?.phoneNumber === item.phoneNumber;
 
                   return (
                     <tr
                       key={item.phoneNumber}
                       className={`cursor-pointer transition-colors ${
-                        isSelected ? 'bg-indigo-50 border-l-4 border-indigo-600' : 'hover:bg-gray-50'
+                        isSelected
+                          ? "bg-indigo-50 border-l-4 border-indigo-600"
+                          : "hover:bg-gray-50"
                       }`}
                       onClick={() => setSelectedNumber(item)}
                     >
                       {/* Number */}
                       <td className="px-6 py-2 whitespace-nowrap text-sm font-medium text-gray-800">
                         <div className="flex flex-col">
-                          <span className="font-semibold">{item.friendlyName}</span>
-                          <span className="text-xs text-gray-500">{item.phoneNumber}</span>
+                          <span className="font-semibold">
+                            {item.friendlyName}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {item.phoneNumber}
+                          </span>
                         </div>
                       </td>
 
                       {/* Location */}
                       <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-600">
                         <div className="flex flex-col">
-                          <span>{item.locality}, {item.region}</span>
-                          <span className="text-xs text-gray-500">{item.postalCode || 'N/A'}</span>
+                          <span>
+                            {item.locality}, {item.region}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {item.postalCode || "N/A"}
+                          </span>
                         </div>
                       </td>
 
@@ -285,6 +334,7 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
                           Yes
                         </span>
                       </td>
+
                     </tr>
                   );
                 })}
@@ -298,25 +348,29 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
           <div className="flex justify-between items-center text-sm text-gray-500 mt-4 pt-4 border-t">
             <div className="flex items-center gap-2">
               <span>
-                Showing {startIndex + 1} - {Math.min(startIndex + itemsPerPage, filteredNumbers.length)} of {filteredNumbers.length}
+                Showing {startIndex + 1} -{" "}
+                {Math.min(startIndex + itemsPerPage, filteredNumbers.length)} of{" "}
+                {filteredNumbers.length}
               </span>
             </div>
             <div className="flex items-center gap-3">
-              <span>Page {currentPage} of {totalPages}</span>
+              <span>
+                Page {currentPage} of {totalPages}
+              </span>
               <div className="flex gap-2">
                 <button
-                  onClick={() => handlePageChange('prev')}
+                  onClick={() => handlePageChange("prev")}
                   disabled={currentPage === 1}
                   className="p-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
                 >
-                  {'<'}
+                  {"<"}
                 </button>
                 <button
-                  onClick={() => handlePageChange('next')}
+                  onClick={() => handlePageChange("next")}
                   disabled={currentPage === totalPages}
                   className="p-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
                 >
-                  {'>'}
+                  {">"}
                 </button>
               </div>
             </div>
@@ -330,19 +384,21 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
             {selectedNumber && (
               <div className="flex items-center gap-2">
                 <span className="font-medium">Selected Number:</span>
-                <span className="text-indigo-600 font-semibold">{selectedNumber.friendlyName}</span>
+                <span className="text-indigo-600 font-semibold">
+                  {selectedNumber.friendlyName}
+                </span>
               </div>
             )}
             {selectedAssistant && (
               <div className="flex items-center gap-2">
                 <span className="font-medium">Assistant:</span>
                 <span className="text-indigo-600 font-semibold">
-                  {assistants.find(a => a.id === selectedAssistant)?.name}
+                  {assistants.find((a) => a.id === selectedAssistant)?.name}
                 </span>
               </div>
             )}
           </div>
-          
+
           <div className="flex gap-3 ml-auto">
             <button
               onClick={onClose}
@@ -361,7 +417,7 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
                   Buying...
                 </>
               ) : (
-                'Buy Number'
+                "Buy Number"
               )}
             </button>
           </div>

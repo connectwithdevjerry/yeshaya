@@ -29,10 +29,7 @@ export const authAPI = {
     return apiClient.put("/auth/reset_password", passwordData);
   },
 
-  refreshToken: (refreshToken) => {
-    return apiClient.post("/auth/refresh", { refreshToken });
-  },
-
+  // ✅ Changed from refreshToken to exchangeToken
   exchangeToken: (refreshToken) => {
     return apiClient.post("/auth/exchange-token", { refreshToken });
   },
