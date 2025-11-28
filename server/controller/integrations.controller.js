@@ -1027,11 +1027,11 @@ const twilioCallReceiver = async (req, res) => {
 
     console.log({
       targetAssistant,
-      numberDetails: targetAssistant.numberDetails,
+      numberDetails: targetAssistant[0].numberDetails,
       receiverNumber,
     });
 
-    const targetPhoneNumber = targetAssistant.numberDetails.filter(
+    const targetPhoneNumber = targetAssistant[0].numberDetails.filter(
       (number) => number.phoneNum === receiverNumber
     );
 
