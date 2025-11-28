@@ -7,24 +7,23 @@ import {
   Trash2,
   Users,
   Link,
-  CreditCard,
   Wallet,
   Link2,
   UploadCloud,
   Zap,
   ArrowRightLeft,
   Info,
-  MoreVertical,
+  MoreHorizontal,
   ChevronLeft,
   ChevronRight,
-  MoreHorizontal,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchSubAccounts } from "../../store/slices/integrationSlice";
+import { fetchImportedSubAccounts } from "../../store/slices/integrationSlice";
 import FolderModal from "../../components/components-ui/Modals/FolderModal";
 import { AccountDetailSidebar } from "../../components/components-ui/Modals/AccountDetailSidebar";
 import AccountActionsMenu from "../../components/components-ui/Accounts/AccountActionsMenu";
 import { copyTextToClipboard } from "../../helper";
+import ImportSubaccountsModal from "../../components/components-ui/Accounts/ImportSubaccountsModal";
 
 function SubAccounts() {
   const [activeTab, setActiveTab] = useState("All");
@@ -33,7 +32,9 @@ function SubAccounts() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [openMenuAccountId, setOpenMenuAccountId] = useState(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+
   const menuAnchorRef = useRef(null);
   const dropdownRef = useRef(null);
 
@@ -42,9 +43,9 @@ function SubAccounts() {
     (state) => state.integrations || {}
   );
 
-  // fetch on mount
+  // fetch imported subaccounts only for this page
   useEffect(() => {
-    dispatch(fetchSubAccounts());
+    dispatch(fetchImportedSubAccounts());
   }, [dispatch]);
 
   useEffect(() => {
@@ -78,9 +79,9 @@ function SubAccounts() {
     if (openMenuAccountId === account.id) {
       setOpenMenuAccountId(null);
       return;
-    } // Calculate button position relative to the viewport
-    const rect = e.currentTarget.getBoundingClientRect(); // --- NEW LOGIC: Check viewport height and menu height (approx 300px) ---
-    const menuHeight = 350; // Approximate menu height, including padding
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuHeight = 350;
     const viewportHeight = window.innerHeight;
     let topPosition = rect.bottom + 5;
     if (topPosition + menuHeight > viewportHeight && rect.top > menuHeight) {
@@ -146,7 +147,7 @@ function SubAccounts() {
             <Folder size={14} /> New Folder
           </button>
 
-          {/* New Sub-account */}
+          {/* New Sub-account Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -163,11 +164,17 @@ function SubAccounts() {
                     handleClick={() => {
                       const url = linkToCopy(agencyId);
                       copyTextToClipboard(url);
-                      console.log("ID copied:", agencyId);
                     }}
                     text="Custom menu link"
                   />
-                  <DropdownItem icon={UploadCloud} text="Import installed" />
+                  <DropdownItem
+                    icon={UploadCloud}
+                    handleClick={() => {
+                      setIsImportModalOpen(true); // opens modal for fetching new subaccounts
+                      setIsDropdownOpen(false);
+                    }}
+                    text="Import installed"
+                  />
                   <DropdownItem icon={Zap} text="Direct connection" />
                   <DropdownItem icon={ArrowRightLeft} text="Transfer account" />
                 </ul>
@@ -218,10 +225,9 @@ function SubAccounts() {
                 <th className="p-3 text-left font-medium w-1/5">
                   CONNECTION STATUS
                 </th>
-                <th className="p-3text-left font-medium w-1/6"></th>
+                <th className="p-3 text-left font-medium w-1/6"></th>
               </tr>
             </thead>
-
             <tbody>
               {filtered?.map((acc) => (
                 <tr
@@ -229,7 +235,6 @@ function SubAccounts() {
                   className="border-b hover:bg-gray-50 transition text-sm text-gray-700"
                   onClick={() => handleAccountClick(acc)}
                 >
-                  {/* NAME */}
                   <td className="p-3 align-middle">
                     <div className="flex items-center gap-3">
                       <input
@@ -242,8 +247,6 @@ function SubAccounts() {
                       </span>
                     </div>
                   </td>
-
-                  {/* LOCATION ID */}
                   <td className="p-3 align-middle text-gray-600 whitespace-nowrap">
                     <div className="flex flex-col">
                       <span className="text-sm">
@@ -251,30 +254,22 @@ function SubAccounts() {
                       </span>
                     </div>
                   </td>
-
-                  {/* WALLET */}
                   <td className="p-3 align-middle text-gray-700 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <Wallet size={18} />
                       <span className="text-sm">$0.00</span>
                     </div>
                   </td>
-
-                  {/* CONNECTION STATUS */}
                   <td className="p-3 align-middle">
                     <div className="flex items-center gap-2 text-green-600 whitespace-nowrap">
                       <Link size={18} />
                       <span className="text-sm">Connected</span>
                     </div>
                   </td>
-
-                  {/* ACTIONS - fixed width, center vertically & horizontally */}
                   <td className="p-3 align-middle w-40">
                     <div className="flex items-center justify-center gap-3">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
+                        onClick={(e) => e.stopPropagation()}
                         className="p-1 rounded-full hover:bg-gray-100"
                         aria-label="users"
                         title="Users"
@@ -284,12 +279,10 @@ function SubAccounts() {
 
                       <button
                         onClick={(e) => {
-                          e.stopPropagation(); // ✅ This stops the row click
+                          e.stopPropagation();
                           handleOpenActionMenu(e, acc);
                         }}
-                        ref={
-                          openMenuAccountId === acc.id ? menuAnchorRef : null
-                        }
+                        ref={openMenuAccountId === acc.id ? menuAnchorRef : null}
                         className="p-2 border rounded-md hover:bg-gray-100"
                         aria-label="more"
                         title="More"
@@ -297,9 +290,7 @@ function SubAccounts() {
                         <MoreHorizontal size={16} className="text-gray-500" />
                       </button>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation(); /* delete */
-                        }}
+                        onClick={(e) => e.stopPropagation()}
                         className="p-2 border rounded-md bg-red-50 hover:bg-red-200"
                         aria-label="delete"
                         title="Delete"
@@ -315,29 +306,13 @@ function SubAccounts() {
         )}
       </div>
 
-      {/* Footer */}
-      <div className="flex justify-between items-center mt-4 text-sm text-gray-500">
-        <div className="flex items-center gap-2">
-          <select className="border border-gray-300 rounded-md px-2 py-1 text-sm">
-            <option>10</option>
-            <option>25</option>
-            <option>50</option>
-          </select>
-          <span>Showing 1 - 10</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span>Page 1 of 1</span>
-          <button className="p-1 border rounded hover:bg-gray-100">
-            <ChevronLeft size={14} />
-          </button>
-          <button className="p-1 border rounded hover:bg-gray-100">
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      </div>
-
       {/* Modals */}
       <FolderModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {/* Import modal fetches its own subaccounts internally */}
+      <ImportSubaccountsModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+      />
       <AccountDetailSidebar
         isOpen={isSidebarOpen}
         onClose={handleCloseSidebar}

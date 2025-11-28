@@ -93,7 +93,7 @@ export const resetPassword = createAsyncThunk(
     try {
       const response = await axios.post(
         "https://api.yashayah.cloud/auth/forgot_password",
-        { email } 
+        { email }
       );
 
       return (
@@ -111,7 +111,6 @@ export const resetPassword = createAsyncThunk(
     }
   }
 );
-
 
 export const verifyToken = createAsyncThunk(
   "auth/verifyToken",
@@ -177,11 +176,41 @@ export const refreshAccessToken = createAsyncThunk(
       sessionStorage.removeItem("refreshToken");
 
       const errorMessage =
-        error.response?.data?.message || 
+        error.response?.data?.message ||
         error.message ||
         "Token refresh failed";
 
       return rejectWithValue(errorMessage);
+    }
+  }
+);
+
+export const getCompanyDetails = createAsyncThunk(
+  "auth/getCompanyDetails",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await axios.get(
+        "https://yeshaya.onrender.com/auth/company-details",
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          },
+        }
+      );
+
+      const data = response.data;
+      if (data.status === false) {
+        return rejectWithValue(
+          data.message || "Failed to load company details"
+        );
+      }
+
+      // localStorage.setItem("companyDetails", JSON.stringify(data.data || null));
+      return data.data;
+    } catch (error) {
+      const msg =
+        error.response?.data?.message || error.message || "Network error";
+      return rejectWithValue(msg);
     }
   }
 );
@@ -203,6 +232,11 @@ const authSlice = createSlice({
       error: null,
     },
     refreshing: false,
+    companyDetails: JSON.parse(
+      localStorage.getItem("companyDetails") || "null"
+    ),
+    companyLoading: false,
+    companyError: null,
   },
   reducers: {
     clearError: (state) => {
@@ -230,6 +264,7 @@ const authSlice = createSlice({
       state.refreshToken = null;
       state.isAuthenticated = false;
       state.error = null;
+      state.companyDetails = null;  
     },
   },
   extraReducers: (builder) => {
@@ -353,16 +388,32 @@ const authSlice = createSlice({
         state.refreshToken = null;
         state.user = null;
         state.error = action.payload || "Session expired. Please login again.";
+      })
+
+       // Add the company details handlers
+      .addCase(getCompanyDetails.pending, (state) => {
+        state.companyLoading = true;
+        state.companyError = null;
+      })
+      .addCase(getCompanyDetails.fulfilled, (state, action) => {
+        state.companyLoading = false;
+        state.companyDetails = action.payload;
+        state.companyError = null;
+      })
+      .addCase(getCompanyDetails.rejected, (state, action) => {
+        state.companyLoading = false;
+        state.companyError = action.payload || "Failed to load company details";
+        state.companyDetails = null;
       });
   },
 });
 
-export const { 
-  clearError, 
-  clearSuccessMessage, 
-  clearVerification, 
+export const {
+  clearError,
+  clearSuccessMessage,
+  clearVerification,
   setTokens,
-  clearAuth 
+  clearAuth,
 } = authSlice.actions;
 
 export default authSlice.reducer;

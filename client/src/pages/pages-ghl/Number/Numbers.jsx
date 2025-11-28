@@ -12,12 +12,17 @@ import {
   Phone,
   MoreHorizontal,
   Trash2,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import TabButton from "../../../components/components-ghl/TabButton";
 import ImportNumberModal from "../../../components/components-ghl/Numbers/ImportNumber";
 import BuyNumberModal from "../../../components/components-ghl/Numbers/BuyNumber";
-import { fetchPurchasedNumbers } from "../../../store/slices/numberSlice";
+import { 
+  fetchPurchasedNumbers, 
+  getVapiConnectionStatus 
+} from "../../../store/slices/numberSlice";
 import { fetchAssistants } from "../../../store/slices/assistantsSlice";
 import NumbersActionsMenu from "../../../components/components-ghl/Numbers/NumberActionsMenu";
 
@@ -39,6 +44,7 @@ const Numbers = () => {
   const subaccountId = searchParams.get("subaccount");
 
   const { data: assistants } = useSelector((state) => state.assistants);
+  const { vapiStatuses } = useSelector((state) => state.numbers);
 
   // Fetch assistants on mount
   useEffect(() => {
@@ -84,6 +90,40 @@ const Numbers = () => {
     fetchAllNumbers();
   }, [dispatch, subaccountId, assistants]);
 
+  // NEW: Check Vapi connection status for all numbers
+  useEffect(() => {
+    const checkVapiStatuses = async () => {
+      if (allPurchasedNumbers.length > 0 && subaccountId) {
+        for (const numberItem of allPurchasedNumbers) {
+          const details = numberItem.phoneNumberDetails;
+          
+          // Check if we have a stored vapiPhoneNumId for this number
+          const vapiStatus = vapiStatuses[details?.sid];
+          const vapiPhoneNumId = vapiStatus?.vapiPhoneNumId;
+          
+          // Only check status if we have a vapiPhoneNumId and haven't checked recently
+          if (details?.sid && vapiPhoneNumId && !vapiStatus?.status) {
+            try {
+              await dispatch(
+                getVapiConnectionStatus({
+                  vapiPhoneNumId: vapiPhoneNumId, // Use stored Vapi phone number ID
+                  subaccountId: subaccountId,
+                  assistantId: numberItem.assistantId,
+                  phoneSid: details.sid,
+                  number: details.phoneNumber,
+                })
+              );
+            } catch (error) {
+              console.error(`Failed to check Vapi status for ${details.phoneNumber}:`, error);
+            }
+          }
+        }
+      }
+    };
+
+    checkVapiStatuses();
+  }, [allPurchasedNumbers, subaccountId, dispatch, vapiStatuses]);
+
   // Filter numbers based on active tab
   const getFilteredNumbers = () => {
     switch (activeTab) {
@@ -110,6 +150,7 @@ const Numbers = () => {
     "CAPABILITIES",
     "STATUS",
     "LINKED ASSISTANT",
+    "VAPI STATUS",
   ];
 
   // Helper function to format capabilities
@@ -120,6 +161,55 @@ const Numbers = () => {
     if (capabilities.sms) caps.push("SMS");
     if (capabilities.mms) caps.push("MMS");
     return caps.join(", ") || "N/A";
+  };
+
+  // Helper function to render Vapi status indicator
+  const renderVapiStatus = (phoneSid) => {
+    const vapiInfo = vapiStatuses[phoneSid];
+    
+    // If no vapiPhoneNumId, number hasn't been connected to Vapi yet
+    if (!vapiInfo || !vapiInfo.vapiPhoneNumId) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+          <XCircle size={12} className="mr-1" />
+          Not Configured
+        </span>
+      );
+    }
+
+    // If we have vapiPhoneNumId but no status yet, still checking
+    if (!vapiInfo.status) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+          <Loader2 size={12} className="mr-1 animate-spin" />
+          Checking...
+        </span>
+      );
+    }
+
+    const isActive = vapiInfo.status === "active";
+
+    return (
+      <span
+        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+          isActive
+            ? "bg-green-100 text-green-800"
+            : "bg-red-100 text-red-800"
+        }`}
+      >
+        {isActive ? (
+          <>
+            <CheckCircle size={12} className="mr-1" />
+            Connected
+          </>
+        ) : (
+          <>
+            <XCircle size={12} className="mr-1" />
+            Not Connected
+          </>
+        )}
+      </span>
+    );
   };
 
   const handleOpenActionMenu = (e, numberItem) => {
@@ -150,9 +240,9 @@ const Numbers = () => {
     // Create account object with proper structure for the menu
     const accountData = {
       id: details.sid,
-      companyId: subaccountId, // Use the subaccount ID from URL params
+      companyId: subaccountId,
       name: details.friendlyName || "Unknown Number",
-      email: "", // Numbers don't have emails
+      email: "",
       phoneNumber: details.phoneNumber,
       assistantId: numberItem.assistantId,
       assistantName: numberItem.assistantName,
@@ -171,7 +261,6 @@ const Numbers = () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-end items-center mb-6">
           <div className="flex items-center space-x-3">
-            {/* Import Number Button */}
             <button
               onClick={() => setIsImportModalOpen(true)}
               className="px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors flex items-center"
@@ -318,13 +407,18 @@ const Numbers = () => {
                         {item.assistantName || "N/A"}
                       </td>
 
-                      {/* ACTIONS - fixed width, center vertically & horizontally */}
+                      {/* NEW: Vapi Status */}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {renderVapiStatus(details.sid)}
+                      </td>
+
+                      {/* ACTIONS */}
                       <td className="p-3 align-middle w-40">
                         <div className="flex items-center justify-center gap-3">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleOpenActionMenu(e, item); 
+                              handleOpenActionMenu(e, item);
                             }}
                             ref={
                               openMenuAccountId === details.sid

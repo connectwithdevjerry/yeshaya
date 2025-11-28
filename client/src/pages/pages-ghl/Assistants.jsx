@@ -18,6 +18,7 @@ import CreateFolderModal from "../../components/components-ghl/Assistants/Create
 import CreateAssistantModal from "../../components/components-ghl/Assistants/CreateAssistantModal";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useCurrentAccount } from "../../hooks/useCurrentAccount";
+import { importSubAccounts } from "../../store/slices/integrationSlice";
 
 const Assistants = () => {
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -33,26 +34,8 @@ const Assistants = () => {
   // ✅ Get subaccountId from URL or current account
   const subaccountId = searchParams.get("subaccount") || account?.subaccount;
 
-  const hasAlerted = React.useRef(false);
 
-  useEffect(() => {
-    if (hasAlerted.current) return;
-
-    const agencyid = searchParams.get("agencyid");
-    const subaccount = searchParams.get("subaccount");
-    const myemail = searchParams.get("myemail");
-    const myname = searchParams.get("myname");
-
-    if (agencyid || subaccount || myemail || myname) {
-      alert(
-        `Agency ID: ${agencyid}\n` +
-          `Subaccount: ${subaccount}\n` +
-          `My Email: ${myemail}\n` +
-          `My Name: ${myname}`
-      );
-      hasAlerted.current = true;
-    }
-  }, [searchParams]);
+  
 
   const {
     data: assistants,
@@ -68,6 +51,11 @@ const Assistants = () => {
       console.warn("⚠️ No subaccountId found");
     }
   }, [dispatch, subaccountId]);
+
+  // useEffect(() => {
+  //   dispatch(importSubAccounts(subaccountId));
+  //   console.log("📍 Importing subaccounts for:", subaccountId);
+  // }, [dispatch, subaccountId]);
 
   // ✅ Handle assistant click with account context
   const handleAssistantClick = (assistant) => {

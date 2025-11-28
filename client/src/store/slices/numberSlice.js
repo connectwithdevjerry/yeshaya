@@ -116,16 +116,56 @@ export const vapiConnect = createAsyncThunk(
   }
 );
 
+// 🚀 NEW: Async thunk to check Vapi connection status
+export const getVapiConnectionStatus = createAsyncThunk(
+  "numbers/getVapiConnectionStatus",
+  async (
+    { phoneNum, subaccountId, assistantId, phoneSid, number },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await apiClient.post(
+        `/integrations/vapi-number-import-status?phoneNum=${phoneNum}`,
+        {
+          subaccountId: subaccountId,
+          assistantId: assistantId,
+          phoneSid: phoneSid,
+          twilioNumber: number,
+        }
+      );
+
+      console.log("📡 Vapi Status Response:", response.data);
+
+      if (response.data?.status) {
+        return {
+          phoneSid,
+          vapiStatus: response.data.data
+        };
+      } else {
+        return rejectWithValue(
+          response.data.message || "Failed to get Vapi status"
+        );
+      }
+    } catch (error) {
+      console.error("❌ Vapi Status Error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || error.message || "Network error"
+      );
+    }
+  }
+);
 
 const numberSlice = createSlice({
   name: "numbers",
   initialState: {
     data: [],
     purchasedNumbers: [],
+    vapiStatuses: {}, // NEW: Store Vapi connection statuses by phoneSid
     loading: false,
     loadingPurchased: false,
     buyingNumber: false,
     connectingVapi: false,
+    checkingVapiStatus: false,
     error: null,
     purchasedError: null,
     buyError: null,
@@ -145,6 +185,14 @@ const numberSlice = createSlice({
     },
     clearVapiError: (state) => {
       state.vapiError = null;
+    },
+    // NEW: Store Vapi phone number ID mapping
+    setVapiPhoneNumberId: (state, action) => {
+      const { phoneSid, vapiPhoneNumId } = action.payload;
+      if (!state.vapiStatuses[phoneSid]) {
+        state.vapiStatuses[phoneSid] = {};
+      }
+      state.vapiStatuses[phoneSid].vapiPhoneNumId = vapiPhoneNumId;
     },
   },
   extraReducers: (builder) => {
@@ -198,15 +246,40 @@ const numberSlice = createSlice({
       })
       .addCase(vapiConnect.fulfilled, (state, action) => {
         state.connectingVapi = false;
-        // Optionally update the number's status in purchasedNumbers
         console.log("✅ Vapi connection successful:", action.payload);
+        
+        // Store the vapiPhoneNumId if returned
+        if (action.payload?.newPhoneNumberId && action.payload?.incomingPhoneNumber?.sid) {
+          const phoneSid = action.payload.incomingPhoneNumber.sid;
+          const vapiPhoneNumId = action.payload.newPhoneNumberId;
+          
+          if (!state.vapiStatuses[phoneSid]) {
+            state.vapiStatuses[phoneSid] = {};
+          }
+          state.vapiStatuses[phoneSid].vapiPhoneNumId = vapiPhoneNumId;
+          state.vapiStatuses[phoneSid].status = 'active'; // Assume active after successful connection
+        }
       })
       .addCase(vapiConnect.rejected, (state, action) => {
         state.connectingVapi = false;
         state.vapiError = action.payload;
+      })
+      
+      // NEW: Check Vapi Connection Status
+      .addCase(getVapiConnectionStatus.pending, (state) => {
+        state.checkingVapiStatus = true;
+      })
+      .addCase(getVapiConnectionStatus.fulfilled, (state, action) => {
+        state.checkingVapiStatus = false;
+        const { phoneSid, vapiStatus } = action.payload;
+        state.vapiStatuses[phoneSid] = vapiStatus;
+      })
+      .addCase(getVapiConnectionStatus.rejected, (state, action) => {
+        state.checkingVapiStatus = false;
+        console.error("Failed to check Vapi status:", action.payload);
       });
   },
 });
 
-export const { clearNumbers, clearPurchasedNumbers, clearBuyError, clearVapiError } = numberSlice.actions;
+export const { clearNumbers, clearPurchasedNumbers, clearBuyError, clearVapiError, setVapiPhoneNumberId } = numberSlice.actions;
 export default numberSlice.reducer;
