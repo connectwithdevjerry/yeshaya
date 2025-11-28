@@ -1009,21 +1009,33 @@ const twilioCallReceiver = async (req, res) => {
 
     console.log(`Incoming call detected from: ${callerNumber}`);
 
+    console.log(userId, subaccount, assistant);
+
     const user = await userModel.findById(userId);
+
+    console.log({ user });
 
     const targetSubaccount = user.ghlSubAccountIds.filter(
       (account) => account.accountId === subaccount
     );
 
+    console.log({ targetSubaccount });
+
     const targetAssistant = targetSubaccount[0].vapiAssistants.filter(
       (vapiAssistant) => vapiAssistant.assistantId === assistant
     );
+
+    console.log({ targetAssistant });
 
     const targetPhoneNumber = targetAssistant.numberDetails.filter(
       (number) => number.phoneNum === receiverNumber
     );
 
+    console.log({ targetPhoneNumber });
+
     const VAPI_PHONE_NUMBER_ID = targetPhoneNumber.vapiPhoneNumId;
+
+    console.log({ VAPI_PHONE_NUMBER_ID });
 
     // Call the Vapi API to start the AI conversation
     const vapiResponse = await axios.post(
