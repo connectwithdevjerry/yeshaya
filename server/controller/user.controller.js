@@ -15,6 +15,7 @@ const {
 } = require("../validation_schema");
 const { REFRESH_TOKEN } = require("../constants");
 const client = require("../jwt_db_access");
+const { default: axios } = require("axios");
 
 const myPayload = (user) => ({
   firstName: user.firstName,
@@ -371,6 +372,140 @@ const updateCompanyDetails = async (req, res, next) => {
   }
 };
 
+const getGhlTokens = async (userId) => {
+  const user = await userModel.findById(userId);
+  const refreshToken = user.ghlRefreshToken;
+
+  try {
+    const url = "https://services.leadconnectorhq.com/oauth/token";
+
+    // process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+    const response = await axios.post(
+      url,
+      {
+        client_id: process.env.GHL_APP_CLIENT_ID,
+        client_secret: process.env.GHL_APP_CLIENT_SECRET,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      },
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        // httpsAgent, // attach secure agent
+        timeout: 10000, // optional safety timeout
+      }
+    );
+
+    user.ghlRefreshToken = response.data.refresh_token;
+    user.ghlRefreshTokenExpiry = new Date(
+      Date.now() + response.data.expires_in * 1000
+    );
+    await user.save();
+
+    return { status: true, data: response.data };
+  } catch (error) {
+    console.error(
+      "Error refreshing GHL Access Token:",
+      error.response?.data || error.message
+    );
+    return {
+      status: false,
+      message: `Error refreshing GHL Access Token:${
+        error.response?.data || error.message
+      }`,
+    };
+  }
+};
+
+const getGhlCompanyDetails = async (req, res, next) => {
+  console.log("Getting company details...");
+  try {
+    const user = await userModel.findById(req.user);
+    const agencyId = user.ghlAgencyId;
+    const tokenResponse = await getGhlTokens(req.user);
+
+    console.log({
+      access_token: tokenResponse?.data?.access_token,
+      tokenResponse,
+    });
+
+    let config = {
+      method: "get",
+      maxBodyLength: Infinity,
+      url: `https://services.leadconnectorhq.com/companies/${agencyId}`,
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${tokenResponse.data.access_token}`,
+      },
+    };
+
+    const response = await axios.request(config);
+
+    console.log({ compD: response.data });
+
+    return res.send({
+      status: true,
+      data: response.data,
+    });
+  } catch (error) {
+    console.log("Error getting company details:", error.data);
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
+const createCompanyDetails = async (req, res, next) => {
+  console.log("Creating company...");
+
+  const { name, phoneNum, address, website, industry } = req.body;
+
+  try {
+    const user = await userModel.findById(req.user);
+    const company = user.company;
+    company.name = name;
+    company.phoneNum = phoneNum;
+    company.address = address;
+    company.website = website;
+    company.industry = industry;
+    await user.save();
+
+    return res.send({
+      status: true,
+      data: company,
+    });
+  } catch (error) {
+    console.log("Error creating company:", error.data);
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
+const getCompanyDetails = async (req, res, next) => {
+  console.log("Getting company details...");
+  try {
+    const user = await userModel.findById(req.user);
+
+    company = user.company;
+
+    return res.send({
+      status: true,
+      data: { ...company.toObject(), agencyId: user.ghlAgencyId },
+    });
+  } catch (error) {
+    console.log("Error getting company details:", error.data);
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   signup,
   signin,
@@ -379,4 +514,7 @@ module.exports = {
   logout,
   activateUser,
   exchangeToken,
+  getCompanyDetails,
+  createCompanyDetails,
+  updateCompanyDetails,
 };

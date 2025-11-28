@@ -1303,6 +1303,26 @@ const getPurchasedNumbers = async (req, res) => {
   }
 };
 
+const getVapiNumberImportStatus = async (req, res) => {
+  try {
+    const { vapiPhoneNumId } = req.query;
+    const VAPI_IMPORT_STATUS_URL = `https://api.vapi.ai/phone-number/${vapiPhoneNumId}`;
+
+    const response = await axios.get(VAPI_IMPORT_STATUS_URL, {
+      headers: {
+        Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
+        // "Content-Type": "application/json",
+      },
+    });
+    console.log({ response: response.data });
+
+    // The response data contains the newly created phone number object
+    return res.send({ status: true, data: response.data });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
 module.exports = {
   ghlAuthorize,
   ghlOauthCallback,
@@ -1323,4 +1343,5 @@ module.exports = {
   twilioSmsReceiver,
   importTwilioNumberToVapi,
   getPurchasedNumbers,
+  getVapiNumberImportStatus,
 };

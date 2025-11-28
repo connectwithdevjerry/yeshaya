@@ -19,6 +19,7 @@ const {
   twilioSmsReceiver,
   importTwilioNumberToVapi,
   getPurchasedNumbers,
+  getVapiNumberImportStatus,
   // admin_super_signup,
 } = require("../controller/integrations.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
@@ -42,6 +43,7 @@ const {
   TWILIO_SMS_RECEIVER,
   IMPORT_PHONE_NUM_TO_VAPI,
   GET_PURCHASED_NUMBER,
+  GET_VAPI_NUMBER_IMPORT_STATUS,
 } = require("../constants");
 
 router.get(GHL_AUTHORIZE, verifyAccessToken, ghlAuthorize);
@@ -65,6 +67,7 @@ router.post(
   verifyAccessToken,
   importTwilioNumberToVapi
 );
+router.get(GET_VAPI_NUMBER_IMPORT_STATUS, verifyAccessToken, getVapiNumberImportStatus);
 router.get(GET_PURCHASED_NUMBER, verifyAccessToken, getPurchasedNumbers);
 
 module.exports = router;

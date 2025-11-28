@@ -8,7 +8,7 @@ const { verifyAccessToken } = require("./jwt_helpers");
 require("dotenv").config();
 
 const app = express();
-const PORT = 6000;
+const PORT = 60001;
 
 const corsOptions = {
   origin: true, // Accepts all origins

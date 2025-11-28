@@ -32,6 +32,9 @@ const TWILIO_CALL_RECEIVER = "/voiceurl/:userId/:subaccount/:assistant";
 const TWILIO_SMS_RECEIVER = "/smsurl/:userId/:subaccount/:assistant";
 const IMPORT_PHONE_NUM_TO_VAPI = "/import-number-to-vapi";
 const GET_PURCHASED_NUMBER = "/purchased-numbers";
+const GET_COMPANY_DETAILS = "/company-details";
+const REGISTER_COMPANY = "/register-company";
+const GET_VAPI_NUMBER_IMPORT_STATUS = "/vapi-number-import-status";
 
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
@@ -59,6 +62,7 @@ module.exports = {
   IMPORT_GHL_SUB_ACCOUNT,
   CREATE_ASSISTANT,
   DELETE_ASSISTANT,
+  GET_VAPI_NUMBER_IMPORT_STATUS,
   GET_ASSISTANT,
   GET_ASSISTANTS,
   UPDATE_ASSISTANT,
@@ -71,4 +75,6 @@ module.exports = {
   TWILIO_SMS_RECEIVER,
   IMPORT_PHONE_NUM_TO_VAPI,
   GET_PURCHASED_NUMBER,
+  GET_COMPANY_DETAILS,
+  REGISTER_COMPANY,
 };
