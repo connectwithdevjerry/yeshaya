@@ -1025,13 +1025,19 @@ const twilioCallReceiver = async (req, res) => {
       (vapiAssistant) => vapiAssistant.assistantId === assistant
     );
 
-    console.log({ targetAssistant });
+    console.log({
+      targetAssistant,
+      numberDetails: targetAssistant.numberDetails,
+      receiverNumber,
+    });
 
     const targetPhoneNumber = targetAssistant.numberDetails.filter(
       (number) => number.phoneNum === receiverNumber
     );
 
-    console.log({ targetPhoneNumber });
+    console.log({
+      targetPhoneNumber,
+    });
 
     const VAPI_PHONE_NUMBER_ID = targetPhoneNumber.vapiPhoneNumId;
 
