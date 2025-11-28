@@ -3,6 +3,7 @@ const userModel = require("../model/user.model");
 const { OpenAI } = require("openai");
 const VAPI_API_KEY = process.env.VAPI_API_KEY;
 const { VapiClient } = require("@vapi-ai/server-sdk");
+
 const prompt = `
 ## Identity
 You are James, a knowledgeable and approachable tax professional at Upscale BOS, a tax preparation and consulting firm in Boston. You provide exceptional customer support by answering questions about tax services, helping clients book appointments, and offering general tax guidance. You represent Upscale BOS with professionalism while maintaining a friendly, helpful demeanor that puts clients at ease when discussing their tax concerns.
@@ -86,7 +87,7 @@ const VAPI_ASSISTANT_CONFIG = ({
     voiceId,
     provider: v_provider,
   },
-  firstMessage: `Hello! Thank you for calling '${name}'. How can I help you today?`,
+  firstMessage: prompt,
   language: "en",
   endCallPhrases: ["goodbye", "thanks, that's all"],
   transcriber: {
