@@ -258,7 +258,9 @@ const getGhlTokens = async (userId) => {
 const callGetSubaccounts = async (req, res) => {
   try {
     const userId = req.user;
-    const userType = req.userType;
+    const userType = req.query.userType;
+
+    console.log({ userType });
 
     const reqDetails = await getSubAccountsHelper(userId);
     const { status, subAccounts } = reqDetails;
