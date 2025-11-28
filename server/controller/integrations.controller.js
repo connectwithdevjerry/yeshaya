@@ -1042,7 +1042,7 @@ const twilioCallReceiver = async (req, res) => {
       },
       {
         headers: {
-          Authorization: `Bearer ${VAPI_PRIVATE_API_KEY}`,
+          Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
           "Content-Type": "application/json",
         },
       }
