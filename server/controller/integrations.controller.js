@@ -1068,7 +1068,7 @@ const twilioCallReceiver = async (req, res) => {
 
 const twilioSmsReceiver = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId, subaccount, assistant } = req.params;
 
     // Twilio sends caller's number in req.body.From
     const callerNumber = req.body.From;
@@ -1161,6 +1161,7 @@ const importTwilioNumberToVapi = async (req, res) => {
         twilioAccountSid: ACCOUNT_SID,
         twilioAuthToken: ACCOUNT_AUTH_TOKEN,
         assistantId: assistantId,
+        smsEnabled: true,
         // The API may also accept twilioApiKey and twilioApiSecret for some users
       },
       {
@@ -1186,7 +1187,7 @@ const importTwilioNumberToVapi = async (req, res) => {
       .incomingPhoneNumbers(phoneSid)
       .update({
         voiceUrl: `${process.env.SERVER_URL}/integrations/voiceurl/${userId}/${subaccountId}/${assistantId}`,
-        smsUrl: `${process.env.SERVER_URL}/integrations/smsurl/${userId}/${subaccountId}/${assistantId}`,
+        // smsUrl: `${process.env.SERVER_URL}/integrations/smsurl/${userId}/${subaccountId}/${assistantId}`, //no longer needed since vapi will handle it automatically
       });
 
     // save the id
