@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useDispatch } from "react-redux";
-import { vapiConnect } from "../../../store/slices/numberSlice";
+import { vapiConnect, getVapiConnectionStatus } from "../../../store/slices/numberSlice";
 
 const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false, disabled = false, loading = false }) => {
   if (isSeparator) return <li className="my-1 border-t border-gray-200" />;
@@ -113,8 +113,29 @@ const NumbersActionsMenu = ({
         ).unwrap();
 
         console.log("✅ Successfully connected to Vapi:", result);
-        alert("Successfully connected to Vapi!");
         
+        // After successful connection, check the status with the new vapiPhoneNumId
+        if (result.newPhoneNumberId) {
+          console.log("🔄 Checking Vapi connection status with ID:", result.newPhoneNumberId);
+          
+          try {
+            await dispatch(
+              getVapiConnectionStatus({
+                vapiPhoneNumId: result.newPhoneNumberId,
+                subaccountId: account.companyId,
+                assistantId: account.assistantId,
+                phoneSid: account.id,
+                number: account.phoneNumber,
+              })
+            ).unwrap();
+            
+            console.log("✅ Status check completed");
+          } catch (statusError) {
+            console.warn("⚠️ Status check failed (but connection succeeded):", statusError);
+          }
+        }
+        
+        alert("Successfully connected to Vapi!");
         onClose();
       } catch (error) {
         console.error("❌ Failed to connect to Vapi:", error);

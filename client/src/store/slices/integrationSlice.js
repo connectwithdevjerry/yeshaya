@@ -101,17 +101,65 @@ export const fetchSubAccounts = createAsyncThunk(
         `/integrations/get-subaccounts?userType=${userType}`
       );
 
-      const locations = response.data?.data || [];
-      const agencyId = response.data?.agencyId || null;
+      // safe extraction: response.data.data.locations is where the array lives
+      const locations = response.data?.data?.locations || [];
+      // agencyId might live in response.data.data or response.data - be tolerant
+      const agencyId =
+        response.data?.data?.agencyId || response.data?.agencyId || null;
+
+      console.log(
+        "🟢 Fetched Subaccounts (locations length):",
+        locations.length
+      );
       return { locations, agencyId };
     } catch (error) {
-      console.error("🔴 Failed to fetch subaccounts:", error);
+      console.error(
+        "🔴 Failed to fetch subaccounts:",
+        error.response?.data || error.message
+      );
       return rejectWithValue(error.response?.data || error.message);
     }
   }
 );
 
-//import new Subaccounts
+//Fetch imported subaccounts
+export const fetchImportedSubAccounts = createAsyncThunk(
+  "integrations/fetchImportedSubAccounts",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/integrations/get-subaccounts");
+
+      const locations = response.data?.data || [];
+      const agencyId = response.data?.agencyId || null;
+      console.log("🟢Subaccounts", response.data);
+      return { locations, agencyId };
+    } catch (error) {
+      console.error(
+        "🔴 Failed to fetch subaccounts:",
+        error.response?.data || error.message
+      );
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+// Thunk to import sub-accounts
+export const importSubAccounts = createAsyncThunk(
+  "importSubAccounts/import",
+  async (accountIds, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post(
+        "/integrations/import-sub-accounts",
+        { accountIds }
+      );
+
+      console.log("🟢 Import Sub-accounts Response:", response.data);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
 
 // 🔹 Slice
 const integrationSlice = createSlice({
@@ -245,6 +293,38 @@ const integrationSlice = createSlice({
         state.agencyId = action.payload.agencyId || null;
       })
       .addCase(fetchSubAccounts.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || action.error;
+      });
+
+    // Fetch Imported SubAccounts
+    builder
+      .addCase(fetchImportedSubAccounts.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchImportedSubAccounts.fulfilled, (state, action) => {
+        state.loading = false;
+        state.subAccounts = action.payload.locations || [];
+        state.agencyId = action.payload.agencyId || null;
+      })
+      .addCase(fetchImportedSubAccounts.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || action.error;
+      });
+
+    // Import SubAccounts
+    builder
+      .addCase(importSubAccounts.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(importSubAccounts.fulfilled, (state, action) => {
+        state.loading = false;
+        state.subAccounts = action.payload?.locations || state.subAccounts;
+        state.agencyId = action.payload?.agencyId || state.agencyId;
+      })
+      .addCase(importSubAccounts.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload || action.error;
       });
