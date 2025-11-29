@@ -106,7 +106,7 @@ const Numbers = () => {
             try {
               await dispatch(
                 getVapiConnectionStatus({
-                  vapiPhoneNumId: vapiPhoneNumId, // Use stored Vapi phone number ID
+                  phoneNum: details.phoneNumber, // Use stored Vapi phone number ID
                   subaccountId: subaccountId,
                   assistantId: numberItem.assistantId,
                   phoneSid: details.sid,

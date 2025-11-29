@@ -264,7 +264,7 @@ const integrationSlice = createSlice({
 
         if (openai) {
           state.openAI.connected = !!openai.status;
-          state.openAI.message = openai.message;
+          state.openAI.message = openai.message || null;
         }
 
         if (ghl) {

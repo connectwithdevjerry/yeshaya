@@ -19,6 +19,7 @@ const copyTextToClipboard = (text) => {
   try {
     // This is the core method that puts the text into the clipboard
     successful = document.execCommand("copy");
+    alert("Copied to clipboard!");
   } catch (err) {
     // Handle failure if the command is disallowed
     successful = false;

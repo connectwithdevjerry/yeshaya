@@ -99,7 +99,7 @@ const IntegrationsContent = () => {
         name="OpenAI"
         image_url="https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg"
         description="Connect OpenAI to use our assistant / agent framework using your own keys"
-        isConnected={openAI?.status}
+        isConnected={openAI?.message === "API Key is valid."}
         loading={openAI?.loading}
         onClick={() => !openAI?.connected && setIsOpenAIConnectOpen(true)}
       />

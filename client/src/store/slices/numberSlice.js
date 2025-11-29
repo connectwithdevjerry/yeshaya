@@ -124,6 +124,8 @@ export const getVapiConnectionStatus = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
+
+      console.log("📤 Checking Vapi status for phoneNum:", phoneNum, subaccountId, assistantId ,phoneSid, number)  ;
       const response = await apiClient.post(
         `/integrations/vapi-number-import-status?phoneNum=${phoneNum}`,
         {
