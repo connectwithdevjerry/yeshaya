@@ -1019,11 +1019,13 @@ const twilioCallReceiver = async (req, res) => {
       (vapiAssistant) => vapiAssistant.assistantId === assistant
     );
 
-    const targetPhoneNumber = targetAssistant.numberDetails.filter(
+    const targetPhoneNumber = targetAssistant[0].numberDetails.filter(
       (number) => number.phoneNum === receiverNumber
     );
 
-    const VAPI_PHONE_NUMBER_ID = targetPhoneNumber.vapiPhoneNumId;
+    const VAPI_PHONE_NUMBER_ID = targetPhoneNumber[0].vapiPhoneNumId;
+
+    console.log({ VAPI_PHONE_NUMBER_ID });
 
     // Call the Vapi API to start the AI conversation
     const vapiResponse = await axios.post(
@@ -1040,7 +1042,7 @@ const twilioCallReceiver = async (req, res) => {
       },
       {
         headers: {
-          Authorization: `Bearer ${VAPI_PRIVATE_API_KEY}`,
+          Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
           "Content-Type": "application/json",
         },
       }
@@ -1066,7 +1068,7 @@ const twilioCallReceiver = async (req, res) => {
 
 const twilioSmsReceiver = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId, subaccount, assistant } = req.params;
 
     // Twilio sends caller's number in req.body.From
     const callerNumber = req.body.From;
@@ -1159,6 +1161,7 @@ const importTwilioNumberToVapi = async (req, res) => {
         twilioAccountSid: ACCOUNT_SID,
         twilioAuthToken: ACCOUNT_AUTH_TOKEN,
         assistantId: assistantId,
+        smsEnabled: true,
         // The API may also accept twilioApiKey and twilioApiSecret for some users
       },
       {
@@ -1184,7 +1187,7 @@ const importTwilioNumberToVapi = async (req, res) => {
       .incomingPhoneNumbers(phoneSid)
       .update({
         voiceUrl: `${process.env.SERVER_URL}/integrations/voiceurl/${userId}/${subaccountId}/${assistantId}`,
-        smsUrl: `${process.env.SERVER_URL}/integrations/smsurl/${userId}/${subaccountId}/${assistantId}`,
+        // smsUrl: `${process.env.SERVER_URL}/integrations/smsurl/${userId}/${subaccountId}/${assistantId}`, //no longer needed since vapi will handle it automatically
       });
 
     // save the id
