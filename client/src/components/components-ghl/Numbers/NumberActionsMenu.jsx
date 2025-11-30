@@ -11,12 +11,13 @@ import {
   Link,
   Zap,
   Loader2,
+  XCircle,
 } from "lucide-react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { useDispatch } from "react-redux";
-import { vapiConnect, getVapiConnectionStatus } from "../../../store/slices/numberSlice";
+import { useDispatch, useSelector } from "react-redux";
+import { vapiConnect, deleteNumberFromVapi } from "../../../store/slices/numberSlice";
 
-const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false, disabled = false, loading = false }) => {
+const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false, disabled = false, loading = false, variant = "default" }) => {
   if (isSeparator) return <li className="my-1 border-t border-gray-200" />;
 
   return (
@@ -29,12 +30,16 @@ const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false, disabled = f
           onClick?.(e);
         }}
         disabled={disabled || loading}
-        className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className={`flex items-center w-full px-4 py-2 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+          variant === "danger" 
+            ? "text-red-700 hover:bg-red-50" 
+            : "text-gray-700 hover:bg-gray-100"
+        }`}
       >
         {loading ? (
           <Loader2 size={18} className="text-gray-500 mr-3 animate-spin" />
         ) : (
-          <Icon size={18} className="text-gray-500 mr-3" />
+          <Icon size={18} className={variant === "danger" ? "text-red-500 mr-3" : "text-gray-500 mr-3"} />
         )}
         {text}
       </button>
@@ -56,6 +61,12 @@ const NumbersActionsMenu = ({
   const dispatch = useDispatch();
   
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+  // Get Vapi connection status from Redux
+  const { vapiStatuses } = useSelector((state) => state.numbers);
+  const vapiInfo = vapiStatuses[account?.id]; // account.id is the phoneSid
+  const isConnectedToVapi = vapiInfo?.status === "active";
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -114,27 +125,6 @@ const NumbersActionsMenu = ({
 
         console.log("✅ Successfully connected to Vapi:", result);
         
-        // After successful connection, check the status with the new vapiPhoneNumId
-        if (result.newPhoneNumberId) {
-          console.log("🔄 Checking Vapi connection status with ID:", result.newPhoneNumberId);
-          
-          try {
-            await dispatch(
-              getVapiConnectionStatus({
-                vapiPhoneNumId: result.newPhoneNumberId,
-                subaccountId: account.companyId,
-                assistantId: account.assistantId,
-                phoneSid: account.id,
-                number: account.phoneNumber,
-              })
-            ).unwrap();
-            
-            console.log("✅ Status check completed");
-          } catch (statusError) {
-            console.warn("⚠️ Status check failed (but connection succeeded):", statusError);
-          }
-        }
-        
         alert("Successfully connected to Vapi!");
         onClose();
       } catch (error) {
@@ -149,6 +139,51 @@ const NumbersActionsMenu = ({
         alert(`Failed to connect to Vapi: ${errorMessage}`);
       } finally {
         setIsConnecting(false);
+      }
+      return;
+    }
+
+    if (action === "DisconnectVapi") {
+      try {
+        const confirmDisconnect = window.confirm(
+          `Are you sure you want to disconnect ${account.phoneNumber} from Vapi?`
+        );
+
+        if (!confirmDisconnect) return;
+
+        setIsDisconnecting(true);
+
+        if (!vapiInfo || !vapiInfo.vapiPhoneNumId) {
+          alert("No Vapi connection found for this number");
+          setIsDisconnecting(false);
+          return;
+        }
+
+        console.log("🚀 Attempting to disconnect from Vapi with:", {
+          phoneNum: account.phoneNumber,
+          phoneSid: account.id,
+        });
+
+        await dispatch(
+          deleteNumberFromVapi({
+            phoneNum: account.phoneNumber,
+            phoneSid: account.id,
+          })
+        ).unwrap();
+
+        console.log("✅ Successfully disconnected from Vapi");
+        alert("Successfully disconnected from Vapi!");
+        onClose();
+      } catch (error) {
+        console.error("❌ Failed to disconnect from Vapi:", error);
+        
+        const errorMessage = typeof error === 'string' 
+          ? error 
+          : error?.message || error?.error || "Unknown error occurred";
+        
+        alert(`Failed to disconnect from Vapi: ${errorMessage}`);
+      } finally {
+        setIsDisconnecting(false);
       }
       return;
     }
@@ -214,13 +249,27 @@ const NumbersActionsMenu = ({
     >
       <ul className="divide-y divide-gray-100">
         <MenuItem icon={Star} text="Rename" onClick={onClose} />
-        <MenuItem
-          icon={ExternalLink}
-          text="Connect to Vapi"
-          onClick={() => handleAction("ConnectVapi")}
-          loading={isConnecting}
-          disabled={isConnecting}
-        />
+        
+        {/* Conditionally show Connect or Disconnect based on Vapi status */}
+        {isConnectedToVapi ? (
+          <MenuItem 
+            icon={XCircle} 
+            text="Disconnect from Vapi"
+            onClick={() => handleAction("DisconnectVapi")}
+            loading={isDisconnecting}
+            disabled={isDisconnecting}
+            variant="danger"
+          />
+        ) : (
+          <MenuItem
+            icon={ExternalLink}
+            text="Connect to Vapi"
+            onClick={() => handleAction("ConnectVapi")}
+            loading={isConnecting}
+            disabled={isConnecting}
+          />
+        )}
+        
         <MenuItem icon={Pencil} text="Edit account" onClick={onClose} />
         <MenuItem icon={Scale} text="Manage limits" onClick={onClose} />
         <MenuItem icon={Eye} text="Edit permissions" onClick={onClose} />
@@ -230,6 +279,11 @@ const NumbersActionsMenu = ({
           {account.name || "Unnamed Account"}
         </p>
         <p>Last edited: 11/05/25</p>
+        {isConnectedToVapi && (
+          <p className="text-green-600 font-medium mt-1">
+            ✓ Connected to Vapi
+          </p>
+        )}
       </div>
     </div>
   );

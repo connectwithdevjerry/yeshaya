@@ -107,7 +107,10 @@ export const vapiConnect = createAsyncThunk(
       console.log("✅ vapiConnection response.data:", response.data);
 
       if (response.data && response.data.status) {
-        return response.data.data || response.data;
+        return {
+          ...(response.data.data || response.data),
+          phoneSid, // Include phoneSid for state update
+        };
       } else {
         const errorMsg = response.data?.message || "Failed to Connect to vapi";
         console.error("❌ API returned error:", errorMsg);
@@ -137,38 +140,71 @@ export const getVapiConnectionStatus = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      console.log(
-        "📤 Checking Vapi status for phoneNum:",
+      console.log("📤 Checking Vapi status for:", {
         phoneNum,
         subaccountId,
         assistantId,
         phoneSid,
-        number
-      );
-      const response = await apiClient.post(
-        `/integrations/vapi-number-import-status?phoneNum=${phoneNum}`,
+        twilioNumber: number,
+      });
+
+      // ✅ GET request with query parameters
+      const response = await apiClient.get(
+        `/integrations/vapi-number-import-status`,
         {
-          subaccountId: subaccountId,
-          assistantId: assistantId,
-          phoneSid: phoneSid,
-          twilioNumber: number,
+          params: {
+            phoneNum: number, // Use the Twilio phone number
+            subaccountId: subaccountId,
+            assistantId: assistantId,
+            phoneSid: phoneSid,
+            twilioNumber: number,
+          },
         }
       );
 
       console.log("📡 Vapi Status Response:", response.data);
+      console.log("📡 Outer status (isConnected):", response.data?.status);
+      console.log(
+        "📡 Inner data.status (Vapi number status):",
+        response.data?.data?.status
+      );
 
-      if (response.data?.status) {
+      // ✅ Use the OUTER status to determine if connected to Vapi
+      // status: true = number IS connected to Vapi
+      // status: false = number is NOT connected to Vapi
+      if (response.data?.status === true) {
+        console.log("✅ Number IS connected to Vapi");
+        // Number IS connected to Vapi
         return {
           phoneSid,
-          vapiStatus: response.data.data,
+          vapiStatus: {
+            ...response.data.data,
+            isConnected: true, // Flag based on outer status
+          },
         };
       } else {
-        return rejectWithValue(
-          response.data.message || "Failed to get Vapi status"
-        );
+        // Number is NOT connected to Vapi
+        console.log("❌ Number is NOT connected to Vapi (outer status: false)");
+        return {
+          phoneSid,
+          vapiStatus: null,
+        };
       }
     } catch (error) {
       console.error("❌ Vapi Status Error:", error);
+
+      // Don't reject on 404 or "not found" errors - just return null status
+      if (
+        error.response?.status === 404 ||
+        error.response?.data?.message?.includes("not found")
+      ) {
+        console.log("ℹ️ Number not connected to Vapi (404 - not found)");
+        return {
+          phoneSid,
+          vapiStatus: null,
+        };
+      }
+
       return rejectWithValue(
         error.response?.data?.message || error.message || "Network error"
       );
@@ -176,19 +212,27 @@ export const getVapiConnectionStatus = createAsyncThunk(
   }
 );
 
-// 🔹 Async thunk: delete number from VAPI
+// 🔹 Async thunk: delete number from VAPI (disconnect)
 export const deleteNumberFromVapi = createAsyncThunk(
-  "assistants/deleteNumberFromVapi",
-  async (phoneNum, { rejectWithValue }) => {
+  "numbers/deleteNumberFromVapi",
+  async ({ phoneNum, phoneSid }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get(
+      console.log("📤 Sending deleteNumberFromVapi request with:", {
+        phoneNum,
+        phoneSid,
+      });
+      const response = await apiClient.delete(
         `/assistants/delete-number-from-vapi`,
         {
           params: { phoneNum },
         }
       );
       console.log("✅ Delete Number Response:", response.data);
-      return response.data;
+      return {
+        ...response.data,
+        phoneNum,
+        phoneSid,
+      };
     } catch (error) {
       return rejectWithValue(error.response?.data || "Failed to delete number");
     }
@@ -206,13 +250,12 @@ const numberSlice = createSlice({
     buyingNumber: false,
     connectingVapi: false,
     checkingVapiStatus: false,
-    deletingNumber: false, // NEW: flag for deleting
-    deleteSuccess: false, // NEW: success flag
-    deleteError: null, // NEW: error for delete
+    disconnectingVapi: false,
     error: null,
     purchasedError: null,
     buyError: null,
     vapiError: null,
+    disconnectError: null,
   },
   reducers: {
     clearNumbers: (state) => {
@@ -229,19 +272,16 @@ const numberSlice = createSlice({
     clearVapiError: (state) => {
       state.vapiError = null;
     },
-    // NEW: Store Vapi phone number ID mapping
+    clearDisconnectError: (state) => {
+      state.disconnectError = null;
+    },
+    // Store Vapi phone number ID mapping
     setVapiPhoneNumberId: (state, action) => {
       const { phoneSid, vapiPhoneNumId } = action.payload;
       if (!state.vapiStatuses[phoneSid]) {
         state.vapiStatuses[phoneSid] = {};
       }
       state.vapiStatuses[phoneSid].vapiPhoneNumId = vapiPhoneNumId;
-    },
-    // NEW: reset delete flags
-    resetDeleteState: (state) => {
-      state.deletingNumber = false;
-      state.deleteSuccess = false;
-      state.deleteError = null;
     },
   },
   extraReducers: (builder) => {
@@ -295,19 +335,34 @@ const numberSlice = createSlice({
       })
       .addCase(vapiConnect.fulfilled, (state, action) => {
         state.connectingVapi = false;
-        // Store the vapiPhoneNumId if returned
-        if (
-          action.payload?.newPhoneNumberId &&
-          action.payload?.incomingPhoneNumber?.sid
-        ) {
-          const phoneSid = action.payload.incomingPhoneNumber.sid;
-          const vapiPhoneNumId = action.payload.newPhoneNumberId;
 
+        const phoneSid = action.payload?.phoneSid;
+        const vapiPhoneNumId =
+          action.payload?.newPhoneNumberId || action.payload?.id;
+
+        console.log("✅ vapiConnect fulfilled - phoneSid:", phoneSid);
+        console.log(
+          "✅ vapiConnect fulfilled - vapiPhoneNumId:",
+          vapiPhoneNumId
+        );
+
+        if (phoneSid && vapiPhoneNumId) {
           if (!state.vapiStatuses[phoneSid]) {
             state.vapiStatuses[phoneSid] = {};
           }
-          state.vapiStatuses[phoneSid].vapiPhoneNumId = vapiPhoneNumId;
-          state.vapiStatuses[phoneSid].status = "active"; // assume active after success
+          // Immediately set as active after successful connection
+          state.vapiStatuses[phoneSid] = {
+            vapiPhoneNumId: vapiPhoneNumId,
+            status: "active", // ✅ Set as active immediately
+            id: vapiPhoneNumId,
+            isConnected: true,
+            ...action.payload,
+          };
+          console.log(
+            "✅ Updated vapiStatuses for phoneSid:",
+            phoneSid,
+            state.vapiStatuses[phoneSid]
+          );
         }
       })
       .addCase(vapiConnect.rejected, (state, action) => {
@@ -322,57 +377,52 @@ const numberSlice = createSlice({
       .addCase(getVapiConnectionStatus.fulfilled, (state, action) => {
         state.checkingVapiStatus = false;
         const { phoneSid, vapiStatus } = action.payload;
-        state.vapiStatuses[phoneSid] = vapiStatus;
+
+        // If vapiStatus is null, number is not connected to Vapi
+        if (vapiStatus === null) {
+          if (state.vapiStatuses[phoneSid]) {
+            delete state.vapiStatuses[phoneSid];
+          }
+        } else {
+          // Normalize and force isConnected boolean
+          const normalized = {
+            ...vapiStatus,
+            vapiPhoneNumId: vapiStatus.id || vapiStatus.vapiPhoneNumId || null,
+            isConnected: vapiStatus.isConnected === true, // explicit boolean
+            status: vapiStatus.isConnected === true ? "active" : "inactive",
+          };
+
+          if (!state.vapiStatuses[phoneSid]) state.vapiStatuses[phoneSid] = {};
+          state.vapiStatuses[phoneSid] = {
+            ...state.vapiStatuses[phoneSid],
+            ...normalized,
+            checking: false,
+            lastUpdatedAt: new Date().toISOString(),
+          };
+        }
       })
       .addCase(getVapiConnectionStatus.rejected, (state, action) => {
         state.checkingVapiStatus = false;
         console.error("Failed to check Vapi status:", action.payload);
       })
 
-      // ---- NEW: deleteNumberFromVapi handlers ----
+      // Disconnect from Vapi (deleteNumberFromVapi)
       .addCase(deleteNumberFromVapi.pending, (state) => {
-        state.deletingNumber = true;
-        state.deleteSuccess = false;
-        state.deleteError = null;
+        state.disconnectingVapi = true;
+        state.disconnectError = null;
       })
       .addCase(deleteNumberFromVapi.fulfilled, (state, action) => {
-        state.deletingNumber = false;
-        state.deleteSuccess = true;
+        state.disconnectingVapi = false;
+        const { phoneSid } = action.payload;
 
-        const phoneNum = action.payload?.phoneNum;
-
-        // Remove matching purchasedNumbers (match by phone number string or shape)
-        if (phoneNum && state.purchasedNumbers?.length) {
-          state.purchasedNumbers = state.purchasedNumbers.filter((pn) => {
-            // adapt to your data shape: check common fields
-            if (!pn) return false;
-            const possibleNumberStrings = [
-              pn.phoneNumber, // common field
-              pn.number,
-              pn.phone,
-              pn.incomingPhoneNumber?.phone,
-            ].filter(Boolean);
-            return !possibleNumberStrings.some((n) => n === phoneNum);
-          });
+        // Reset the Vapi status for this number
+        if (phoneSid && state.vapiStatuses[phoneSid]) {
+          delete state.vapiStatuses[phoneSid];
         }
-
-        // Remove any vapiStatuses entries referencing the deleted phoneNum
-        // We try to clean by vapiPhoneNumId or incoming phone matching
-        Object.keys(state.vapiStatuses || {}).forEach((phoneSid) => {
-          const status = state.vapiStatuses[phoneSid];
-          const matchesPhone =
-            (status?.incomingPhoneNumber?.phone &&
-              status.incomingPhoneNumber.phone === phoneNum) ||
-            (status?.phone && status.phone === phoneNum);
-          if (matchesPhone) {
-            delete state.vapiStatuses[phoneSid];
-          }
-        });
       })
       .addCase(deleteNumberFromVapi.rejected, (state, action) => {
-        state.deletingNumber = false;
-        state.deleteSuccess = false;
-        state.deleteError = action.payload || action.error?.message;
+        state.disconnectingVapi = false;
+        state.disconnectError = action.payload || action.error?.message;
       });
   },
 });
@@ -382,8 +432,8 @@ export const {
   clearPurchasedNumbers,
   clearBuyError,
   clearVapiError,
+  clearDisconnectError,
   setVapiPhoneNumberId,
-  resetDeleteState,
 } = numberSlice.actions;
 
 export default numberSlice.reducer;

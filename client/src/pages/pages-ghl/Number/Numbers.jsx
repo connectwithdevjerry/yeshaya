@@ -19,9 +19,9 @@ import { useDispatch, useSelector } from "react-redux";
 import TabButton from "../../../components/components-ghl/TabButton";
 import ImportNumberModal from "../../../components/components-ghl/Numbers/ImportNumber";
 import BuyNumberModal from "../../../components/components-ghl/Numbers/BuyNumber";
-import { 
-  fetchPurchasedNumbers, 
-  getVapiConnectionStatus 
+import {
+  fetchPurchasedNumbers,
+  getVapiConnectionStatus,
 } from "../../../store/slices/numberSlice";
 import { fetchAssistants } from "../../../store/slices/assistantsSlice";
 import NumbersActionsMenu from "../../../components/components-ghl/Numbers/NumberActionsMenu";
@@ -78,7 +78,19 @@ const Numbers = () => {
             }))
           );
 
-          setAllPurchasedNumbers(combined);
+          // Remove duplicates based on phone number SID
+          const uniqueNumbers = combined.reduce((acc, current) => {
+            const exists = acc.find(
+              (item) =>
+                item.phoneNumberDetails?.sid === current.phoneNumberDetails?.sid
+            );
+            if (!exists) {
+              acc.push(current);
+            }
+            return acc;
+          }, []);
+
+          setAllPurchasedNumbers(uniqueNumbers);
         } catch (error) {
           console.error("Error fetching numbers:", error);
         } finally {
@@ -90,41 +102,57 @@ const Numbers = () => {
     fetchAllNumbers();
   }, [dispatch, subaccountId, assistants]);
 
-  // NEW: Check Vapi connection status for all numbers
+  // Check Vapi connection status for all numbers
   useEffect(() => {
     const checkVapiStatuses = async () => {
+      console.log("🔍 Checking Vapi statuses...");
+      console.log("📊 All Purchased Numbers:", allPurchasedNumbers.length);
+      console.log("📊 Subaccount ID:", subaccountId);
+      console.log("📊 Current vapiStatuses:", vapiStatuses);
+
       if (allPurchasedNumbers.length > 0 && subaccountId) {
         for (const numberItem of allPurchasedNumbers) {
           const details = numberItem.phoneNumberDetails;
-          
-          // Check if we have a stored vapiPhoneNumId for this number
-          const vapiStatus = vapiStatuses[details?.sid];
-          const vapiPhoneNumId = vapiStatus?.vapiPhoneNumId;
-          
-          // Only check status if we have a vapiPhoneNumId and haven't checked recently
-          if (details?.sid && vapiPhoneNumId && !vapiStatus?.status) {
-            try {
-              await dispatch(
-                getVapiConnectionStatus({
-                  phoneNum: details.phoneNumber, // Use stored Vapi phone number ID
-                  subaccountId: subaccountId,
-                  assistantId: numberItem.assistantId,
-                  phoneSid: details.sid,
-                  number: details.phoneNumber,
-                })
-              );
-            } catch (error) {
-              console.error(`Failed to check Vapi status for ${details.phoneNumber}:`, error);
-            }
+
+          if (!details?.sid || !details?.phoneNumber) {
+            console.log("⚠️ Skipping number with missing details");
+            continue;
+          }
+
+          console.log("🔍 Checking number:", details.phoneNumber);
+
+          try {
+            console.log(
+              `🚀 Fetching Vapi status for ${details.phoneNumber}...`
+            );
+
+            await dispatch(
+              getVapiConnectionStatus({
+                phoneNum: details.phoneNumber,
+                subaccountId: subaccountId,
+                assistantId: numberItem.assistantId,
+                phoneSid: details.sid,
+                number: details.phoneNumber,
+              })
+            );
+
+            console.log(`✅ Status check completed for ${details.phoneNumber}`);
+          } catch (error) {
+            console.error(
+              `❌ Failed to check Vapi status for ${details.phoneNumber}:`,
+              error
+            );
+            // Don't stop checking other numbers if one fails
           }
         }
       }
     };
 
-    checkVapiStatuses();
-  }, [allPurchasedNumbers, subaccountId, dispatch, vapiStatuses]);
+    if (allPurchasedNumbers.length > 0) {
+      checkVapiStatuses();
+    }
+  }, [allPurchasedNumbers.length, subaccountId, dispatch]);
 
-  // Filter numbers based on active tab
   const getFilteredNumbers = () => {
     switch (activeTab) {
       case "bought":
@@ -151,6 +179,7 @@ const Numbers = () => {
     "STATUS",
     "LINKED ASSISTANT",
     "VAPI STATUS",
+    "ACTIONS",
   ];
 
   // Helper function to format capabilities
@@ -166,19 +195,20 @@ const Numbers = () => {
   // Helper function to render Vapi status indicator
   const renderVapiStatus = (phoneSid) => {
     const vapiInfo = vapiStatuses[phoneSid];
-    
-    // If no vapiPhoneNumId, number hasn't been connected to Vapi yet
-    if (!vapiInfo || !vapiInfo.vapiPhoneNumId) {
+
+    // No record at all -> Not Connected
+    if (!vapiInfo) {
       return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
           <XCircle size={12} className="mr-1" />
-          Not Configured
+          Not Connected
         </span>
       );
     }
 
-    // If we have vapiPhoneNumId but no status yet, still checking
-    if (!vapiInfo.status) {
+    // If a check is in progress: show Checking...
+    // We treat undefined isConnected as "still checking" if the object exists
+    if (vapiInfo.checking || typeof vapiInfo.isConnected === "undefined") {
       return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
           <Loader2 size={12} className="mr-1 animate-spin" />
@@ -187,17 +217,16 @@ const Numbers = () => {
       );
     }
 
-    const isActive = vapiInfo.status === "active";
+    // Only consider connected when isConnected === true
+    const connected = vapiInfo.isConnected === true;
 
     return (
       <span
         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-          isActive
-            ? "bg-green-100 text-green-800"
-            : "bg-red-100 text-red-800"
+          connected ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
         }`}
       >
-        {isActive ? (
+        {connected ? (
           <>
             <CheckCircle size={12} className="mr-1" />
             Connected
@@ -364,33 +393,35 @@ const Numbers = () => {
               ) : (
                 filteredNumbers.map((item, index) => {
                   const details = item.phoneNumberDetails;
+                  // Create unique key using both SID and index
+                  const uniqueKey = `${details.sid}-${index}`;
 
                   return (
-                    <tr key={details.sid || index} className="hover:bg-gray-50">
+                    <tr key={uniqueKey} className="hover:bg-gray-50">
                       {/* Name */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                         {details.friendlyName || "N/A"}
                       </td>
 
                       {/* Number */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-600">
                         {details.phoneNumber || "N/A"}
                       </td>
 
                       {/* Updated */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
                         {details.dateUpdated
                           ? new Date(details.dateUpdated).toLocaleString()
                           : "N/A"}
                       </td>
 
                       {/* Capabilities */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
                         {formatCapabilities(details.capabilities)}
                       </td>
 
                       {/* Status */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm">
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             details.status === "in-use"
@@ -403,17 +434,17 @@ const Numbers = () => {
                       </td>
 
                       {/* Linked Assistant */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-indigo-600 font-medium">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm text-indigo-600 font-medium">
                         {item.assistantName || "N/A"}
                       </td>
 
-                      {/* NEW: Vapi Status */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {/* Vapi Status */}
+                      <td className="px-3 py-3 whitespace-nowrap text-sm">
                         {renderVapiStatus(details.sid)}
                       </td>
 
                       {/* ACTIONS */}
-                      <td className="p-3 align-middle w-40">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm">
                         <div className="flex items-center justify-center gap-3">
                           <button
                             onClick={(e) => {
@@ -433,16 +464,6 @@ const Numbers = () => {
                               size={16}
                               className="text-gray-500"
                             />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                            }}
-                            className="p-2 border rounded-md bg-red-50 hover:bg-red-200"
-                            aria-label="delete"
-                            title="Delete"
-                          >
-                            <Trash2 size={16} className="text-red-400" />
                           </button>
                         </div>
                       </td>
