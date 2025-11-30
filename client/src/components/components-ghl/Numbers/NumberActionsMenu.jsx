@@ -1,3 +1,4 @@
+// src/components/components-ghl/Numbers/NumberActionsMenu.jsx
 import React, { useRef, useEffect, useState } from "react";
 import {
   Star,
@@ -26,6 +27,7 @@ const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false, disabled = f
         type="button"
         onClick={(e) => {
           e.stopPropagation();
+          // console.log kept for easier debugging
           console.log("🔹 MenuItem clicked:", text);
           onClick?.(e);
         }}
@@ -64,9 +66,11 @@ const NumbersActionsMenu = ({
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   // Get Vapi connection status from Redux
-  const { vapiStatuses } = useSelector((state) => state.numbers);
-  const vapiInfo = vapiStatuses[account?.id]; // account.id is the phoneSid
-  const isConnectedToVapi = vapiInfo?.status === "active";
+  const { vapiStatuses } = useSelector((state) => state.numbers || {});
+  const vapiInfo = vapiStatuses?.[account?.id]; // account.id is the phoneSid (may be undefined)
+  // NEW: decide connection solely on isConnected === true
+  const isConnectedToVapi = vapiInfo?.isConnected === true;
+  const isChecking = Boolean(vapiInfo?.checking);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -74,7 +78,7 @@ const NumbersActionsMenu = ({
       if (
         menuRef.current &&
         !menuRef.current.contains(event.target) &&
-        anchorRef.current &&
+        anchorRef?.current &&
         !anchorRef.current.contains(event.target)
       ) {
         onClose();
@@ -249,9 +253,19 @@ const NumbersActionsMenu = ({
     >
       <ul className="divide-y divide-gray-100">
         <MenuItem icon={Star} text="Rename" onClick={onClose} />
-        
-        {/* Conditionally show Connect or Disconnect based on Vapi status */}
-        {isConnectedToVapi ? (
+
+        {/* Show Checking... if status is being determined */}
+        {isChecking && (
+          <li>
+            <div className="flex items-center w-full px-4 py-2 text-sm text-gray-700">
+              <Loader2 size={18} className="text-gray-500 mr-3 animate-spin" />
+              Checking Vapi status...
+            </div>
+          </li>
+        )}
+
+        {/* Conditionally show Connect or Disconnect based on isConnected boolean */}
+        {!isChecking && (isConnectedToVapi ? (
           <MenuItem 
             icon={XCircle} 
             text="Disconnect from Vapi"
@@ -268,8 +282,8 @@ const NumbersActionsMenu = ({
             loading={isConnecting}
             disabled={isConnecting}
           />
-        )}
-        
+        ))}
+
         <MenuItem icon={Pencil} text="Edit account" onClick={onClose} />
         <MenuItem icon={Scale} text="Manage limits" onClick={onClose} />
         <MenuItem icon={Eye} text="Edit permissions" onClick={onClose} />
@@ -279,10 +293,14 @@ const NumbersActionsMenu = ({
           {account.name || "Unnamed Account"}
         </p>
         <p>Last edited: 11/05/25</p>
+        {/* Footer connection message based on isConnected boolean */}
         {isConnectedToVapi && (
           <p className="text-green-600 font-medium mt-1">
             ✓ Connected to Vapi
           </p>
+        )}
+        {!isConnectedToVapi && !isChecking && (
+          <p className="text-gray-500 mt-1">Not connected to Vapi</p>
         )}
       </div>
     </div>
