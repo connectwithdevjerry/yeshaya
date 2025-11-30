@@ -1,6 +1,7 @@
 // src/store/slices/integrationSlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../api/config"; // using interceptor instance
+import axios from "axios";
 
 // 🔹 GoHighLevel
 export const connectGoHighLevel = createAsyncThunk(
@@ -143,19 +144,21 @@ export const fetchImportedSubAccounts = createAsyncThunk(
   }
 );
 
-// Thunk to import sub-accounts
 export const importSubAccounts = createAsyncThunk(
   "importSubAccounts/import",
   async (accountIds, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post(
-        "/integrations/import-sub-accounts",
+      const response = await axios.post(
+        "https://yeshaya.onrender.com/integrations/import-sub-accounts",
         { accountIds }
       );
 
       console.log("🟢 Import Sub-accounts Response:", response.data);
+
+      // Treat "already installed" as a normal response
       return response.data;
     } catch (error) {
+      console.log("❌ Import Sub-accounts failed:", error);
       return rejectWithValue(error.response?.data || error.message);
     }
   }
@@ -173,6 +176,7 @@ const integrationSlice = createSlice({
     agencyId: null,
     loading: false,
     error: null,
+    warning: null,
   },
   reducers: {
     setIntegrationStatus: (state, action) => {
@@ -321,6 +325,13 @@ const integrationSlice = createSlice({
       })
       .addCase(importSubAccounts.fulfilled, (state, action) => {
         state.loading = false;
+        if (
+          action.payload?.status === false &&
+          action.payload?.message === "Sub-accounts Already Installed!"
+        ) {
+          console.warn("Sub-accounts already installed. No changes made.");
+          return;
+        }
         state.subAccounts = action.payload?.locations || state.subAccounts;
         state.agencyId = action.payload?.agencyId || state.agencyId;
       })

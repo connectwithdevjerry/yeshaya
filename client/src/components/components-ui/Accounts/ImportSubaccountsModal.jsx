@@ -21,15 +21,23 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
       setSelectedIds(new Set());
       setPage(1);
 
-      apiClient.get("/integrations/get-subaccounts?userType=anon")
+      apiClient
+        .get("/integrations/get-subaccounts?userType=anon")
         .then((res) => {
           const locations = res.data?.data?.locations || [];
           setSubAccounts(locations);
           setLoading(false);
         })
         .catch((err) => {
-          console.error("Failed to fetch subaccounts:", err.response?.data || err.message);
-          setError(err.response?.data?.message || err.message || "Failed to load subaccounts");
+          console.error(
+            "Failed to fetch subaccounts:",
+            err.response?.data || err.message
+          );
+          setError(
+            err.response?.data?.message ||
+              err.message ||
+              "Failed to load subaccounts"
+          );
           setLoading(false);
         });
     }
@@ -65,16 +73,30 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
   const handleImport = () => {
     const selected = subAccounts.filter((l) => selectedIds.has(l.id));
     const ids = selected.map((l) => l.id);
-    if (ids.length) {
-      dispatch(importSubAccounts(ids))
-        .unwrap()
-        .then(() => {
-          console.log("Subaccounts imported successfully");
-        })
-        .catch((err) => {
-          console.error("Import failed:", err);
-        });
-    }
+
+    if (!ids.length) return;
+
+    console.log("Importing subaccounts with IDs:", ids);
+
+    dispatch(importSubAccounts(ids))
+      .unwrap()
+      .then((res) => {
+        if (
+          res.status === false &&
+          res.message === "Sub-accounts Already Installed!"
+        ) {
+          alert("Sub-accounts Already Installed!");
+          console.warn("Already installed:", ids);
+        } else {
+          alert("Subaccounts imported successfully!");
+          console.log("Subaccounts imported successfully:", ids);
+        }
+      })
+      .catch((err) => {
+        console.error("Import failed:", err);
+        alert("Failed to import subaccounts!");
+      });
+
     onClose();
   };
 
@@ -109,7 +131,10 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
                       <input
                         type="checkbox"
                         onChange={toggleAllOnPage}
-                        checked={paged.length > 0 && paged.every((l) => selectedIds.has(l.id))}
+                        checked={
+                          paged.length > 0 &&
+                          paged.every((l) => selectedIds.has(l.id))
+                        }
                       />
                     </th>
                     <th className="p-3 text-left">NAME</th>
@@ -139,11 +164,15 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
                             {loc.name || loc.business?.name || "Unnamed"}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {loc.firstName ? `${loc.firstName} ${loc.lastName ?? ""}` : loc.email}
+                            {loc.firstName
+                              ? `${loc.firstName} ${loc.lastName ?? ""}`
+                              : loc.email}
                           </div>
                         </td>
                         <td className="p-3 text-gray-600">{loc.id}</td>
-                        <td className="p-3 text-gray-600">{loc.installed ? "Yes" : "No"}</td>
+                        <td className="p-3 text-gray-600">
+                          {loc.installed ? "Yes" : "No"}
+                        </td>
                       </tr>
                     ))
                   )}
@@ -155,7 +184,8 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
           {/* Pagination */}
           <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
             <div>
-              Page {page} of {Math.max(1, Math.ceil(subAccounts.length / perPage))}
+              Page {page} of{" "}
+              {Math.max(1, Math.ceil(subAccounts.length / perPage))}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -167,7 +197,10 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
               <button
                 onClick={() =>
                   setPage((p) =>
-                    Math.min(Math.max(1, Math.ceil(subAccounts.length / perPage)), p + 1)
+                    Math.min(
+                      Math.max(1, Math.ceil(subAccounts.length / perPage)),
+                      p + 1
+                    )
                   )
                 }
                 className="p-2 border rounded hover:bg-gray-100"

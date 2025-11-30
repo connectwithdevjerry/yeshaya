@@ -34,9 +34,6 @@ const Assistants = () => {
   // ✅ Get subaccountId from URL or current account
   const subaccountId = searchParams.get("subaccount") || account?.subaccount;
 
-
-  
-
   const {
     data: assistants,
     loading,
@@ -52,10 +49,24 @@ const Assistants = () => {
     }
   }, [dispatch, subaccountId]);
 
-  // useEffect(() => {
-  //   dispatch(importSubAccounts(subaccountId));
-  //   console.log("📍 Importing subaccounts for:", subaccountId);
-  // }, [dispatch, subaccountId]);
+  useEffect(() => {
+    if (!subaccountId) return;
+    console.log("📥 Importing subaccounts for subaccountId:", subaccountId);
+    (async () => {
+      try {
+        dispatch(importSubAccounts(subaccountId))
+          .unwrap()
+          .then(() => {
+            console.log("Subaccounts imported successfully");
+          })
+          .catch((err) => {
+            console.error("Import failed:", err);
+          });
+      } catch (err) {
+        console.warn("📥 importSubAccounts failed (background):", err);
+      }
+    })();
+  }, [dispatch, subaccountId]);
 
   // ✅ Handle assistant click with account context
   const handleAssistantClick = (assistant) => {
