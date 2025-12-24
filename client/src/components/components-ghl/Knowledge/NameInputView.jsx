@@ -1,0 +1,56 @@
+import React, { useState } from 'react';
+import { X, Info } from 'lucide-react';
+
+const NameInputView = ({ onClose, onBack, onUpload }) => {
+  const [name, setName] = useState('');
+
+  return (
+    <>
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <h2 className="text-xl font-semibold text-gray-800">Upload</h2>
+          <Info size={18} className="text-gray-400 cursor-help" />
+        </div>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Body - High padding to match the centered look */}
+      <div className="p-10">
+        <div className="relative">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Name"
+            className="w-full p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-gray-700 shadow-sm"
+            autoFocus
+          />
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex justify-end items-center gap-4 px-6 py-4 border-t border-gray-100">
+        <button 
+          onClick={onBack}
+          className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          Close
+        </button>
+        <button 
+          onClick={() => onUpload(name)}
+          disabled={!name.trim()}
+          className={`px-6 py-2 rounded-md text-white text-sm font-semibold shadow-sm transition-all ${
+            name.trim() ? 'bg-[#a389f4] hover:bg-[#9175e6]' : 'bg-purple-300 cursor-not-allowed'
+          }`}
+        >
+          Upload
+        </button>
+      </div>
+    </>
+  );
+};
+
+export default NameInputView;

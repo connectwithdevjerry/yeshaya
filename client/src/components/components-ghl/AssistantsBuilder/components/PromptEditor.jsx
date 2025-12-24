@@ -22,6 +22,7 @@ import { GeneratePromptModal } from "./GeneratePromptModal";
 import DynamicGreetingModal from "./DynamicGreetingModal";
 import { useNavigate } from "react-router-dom";
 import { VoiceMenuDrawer } from "./VoiceMenu";
+import { VoiceSettingsDropdown } from "./VoiceMenuModals/VoiceSettingsDropdown";
 
 const TabButton = ({ text, isActive, onClick }) => (
   <button
@@ -62,6 +63,7 @@ export const GlobalPromptEditor = () => {
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
   const openVoiceMenu = () => setIsVoiceMenuOpen(true);
   const closeVoiceMenu = () => setIsVoiceMenuOpen(false);
+  const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState(false);
 
   // ✅ Populate prompt content when assistant data loads
   useEffect(() => {
@@ -181,15 +183,37 @@ export const GlobalPromptEditor = () => {
 
         {/* Right Controls */}
         <div className="flex gap-2 items-center">
-          <div
-            onClick={() => navigate("/activetags")}
-            className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer"
-          >
-            <Tag className="w-4 h-4 text-gray-400" />
-            <span className="text-sm font-mono text-gray-700 truncate max-w-[140px]">
-              1761056664694×928651361970399400
-            </span>
-            <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
+            <div
+              className="flex items-center space-x-2"
+              onClick={() => navigate("/")}
+            >
+              <Tag className="w-4 h-4 text-gray-400" />
+              <span className="text-sm font-mono text-gray-700 truncate max-w-[140px]">
+                1761056664694×928651361970399400
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2 border-l-2  hover:text-gray-600">
+              <button
+                className="text-gray-400 p-1 rounded-full hover:bg-gray-100"
+                title="Settings"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
+            <div
+              onClick={() => navigate("")}
+              className="flex items-center space-x-2"
+            >
+              <Phone className="w-4 h-4 text-gray-400" />
+              <span className="text-sm font-mono text-gray-700 truncate max-w-[120px]">
+                +1222342743
+              </span>
+            </div>
+            <div className="flex items-center space-x-2 border-l-2">
               <button
                 className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
                 title="Settings"
@@ -198,39 +222,38 @@ export const GlobalPromptEditor = () => {
               </button>
             </div>
           </div>
-          <div
-            onClick={() => navigate("/numbers")}
-            className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer"
-          >
-            <Phone className="w-4 h-4 text-gray-400" />
-            <span className="text-sm font-mono text-gray-700 truncate max-w-[120px]">
-              +1222342743
-            </span>
-            <div className="flex items-center space-x-2">
-              <button
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
-                title="Settings"
+          <div className="relative">
+            {" "}
+            {/* Added relative container for dropdown positioning */}
+            <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
+              <div
+                className="flex items-center space-x-2"
+                onClick={openVoiceMenu}
               >
-                <Settings className="w-4 h-4" />
-              </button>
+                <Volume2 className="w-4 h-4 text-gray-400" />
+                <span className="text-sm font-mono text-gray-700 truncate max-w-[150px]">
+                  {voiceDisplay}
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-2 border-l-2 pl-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent opening voice menu
+                    setIsVoiceSettingsOpen(!isVoiceSettingsOpen);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                  title="Settings"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </div>
-          <div
-            onClick={openVoiceMenu}
-            className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer"
-          >
-            <Volume2 className="w-4 h-4 text-gray-400" />
-            <span className="text-sm font-mono text-gray-700 truncate max-w-[150px]">
-              {voiceDisplay}
-            </span>
-            <div className="flex items-center space-x-2">
-              <button
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
-                title="Settings"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-            </div>
+            {/* Dropdown Modal */}
+            <VoiceSettingsDropdown
+              isOpen={isVoiceSettingsOpen}
+              onClose={() => setIsVoiceSettingsOpen(false)}
+            />
           </div>
         </div>
       </div>

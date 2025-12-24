@@ -2,7 +2,8 @@ import React, { useMemo, useState, useEffect } from "react";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { useDispatch } from "react-redux";
 import { importSubAccounts } from "../../../store/slices/integrationSlice";
-import apiClient from "../../../store/api/config"; // assuming you have this for fetching
+import apiClient from "../../../store/api/config";
+import toast from "react-hot-toast";
 
 const ImportSubaccountsModal = ({ isOpen, onClose }) => {
   const dispatch = useDispatch();
@@ -11,6 +12,7 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
   const [error, setError] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [page, setPage] = useState(1);
+  const [importing, setImporting] = useState(false);
   const perPage = 8;
 
   // Fetch subaccounts locally when modal opens
@@ -74,30 +76,35 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
     const selected = subAccounts.filter((l) => selectedIds.has(l.id));
     const ids = selected.map((l) => l.id);
 
-    if (!ids.length) return;
+    if (!ids.length) {
+      alert("Please select at least one subaccount to import");
+      return;
+    }
 
-    console.log("Importing subaccounts with IDs:", ids);
+    console.log("🚀 Starting import for IDs:", ids);
+    setImporting(true);
 
     dispatch(importSubAccounts(ids))
       .unwrap()
-      .then((res) => {
-        if (
-          res.status === false &&
-          res.message === "Sub-accounts Already Installed!"
-        ) {
-          alert("Sub-accounts Already Installed!");
-          console.warn("Already installed:", ids);
+      .then((response) => {
+        console.log("📥 IMPORT RESPONSE RECEIVED:", response);
+        
+        // Handle the already installed case
+        if (response.alreadyInstalled) {
+          console.log("ℹ️ Sub-accounts already installed:", ids);
+          toast.success("Sub-accounts Already Installed!");
         } else {
-          alert("Subaccounts imported successfully!");
-          console.log("Subaccounts imported successfully:", ids);
+          console.log("✅ Subaccounts imported successfully:", response);
+          toast.success("Subaccounts imported successfully!");
         }
+        setImporting(false);
+        onClose();
       })
       .catch((err) => {
-        console.error("Import failed:", err);
-        alert("Failed to import subaccounts!");
+        console.error("❌ IMPORT ERROR:", err);
+        toast.error(`Failed to import subaccounts: ${err.message || JSON.stringify(err)}`);
+        setImporting(false);
       });
-
-    onClose();
   };
 
   return (
@@ -106,7 +113,11 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b">
           <h3 className="text-lg font-semibold">Import Sub-accounts</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
+          <button 
+            onClick={onClose} 
+            className="p-1 rounded hover:bg-gray-100"
+            disabled={importing}
+          >
             <X size={18} />
           </button>
         </div>
@@ -135,6 +146,7 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
                           paged.length > 0 &&
                           paged.every((l) => selectedIds.has(l.id))
                         }
+                        disabled={importing}
                       />
                     </th>
                     <th className="p-3 text-left">NAME</th>
@@ -157,6 +169,7 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
                             type="checkbox"
                             checked={selectedIds.has(loc.id)}
                             onChange={() => toggle(loc.id)}
+                            disabled={importing}
                           />
                         </td>
                         <td className="p-3">
@@ -190,7 +203,8 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="p-2 border rounded hover:bg-gray-100"
+                className="p-2 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={page === 1 || importing}
               >
                 <ChevronLeft size={14} />
               </button>
@@ -203,7 +217,10 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
                     )
                   )
                 }
-                className="p-2 border rounded hover:bg-gray-100"
+                className="p-2 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={
+                  page >= Math.ceil(subAccounts.length / perPage) || importing
+                }
               >
                 <ChevronRight size={14} />
               </button>
@@ -213,14 +230,26 @@ const ImportSubaccountsModal = ({ isOpen, onClose }) => {
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 p-4 border-t">
-          <button onClick={onClose} className="px-4 py-2 rounded-md border">
+          <button 
+            onClick={onClose} 
+            className="px-4 py-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={importing}
+          >
             Cancel
           </button>
           <button
             onClick={handleImport}
-            className="px-5 py-2 rounded-md bg-gradient-to-r from-violet-500 to-pink-400 text-white"
+            className="px-5 py-2 rounded-md bg-gradient-to-r from-violet-500 to-pink-400 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            disabled={importing || selectedIds.size === 0}
           >
-            Import
+            {importing ? (
+              <>
+                <span className="animate-spin">⏳</span>
+                Importing...
+              </>
+            ) : (
+              "Import"
+            )}
           </button>
         </div>
       </div>

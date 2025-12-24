@@ -23,9 +23,13 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { getAssistantById } from "../../../../store/slices/assistantsSlice";
 import { useCurrentAccount } from "../../../../hooks/useCurrentAccount";
+import { LogsModal } from "./LogsModal";
+import { ExperimentsDropdown } from "./ExperimentsDropdown";
+import { CollabSessionDropdown } from "./CollabSessionDropdown";
 
-const IconButton = ({ icon: Icon, tooltip }) => (
+const IconButton = ({ icon: Icon, tooltip, onClick }) => (
   <button
+    onClick={onClick}
     className="p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors duration-150"
     title={tooltip}
     aria-label={tooltip}
@@ -38,6 +42,9 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [isIssuesModalOpen, setIsIssuesModalOpen] = useState(false);
+  const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
+  const [isExperimentsOpen, setIsExperimentsOpen] = useState(false);
+  const [isUsersOpen, setIsUsersOpen] = useState(false);
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -92,6 +99,13 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
     setIsIssuesModalOpen((prev) => !prev);
     setIsModelModalOpen(false);
     setIsRenameModalOpen(false);
+  };
+
+  const toggleLogsModal = () => {
+    setIsLogsModalOpen((prev) => !prev);
+    setIsModelModalOpen(false);
+    setIsRenameModalOpen(false);
+    setIsIssuesModalOpen(false);
   };
 
   // ✅ Navigate back with account context
@@ -181,11 +195,34 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
           </button>
         </div>
 
-        <div className="flex items-center space-x-1">
-          <IconButton  icon={FlaskConical} tooltip="Experiments" />
-          <IconButton icon={Users} tooltip="Users" />
+        <div className="flex items-center space-x-1 relative">
+          <IconButton
+            icon={FlaskConical}
+            tooltip="Experiments"
+            onClick={() => setIsExperimentsOpen(!isExperimentsOpen)}
+          />
+          <ExperimentsDropdown
+            isOpen={isExperimentsOpen}
+            onClose={() => setIsExperimentsOpen(false)}
+          />
+
+          <div className="relative">
+            <IconButton 
+              icon={Users} 
+              tooltip="Users" 
+              onClick={() => setIsUsersOpen(!isUsersOpen)} 
+            />
+            <CollabSessionDropdown 
+              isOpen={isUsersOpen} 
+              onClose={() => setIsUsersOpen(false)} 
+            />
+          </div> 
           <IconButton icon={Rocket} tooltip="Testing Lab" />
-          <IconButton icon={Sparkles} tooltip="Logs" />
+          <IconButton
+            icon={Sparkles}
+            tooltip="Logs"
+            onClick={toggleLogsModal}
+          />
           <IconButton icon={RotateCcw} tooltip="Refresh" />
         </div>
       </div>
@@ -217,6 +254,7 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
         onClose={toggleRenameModal}
       />
       <IssuesModal isOpen={isIssuesModalOpen} onClose={toggleIssuesModal} />
+      <LogsModal isOpen={isLogsModalOpen} onClose={toggleLogsModal} />
     </header>
   );
 };

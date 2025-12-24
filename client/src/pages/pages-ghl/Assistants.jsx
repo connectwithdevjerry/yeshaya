@@ -19,6 +19,7 @@ import CreateAssistantModal from "../../components/components-ghl/Assistants/Cre
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useCurrentAccount } from "../../hooks/useCurrentAccount";
 import { importSubAccounts } from "../../store/slices/integrationSlice";
+import toast from "react-hot-toast";
 
 const Assistants = () => {
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -49,23 +50,25 @@ const Assistants = () => {
     }
   }, [dispatch, subaccountId]);
 
+  // ✅ Run import in background silently
   useEffect(() => {
     if (!subaccountId) return;
-    console.log("📥 Importing subaccounts for subaccountId:", subaccountId);
-    (async () => {
-      try {
-        dispatch(importSubAccounts(subaccountId))
-          .unwrap()
-          .then(() => {
-            console.log("Subaccounts imported successfully");
-          })
-          .catch((err) => {
-            console.error("Import failed:", err);
-          });
-      } catch (err) {
-        console.warn("📥 importSubAccounts failed (background):", err);
-      }
-    })();
+    
+    console.log("📥 Running background import for subaccountId:", subaccountId);
+    
+    dispatch(importSubAccounts([subaccountId]))
+      .unwrap()
+      .then((response) => {
+        if (response.alreadyInstalled) {
+          console.log("ℹ️ Background check: Subaccount already installed");
+        } else {
+          toast.success("✅ Background import: Subaccount imported successfully");
+        }
+      })
+      .catch((err) => {
+        // Silent failure - don't show error to user
+        console.log("📥 Background import check completed (error ignored):", err);
+      });
   }, [dispatch, subaccountId]);
 
   // ✅ Handle assistant click with account context
