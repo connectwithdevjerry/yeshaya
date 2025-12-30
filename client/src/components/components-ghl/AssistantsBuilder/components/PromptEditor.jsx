@@ -20,7 +20,7 @@ import { VoiceLabView } from "./VoiceLab";
 import { ToolkitSidebar } from "./AssistantSidebar";
 import { GeneratePromptModal } from "./GeneratePromptModal";
 import DynamicGreetingModal from "./DynamicGreetingModal";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { VoiceMenuDrawer } from "./VoiceMenu";
 import { VoiceSettingsDropdown } from "./VoiceMenuModals/VoiceSettingsDropdown";
 
@@ -50,10 +50,35 @@ export const GlobalPromptEditor = () => {
   const maxChars = 8024;
   const charCount = promptContent.length;
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   // ✅ Get assistant data from Redux
   const { selectedAssistant } = useSelector((state) => state.assistants);
   const [voiceDisplay, setVoiceDisplay] = useState("Marrisa");
+
+  // Helper function to navigate with account context
+  const getContextualPath = (targetRoute) => {
+    const agencyid = searchParams.get("agencyid");
+    const subaccount = searchParams.get("subaccount");
+    const allow = searchParams.get("allow");
+    const myname = searchParams.get("myname");
+    const myemail = searchParams.get("myemail");
+
+    if (agencyid && subaccount) {
+      const params = new URLSearchParams({
+        agencyid,
+        subaccount,
+        ...(allow && { allow }), // Only add if they exist
+        ...(myname && { myname }),
+        ...(myemail && { myemail }),
+        route: targetRoute,
+      });
+      return `/app?${params.toString()}`;
+    }
+
+    return targetRoute;
+  };
 
   const toggleToolkit = () => setIsToolkitOpen((prev) => !prev);
   const openGeneratePromptModal = () => setIsGeneratePromptModalOpen(true);
@@ -186,7 +211,7 @@ export const GlobalPromptEditor = () => {
           <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
             <div
               className="flex items-center space-x-2"
-              onClick={() => navigate("/")}
+              onClick={() => navigate(getContextualPath("/activetags"))}
             >
               <Tag className="w-4 h-4 text-gray-400" />
               <span className="text-sm font-mono text-gray-700 truncate max-w-[140px]">
@@ -205,7 +230,7 @@ export const GlobalPromptEditor = () => {
           </div>
           <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
             <div
-              onClick={() => navigate("")}
+              onClick={() => navigate(getContextualPath("/call"))}
               className="flex items-center space-x-2"
             >
               <Phone className="w-4 h-4 text-gray-400" />
