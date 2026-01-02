@@ -5,13 +5,16 @@ import { toolkitItems, bottomMenuItem } from "../data/ToolKitData";
 import { ChatSettingsPanel } from "./Sidebar/ChatSettingsPanel";
 import { CallSettingsPanel } from "./Sidebar/CallSettingsPanel";
 import { ToolsAndAPIsModal } from "./Sidebar/ToolsAndAPIsModal";
+import { CalendarModal } from "./Sidebar/CalendarModal";
 
-const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal }) => {
+const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal, openCalendarModal }) => {
   const Icon = item.icon;
 
   const handleClick = () => {
-    if (item.type === "modal") {
+    if (item.title === "Tools & APIs") {
       openToolsModal(); // ✅ Opens modal for 'Tools & APIs'
+    } else if (item.title === "Calendars") {
+      openCalendarModal();
     } else if (item.type === "panel") {
       onSelect(item.title); // Expand panel content
     }
@@ -69,7 +72,8 @@ const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal }) => {
 export const ToolkitSidebar = ({ isOpen, onToggle, activeTab }) => {
   const [expandedItem, setExpandedItem] = useState(null);
   const [isToolsModalOpen, setIsToolsModalOpen] = useState(false);
-  const sidebarWidth = "w-[250px]";
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const sidebarWidth = "w-[300px]";
 
   const handleItemSelect = (title) => {
     setExpandedItem((prev) => (prev === title ? null : title));
@@ -123,7 +127,8 @@ export const ToolkitSidebar = ({ isOpen, onToggle, activeTab }) => {
                 item={item}
                 isSelected={expandedItem === item.title}
                 onSelect={handleItemSelect}
-                openToolsModal={openToolsModal} // ✅ Properly passed down
+                openToolsModal={openToolsModal} 
+                openCalendarModal={() => setIsCalendarModalOpen(true)}
               />
             ))}
           </div>
@@ -159,6 +164,7 @@ export const ToolkitSidebar = ({ isOpen, onToggle, activeTab }) => {
 
       {/* ✅ Tools & APIs Modal */}
       <ToolsAndAPIsModal isOpen={isToolsModalOpen} onClose={closeToolsModal} />
+      <CalendarModal isOpen={isCalendarModalOpen} onClose={() => setIsCalendarModalOpen(false)} />
     </div>
   );
 };

@@ -23,6 +23,7 @@ import DynamicGreetingModal from "./DynamicGreetingModal";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { VoiceMenuDrawer } from "./VoiceMenu";
 import { VoiceSettingsDropdown } from "./VoiceMenuModals/VoiceSettingsDropdown";
+import { PromptSnippetsDropdown } from "./PromptSnippetsModal";
 
 const TabButton = ({ text, isActive, onClick }) => (
   <button
@@ -47,6 +48,7 @@ export const GlobalPromptEditor = () => {
     useState(false);
   const [isDynamicGreetingModalOpen, setIsDynamicGreetingModalOpen] =
     useState(false);
+  const [isSnippetsOpen, setIsSnippetsOpen] = useState(false);
   const maxChars = 8024;
   const charCount = promptContent.length;
   const navigate = useNavigate();
@@ -154,9 +156,19 @@ export const GlobalPromptEditor = () => {
               <button className="hover:bg-blue-50 p-2 flex items-center gap-1">
                 <Tags size={15} /> Fields & Values
               </button>
-              <button className="hover:bg-blue-50 p-2 flex items-center gap-1">
-                <Pencil size={15} /> Add Snippet
-              </button>
+              <div className="relative">
+                <button
+                  className="hover:bg-blue-50 p-2 flex items-center gap-1"
+                  onClick={() => setIsSnippetsOpen(!isSnippetsOpen)}
+                >
+                  <Pencil size={15} /> Add Snippet
+                </button>
+
+                <PromptSnippetsDropdown
+                  isOpen={isSnippetsOpen}
+                  onClose={() => setIsSnippetsOpen(false)}
+                />
+              </div>
             </div>
 
             {/* Right Section */}
