@@ -319,29 +319,29 @@ const updateAssistant = async (req, res) => {
 
   // const checkHeader = req
 
-  const user = await userModel.findById(userId);
-
-  const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === subaccountId && sub.connected
-  );
-
-  if (!targetSubaccount)
-    return res.send({
-      status: false,
-      message: "This subaccount does not exist!",
-    });
-
-  const targetAssistant = targetSubaccount.vapiAssistants.find(
-    (target) => target.assistantId === assistantId
-  );
-
-  if (!targetAssistant)
-    return res.send({
-      status: false,
-      message: "This assistant does not exist!",
-    });
-
   try {
+    const user = await userModel.findById(userId);
+
+    const targetSubaccount = user.ghlSubAccountIds.find(
+      (sub) => sub.accountId === subaccountId && sub.connected
+    );
+
+    if (!targetSubaccount)
+      return res.send({
+        status: false,
+        message: "This subaccount does not exist!",
+      });
+
+    const targetAssistant = targetSubaccount.vapiAssistants.find(
+      (target) => target.assistantId === assistantId
+    );
+
+    if (!targetAssistant)
+      return res.send({
+        status: false,
+        message: "This assistant does not exist!",
+      });
+
     const response = await axios.patch(
       `https://api.vapi.ai/assistant/${assistantId}`,
       updateData,
@@ -362,6 +362,11 @@ const updateAssistant = async (req, res) => {
       "Failed to update assistant:",
       error.response?.data || error.message
     );
+    return res.send({
+      status: false,
+      data: error.response?.data,
+      message: error.message,
+    });
   }
 };
 
