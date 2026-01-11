@@ -56,19 +56,76 @@ export const createAssistant = createAsyncThunk(
   }
 );
 
-// ✅ Update assistant
+// ✅ Update assistant - FIXED VERSION
 export const updateAssistant = createAsyncThunk(
   "assistants/update",
   async ({ subaccountId, assistantId, updateData }, { rejectWithValue }) => {
     try {
-      const payload = { subaccountId, assistantId, updateData };
+      // Validate required fields
+      if (!subaccountId || !assistantId) {
+        return rejectWithValue("Missing required fields: subaccountId or assistantId");
+      }
+
+      // Prepare payload
+      const payload = { 
+        subaccountId, 
+        assistantId, 
+        updateData 
+      };
+
+      console.log("🔄 Updating assistant:", payload);
+
+      // ✅ FIXED: Use apiClient instead of raw axios
       const response = await apiClient.put("/assistants/update", payload);
+
+      // Check response status
+      if (!response.data.status) {
+        return rejectWithValue(response.data.message || "Update failed");
+      }
+
+      console.log("✅ Assistant updated successfully:", response.data.data);
 
       // Return the updated assistant data
       return response.data.data;
     } catch (error) {
+      console.error("❌ Update assistant error:", error);
+      
+      // Handle different error types
+      if (error.response) {
+        // Server responded with error
+        return rejectWithValue(
+          error.response.data?.message || 
+          error.response.data?.error || 
+          "Failed to update assistant"
+        );
+      } else if (error.request) {
+        // Request was made but no response
+        return rejectWithValue("No response from server");
+      } else {
+        // Something else happened
+        return rejectWithValue(error.message || "Failed to update assistant");
+      }
+    }
+  }
+);
+
+// ✅ Delete assistant
+export const deleteAssistant = createAsyncThunk(
+  "assistants/delete",
+  async ({ subaccountId, assistantId }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.delete(
+        `/assistants/delete?subaccountId=${subaccountId}&assistantId=${assistantId}`
+      );
+      
+      if (!response.data.status) {
+        return rejectWithValue(response.data.message || "Delete failed");
+      }
+      
+      return assistantId;
+    } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to update assistant"
+        error.response?.data?.message || "Failed to delete assistant"
       );
     }
   }
@@ -81,10 +138,33 @@ const assistantsSlice = createSlice({
     selectedAssistant: null,
     loading: false,
     error: null,
+    updating: false, // Track update status separately
+    updateError: null,
   },
   reducers: {
     clearSelectedAssistant: (state) => {
       state.selectedAssistant = null;
+    },
+    clearUpdateError: (state) => {
+      state.updateError = null;
+    },
+    // Optimistic update for better UX
+    optimisticUpdate: (state, action) => {
+      const { assistantId, updateData } = action.payload;
+      
+      // Update in list
+      const index = state.data.findIndex(
+        (a) => a.id === assistantId || a.assistantId === assistantId
+      );
+      if (index !== -1) {
+        state.data[index] = { ...state.data[index], ...updateData };
+      }
+      
+      // Update selected assistant
+      if (state.selectedAssistant?.assistantId === assistantId || 
+          state.selectedAssistant?.id === assistantId) {
+        state.selectedAssistant = { ...state.selectedAssistant, ...updateData };
+      }
     },
   },
   extraReducers: (builder) => {
@@ -132,17 +212,17 @@ const assistantsSlice = createSlice({
 
       // 🔹 Update
       .addCase(updateAssistant.pending, (state) => {
-        state.loading = true;
-        state.error = null;
+        state.updating = true;
+        state.updateError = null;
       })
       .addCase(updateAssistant.fulfilled, (state, action) => {
-        state.loading = false;
+        state.updating = false;
 
         // ✅ Update the assistant inside the list
         const index = state.data.findIndex(
           (a) =>
             a.id === action.payload.id ||
-            a.assistantId === action.payload.assistantId
+            a.assistantId === action.payload.id
         );
         if (index !== -1) {
           state.data[index] = { ...state.data[index], ...action.payload };
@@ -150,7 +230,8 @@ const assistantsSlice = createSlice({
 
         // ✅ Update the selected assistant too
         if (
-          state.selectedAssistant?.assistantId === action.payload.assistantId
+          state.selectedAssistant?.assistantId === action.payload.id ||
+          state.selectedAssistant?.id === action.payload.id
         ) {
           state.selectedAssistant = {
             ...state.selectedAssistant,
@@ -159,11 +240,30 @@ const assistantsSlice = createSlice({
         }
       })
       .addCase(updateAssistant.rejected, (state, action) => {
+        state.updating = false;
+        state.updateError = action.payload;
+      })
+
+      // 🔹 Delete
+      .addCase(deleteAssistant.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(deleteAssistant.fulfilled, (state, action) => {
+        state.loading = false;
+        state.data = state.data.filter(
+          (a) => a.id !== action.payload && a.assistantId !== action.payload
+        );
+        if (state.selectedAssistant?.id === action.payload || 
+            state.selectedAssistant?.assistantId === action.payload) {
+          state.selectedAssistant = null;
+        }
+      })
+      .addCase(deleteAssistant.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       });
   },
 });
 
-export const { clearSelectedAssistant } = assistantsSlice.actions;
+export const { clearSelectedAssistant, clearUpdateError, optimisticUpdate } = assistantsSlice.actions;
 export default assistantsSlice.reducer;
