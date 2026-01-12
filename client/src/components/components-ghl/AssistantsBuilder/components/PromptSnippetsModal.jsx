@@ -155,10 +155,26 @@ const snippets = [
   },
 ];
 
-export const PromptSnippetsDropdown = ({ isOpen, onClose }) => {
+export const PromptSnippetsDropdown = ({ isOpen, onClose, onAddSnippet }) => {
   const [activeTab, setActiveTab] = useState("General");
 
   if (!isOpen) return null;
+
+  // Handle snippet insertion
+  const handleAddSnippet = (snippet) => {
+    // Format the snippet content
+    const formattedSnippet = `\n--- ${snippet.title} ---\n${snippet.prompts
+      .map((prompt, index) => `${index + 1}. ${prompt}`)
+      .join("\n")}\n`;
+
+    // Call the parent callback to insert the snippet
+    if (onAddSnippet) {
+      onAddSnippet(formattedSnippet);
+    }
+
+    // Close the modal after adding
+    onClose();
+  };
 
   return (
     <>
@@ -200,7 +216,7 @@ export const PromptSnippetsDropdown = ({ isOpen, onClose }) => {
         </div>
 
         {/* Scrollable Content */}
-        <div className="max-h-[400px] overflow-y-auto p-3 space-y-2">
+        <div className="max-h-[300px] overflow-y-auto p-3 space-y-2 no-scrollbar">
           {snippets.map((item) => (
             <div
               key={item.id}
@@ -219,7 +235,10 @@ export const PromptSnippetsDropdown = ({ isOpen, onClose }) => {
                   </span>
                 </div>
               </div>
-              <button className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[11px] font-bold hover:bg-blue-600 hover:text-white transition-all">
+              <button
+                onClick={() => handleAddSnippet(item)}
+                className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[11px] font-bold hover:bg-blue-600 hover:text-white transition-all"
+              >
                 Add
               </button>
             </div>

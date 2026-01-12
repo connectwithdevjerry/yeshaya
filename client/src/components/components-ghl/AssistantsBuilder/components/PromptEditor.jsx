@@ -42,8 +42,10 @@ export const GlobalPromptEditor = () => {
   const [activeTab, setActiveTab] = useState("Builder");
   const [promptContent, setPromptContent] = useState("");
   const [isToolkitOpen, setIsToolkitOpen] = useState(true);
-  const [isGeneratePromptModalOpen, setIsGeneratePromptModalOpen] = useState(false);
-  const [isDynamicGreetingModalOpen, setIsDynamicGreetingModalOpen] = useState(false);
+  const [isGeneratePromptModalOpen, setIsGeneratePromptModalOpen] =
+    useState(false);
+  const [isDynamicGreetingModalOpen, setIsDynamicGreetingModalOpen] =
+    useState(false);
   const [isSnippetsOpen, setIsSnippetsOpen] = useState(false);
   const maxChars = 8024;
   const charCount = promptContent.length;
@@ -58,10 +60,16 @@ export const GlobalPromptEditor = () => {
   const [phoneNumber, setPhoneNumber] = useState("+1222342743");
   const [assistantTag, setAssistantTag] = useState("");
 
+  // ✅ Handle snippet insertion
+  const handleAddSnippet = (snippetText) => {
+    setPromptContent((prev) => prev + snippetText);
+    console.log("✅ Snippet added to prompt");
+  };
+
   // Helper function to format voice display name
   const formatVoiceDisplay = (voice) => {
     if (!voice) return "Select Voice";
-    
+
     // If it's an Azure voice, extract the name
     if (voice.provider === "azure" && voice.voiceId) {
       // Extract name from format like "en-US-EmmaNeural"
@@ -69,12 +77,12 @@ export const GlobalPromptEditor = () => {
       const name = parts[parts.length - 1].replace("Neural", "");
       return name; // Returns "Emma"
     }
-    
+
     // For ElevenLabs or other providers
     if (voice.provider === "elevenlabs" || voice.provider === "playht") {
       return voice.voiceId || "Select Voice";
     }
-    
+
     // Default
     return voice.voiceId || "Select Voice";
   };
@@ -82,9 +90,9 @@ export const GlobalPromptEditor = () => {
   // Helper function to format model display
   const formatModelDisplay = (model) => {
     if (!model) return "GPT-4o";
-    
+
     const modelName = model.model || "gpt-4o";
-    
+
     // Map common model names to display names
     const modelMap = {
       "gpt-4o": "GPT-4o",
@@ -93,7 +101,7 @@ export const GlobalPromptEditor = () => {
       "claude-3-opus": "Claude 3 Opus",
       "claude-3-sonnet": "Claude 3 Sonnet",
     };
-    
+
     return modelMap[modelName] || modelName;
   };
 
@@ -101,7 +109,7 @@ export const GlobalPromptEditor = () => {
   useEffect(() => {
     if (selectedAssistant) {
       console.log("📝 Populating assistant data:", selectedAssistant);
-      
+
       // Set prompt content
       const firstMessage = selectedAssistant.firstMessage || "";
       const endCallPhrases = selectedAssistant.endCallPhrases || [];
@@ -132,7 +140,7 @@ export const GlobalPromptEditor = () => {
       }
 
       // Set phone number if available
-      // Note: The API response doesn't include phone number, 
+      // Note: The API response doesn't include phone number,
       // so you might need to fetch it separately or add it to the assistant data
       if (selectedAssistant.phoneNumber) {
         setPhoneNumber(selectedAssistant.phoneNumber);
@@ -187,7 +195,7 @@ export const GlobalPromptEditor = () => {
     return (
       <div className="flex h-full">
         {/* Prompt Editor */}
-        <div className="flex-1 bg-gray-50 border-r overflow-y-auto">
+        <div className="flex-1 bg-gray-50 border-r overflow-y-auto no-scrollbar">
           <div className="flex flex-wrap justify-between items-center bg-white px-6 py-1 border-b shadow-sm gap-3">
             {/* Left Section */}
             <h2 className="text-md font-semibold text-gray-800 flex items-center space-x-2">
@@ -224,6 +232,7 @@ export const GlobalPromptEditor = () => {
                 <PromptSnippetsDropdown
                   isOpen={isSnippetsOpen}
                   onClose={() => setIsSnippetsOpen(false)}
+                  onAddSnippet={handleAddSnippet}
                 />
               </div>
             </div>
@@ -242,7 +251,7 @@ export const GlobalPromptEditor = () => {
 
           <div className="p-2">
             <textarea
-              className="w-full min-h-[400px] p-4 text-gray-800 bg-gray-50 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full no-scrollbar h-[600px] p-4 text-gray-800 bg-gray-50 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 overflow-y-auto"
               value={promptContent}
               onChange={(e) => setPromptContent(e.target.value)}
               placeholder="Enter your prompt here..."
@@ -285,7 +294,9 @@ export const GlobalPromptEditor = () => {
             >
               <Tag className="w-4 h-4 text-gray-400" />
               <span className="text-sm font-mono text-gray-700 truncate max-w-[140px]">
-                {assistantTag ? `${assistantTag.slice(0, 8)}...${assistantTag.slice(-8)}` : "No ID"}
+                {assistantTag
+                  ? `${assistantTag.slice(0, 8)}...${assistantTag.slice(-8)}`
+                  : "No ID"}
               </span>
             </div>
 
