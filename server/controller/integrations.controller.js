@@ -12,6 +12,7 @@ const { HighLevel } = require("@gohighlevel/api-client");
 const https = require("https");
 const twilio = require("twilio");
 const { getVapiPhoneId } = require("./assistant.controller");
+const { extractVariables, fillTemplate } = require("../helperFunctions");
 const VoiceResponse = require("twilio").twiml.VoiceResponse;
 
 const SUB_PATH = "/integrations";
@@ -888,8 +889,13 @@ const chargeUserCustomers = async (req, res) => {
 
 const buyUsPhoneNumber = async (req, res) => {
   try {
-    const { numberToBuy, subaccount, assistant } = req.body;
+    let { numberToBuy, subaccount, assistant } = req.body;
     const userId = req.user;
+
+    // add + if not present in number to buy
+    if (!numberToBuy.startsWith("+")) {
+      numberToBuy = `+${numberToBuy.trim()}`;
+    }
 
     const user = await userModel.findById(userId);
 
@@ -929,11 +935,13 @@ const buyUsPhoneNumber = async (req, res) => {
       // smsFallbackUrl: "",
     });
 
-    console.log("SUCCESS! Phone number purchased.");
+    console.log({ purchasedNumber });
+
+    // console.log("SUCCESS! Phone number purchased.");
     // console.log(`SID: ${purchasedNumber.sid}`);
     // console.log(`Number: ${purchasedNumber.phoneNumber}`);
 
-    console.log(getSubAccount);
+    // console.log(getSubAccount);
 
     getAssistant[0].numberDetails.push({
       phoneNum: purchasedNumber?.phoneNumber,
@@ -1000,6 +1008,7 @@ const getAvailableNumbers = async (req, res) => {
   }
 };
 
+// inbound calls handler - check assistant controller for outbound calls handler
 const twilioCallReceiver = async (req, res) => {
   try {
     const { userId, subaccount, assistant } = req.params;
@@ -1027,6 +1036,58 @@ const twilioCallReceiver = async (req, res) => {
 
     console.log({ VAPI_PHONE_NUMBER_ID });
 
+    const inboundDynamicMessage = targetAssistant.inboundDynamicMessage;
+    let greetingsValues = {};
+    let myCustomer = {};
+
+    const checkMessageAvailability =
+      inboundDynamicMessage && inboundDynamicMessage.trim() !== "";
+    
+    const refreshGhlTokensValue = await getGhlTokens(userId);
+
+    if (!refreshGhlTokensValue.status) {
+      throw new Error(
+        `Failed to refresh GHL tokens: ${refreshGhlTokensValue.message}`
+      );
+    }
+
+    const accessToken = refreshGhlTokensValue?.data?.access_token;
+
+    if (checkMessageAvailability) {
+      const response = await axios.get(
+        "https://services.leadconnectorhq.com/contacts/search",
+        {
+          params: {
+            locationId: subaccount,
+            query: callerNumber, // GHL search allows querying by phone number string
+          },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Version: "2021-07-28", // Required GHL API Version
+            Accept: "application/json",
+          },
+        }
+      );
+
+      console.log({ ghlContactSearchResponse: response.data });
+
+      // GHL returns an array of contacts. We check if at least one exists.
+      const contacts = response.data.contacts;
+      if (contacts && contacts.length > 0) {
+        myCustomer = contacts[0];
+      }
+
+      const greetingsVariables = extractVariables(inboundDynamicMessage);
+
+      const variableValues = greetingsVariables.map((variable) => {
+        // if (!myCustomer[variable]) return false;
+        greetingsValues[variable] = myCustomer[variable] || "there!";
+        return true;
+      });
+    }
+
+    const message = fillTemplate(inboundDynamicMessage, greetingsValues);
+
     // Call the Vapi API to start the AI conversation
     const vapiResponse = await axios.post(
       "https://api.vapi.ai/call",
@@ -1039,6 +1100,10 @@ const twilioCallReceiver = async (req, res) => {
           number: callerNumber,
         },
         assistantId: assistant,
+        assistantOverrides: {
+          ...(message && { firstMessage: message }),
+          firstMessageMode: "assistant-speaks-first",
+        },
       },
       {
         headers: {
@@ -1124,8 +1189,12 @@ const importTwilioNumberToVapi = async (req, res) => {
     // this only supports twilio, we can always extend to other services
     // try {
     console.log("Importing Twilio number to Vapi...");
-    const { subaccountId, assistantId, phoneSid, twilioNumber } = req.body;
+    let { subaccountId, assistantId, twilioNumber } = req.body;
     const userId = req.user;
+    // add +1 if not present
+    if (!twilioNumber.startsWith("+")) {
+      twilioNumber = `+${twilioNumber.trim()}`;
+    }
 
     // if (newPhoneNumberId) {
     const user = await userModel.findById(userId);
@@ -1147,6 +1216,17 @@ const importTwilioNumberToVapi = async (req, res) => {
     const getPhoneNumber = getAssistant[0]?.numberDetails.filter(
       (number) => number.phoneNum === twilioNumber
     );
+
+    if (!getPhoneNumber.length) {
+      return res.send({
+        status: false,
+        message:
+          "No phone number with this assistant for this number! Make sure the number is added to the assistant first.",
+      });
+    }
+    const phoneSid = getPhoneNumber[0].phoneSid;
+
+    console.log({ phoneSid });
 
     const VAPI_IMPORT_URL = "https://api.vapi.ai/phone-number";
 
@@ -1191,15 +1271,15 @@ const importTwilioNumberToVapi = async (req, res) => {
       });
 
     // save the id
-    if (!getPhoneNumber.length) {
-      getAssistant.numberDetails.push({
-        phoneNum: twilioNumber,
-        vapiPhoneNumId: newPhoneNumberId,
-        phoneSid,
-      });
-    } else {
-      getPhoneNumber[0].vapiPhoneNumId = newPhoneNumberId;
-    }
+    // if (!getPhoneNumber.length) {
+    //   getAssistant.numberDetails.push({
+    //     phoneNum: twilioNumber,
+    //     vapiPhoneNumId: newPhoneNumberId,
+    //     phoneSid: getPhoneNumber[0].phoneSid,
+    //   });
+    // } else {
+    getPhoneNumber[0].vapiPhoneNumId = newPhoneNumberId;
+    // }
 
     await user.save();
 
@@ -1334,6 +1414,44 @@ const getVapiNumberImportStatus = async (req, res) => {
   }
 };
 
+// to be tested better one has been written in assistant controller
+// which delete both from twilio and from our database and vapi
+const deleteTwilioNumber = async (req, res) => {
+  try {
+    const { phoneSid } = req.body;
+
+    const client = twilio(ACCOUNT_SID, ACCOUNT_AUTH_TOKEN);
+    await client.incomingPhoneNumbers(phoneSid).remove();
+
+    // delete from database
+    const userId = req.user;
+    const user = await userModel.findById(userId);
+
+    user.ghlSubAccountIds.forEach((subaccount) => {
+      subaccount.vapiAssistants.forEach((assistant) => {
+        assistant.numberDetails = assistant.numberDetails.filter(
+          (number) => number.phoneSid !== phoneSid
+        );
+      });
+    });
+
+    // remove number from assistants
+    user.ghlSubAccountIds.forEach((subaccount) => {
+      subaccount.vapiAssistants.forEach((assistant) => {
+        assistant.numberDetails = assistant.numberDetails.filter(
+          (number) => number.phoneSid !== phoneSid
+        );
+      });
+    });
+
+    await user.save();
+
+    return res.send({ status: true, message: "Phone number deleted." });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
 module.exports = {
   ghlAuthorize,
   ghlOauthCallback,
@@ -1355,4 +1473,5 @@ module.exports = {
   importTwilioNumberToVapi,
   getPurchasedNumbers,
   getVapiNumberImportStatus,
+  deleteTwilioNumber,
 };

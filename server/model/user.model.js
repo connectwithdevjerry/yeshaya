@@ -12,6 +12,8 @@ const userSchema = mongoose.Schema({
   stripeAccessToken: { type: String, required: false }, // does not expire
   openAIApiKey: { type: String, required: false },
   ghlAgencyId: { type: String, required: false },
+  walletBalance: { type: Number, default: 0 },
+  autoCardCharging: { type: Boolean, default: false },
   ghlSubAccountIds: [
     {
       accountId: String,
@@ -21,6 +23,11 @@ const userSchema = mongoose.Schema({
         {
           assistantId: String,
           description: String,
+          calendar: String,
+          inboundDynamicMessage: { type: String, required: false },
+          outboundDynamicMessage: { type: String, required: false },
+          knowledgeBaseFileIds: [String],
+          connectedTools: [String],
           numberDetails: [
             {
               phoneNum: String,
@@ -34,6 +41,19 @@ const userSchema = mongoose.Schema({
   ],
   ghlRefreshToken: { type: String, required: false },
   ghlRefreshTokenExpiry: { type: Date, required: false },
+  billingEvents: [
+    {
+      callId: String,
+      type: { type: String, enum: ["call.ended", "call.analysis.completed"] },
+      amount: Number,
+      processedAt: { type: Date, default: Date.now },
+    },
+  ],
+  whiteLabel: {
+    recordType: { type: String },
+    recordName: { type: String },
+    recordValue: { type: String },
+  },
   company: {
     name: { type: String, required: false },
     website: { type: String, required: false },

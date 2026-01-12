@@ -15,6 +15,7 @@ const {
 } = require("../validation_schema");
 const { REFRESH_TOKEN } = require("../constants");
 const client = require("../jwt_db_access");
+const { saveImageToDB } = require("../cloudinaryImageHandler");
 const { default: axios } = require("axios");
 
 const myPayload = (user) => ({
@@ -461,9 +462,13 @@ const getGhlCompanyDetails = async (req, res, next) => {
 const createCompanyDetails = async (req, res, next) => {
   console.log("Creating company...");
 
-  const { name, phoneNum, address, website, industry } = req.body;
+  const { name, phoneNum, address, website, industry, imageBase64 } = req.body;
 
   try {
+    const saveImage = await saveImageToDB(imageBase64, "company-logo", "image");
+
+    console.log({ saveImage });
+
     const user = await userModel.findById(req.user);
     const company = user.company;
     company.name = name;
@@ -471,6 +476,7 @@ const createCompanyDetails = async (req, res, next) => {
     company.address = address;
     company.website = website;
     company.industry = industry;
+    company.logo = saveImage.secure_url;
     await user.save();
 
     return res.send({

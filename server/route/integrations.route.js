@@ -20,6 +20,7 @@ const {
   importTwilioNumberToVapi,
   getPurchasedNumbers,
   getVapiNumberImportStatus,
+  deleteTwilioNumber,
   // admin_super_signup,
 } = require("../controller/integrations.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
@@ -44,12 +45,24 @@ const {
   IMPORT_PHONE_NUM_TO_VAPI,
   GET_PURCHASED_NUMBER,
   GET_VAPI_NUMBER_IMPORT_STATUS,
+  STRIPE_WEBHOOK,
+  DELETE_TWILIO_NUMBER,
+  CALL_BILLING_WEBHOOK,
 } = require("../constants");
+const {
+  stripeWebhook,
+  callBillingWebhook,
+} = require("../controller/payments.controller");
 
 router.get(GHL_AUTHORIZE, verifyAccessToken, ghlAuthorize);
 router.get(GHL_OAUTH_CALLBACK, ghlOauthCallback);
 router.get(STRIPE_AUTHORIZE, verifyAccessToken, stripeAuthorize);
 router.get(STRIPE_OAUTH_CALLBACK, stripeOauthCallback);
+router.post(
+  STRIPE_WEBHOOK,
+  express.raw({ type: "application/json" }),
+  stripeWebhook
+);
 router.get(TEST_OPENAI_KEY, verifyAccessToken, testOpenAIKey);
 router.post(CONNECT_OPENAI, verifyAccessToken, connectOpenAI);
 router.get(TEST_STRIPE_TOKEN, verifyAccessToken, testStripeToken);
@@ -67,7 +80,15 @@ router.post(
   verifyAccessToken,
   importTwilioNumberToVapi
 );
-router.get(GET_VAPI_NUMBER_IMPORT_STATUS, verifyAccessToken, getVapiNumberImportStatus);
+router.get(
+  GET_VAPI_NUMBER_IMPORT_STATUS,
+  verifyAccessToken,
+  getVapiNumberImportStatus
+);
 router.get(GET_PURCHASED_NUMBER, verifyAccessToken, getPurchasedNumbers);
+router.get(DELETE_TWILIO_NUMBER, verifyAccessToken, deleteTwilioNumber);
+
+// router for payments integration
+router.get(CALL_BILLING_WEBHOOK, express.json(), callBillingWebhook);
 
 module.exports = router;
