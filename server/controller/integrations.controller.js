@@ -1036,20 +1036,30 @@ const twilioCallReceiver = async (req, res) => {
 
     console.log({ VAPI_PHONE_NUMBER_ID });
 
-    const inboundDynamicMessage = user.inboundDynamicMessage;
+    const inboundDynamicMessage = targetAssistant.inboundDynamicMessage;
     let greetingsValues = {};
     let myCustomer = {};
 
     const checkMessageAvailability =
       inboundDynamicMessage && inboundDynamicMessage.trim() !== "";
+    
+    const refreshGhlTokensValue = await getGhlTokens(userId);
+
+    if (!refreshGhlTokensValue.status) {
+      throw new Error(
+        `Failed to refresh GHL tokens: ${refreshGhlTokensValue.message}`
+      );
+    }
+
+    const accessToken = refreshGhlTokensValue?.data?.access_token;
 
     if (checkMessageAvailability) {
       const response = await axios.get(
         "https://services.leadconnectorhq.com/contacts/search",
         {
           params: {
-            locationId: locationId,
-            query: phone, // GHL search allows querying by phone number string
+            locationId: subaccount,
+            query: callerNumber, // GHL search allows querying by phone number string
           },
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -1058,6 +1068,8 @@ const twilioCallReceiver = async (req, res) => {
           },
         }
       );
+
+      console.log({ ghlContactSearchResponse: response.data });
 
       // GHL returns an array of contacts. We check if at least one exists.
       const contacts = response.data.contacts;
