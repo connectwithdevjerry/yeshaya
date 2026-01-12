@@ -148,22 +148,32 @@ export const importSubAccounts = createAsyncThunk(
   "importSubAccounts/import",
   async (accountIds, { rejectWithValue }) => {
     try {
-      const response = await axios.post(
-        "https://yeshaya.onrender.com/integrations/import-sub-accounts",
+
+      const response = await apiClient.post(
+        "/integrations/import-sub-accounts",
         { accountIds }
       );
+      console.log("📥 RESPONSE DATA:", response.data);
 
-      console.log("🟢 Import Sub-accounts Response:", response.data);
+      if (
+        response.data?.status === false &&
+        response.data?.message === "Sub-accounts Already Installed!"
+      ) {
+        console.log("ℹ️ Subaccounts already installed, adding flag");
+        return {
+          ...response.data,
+          alreadyInstalled: true,
+        };
+      }
 
-      // Treat "already installed" as a normal response
+      console.log("✅ Import successful, returning data");
       return response.data;
     } catch (error) {
-      console.log("❌ Import Sub-accounts failed:", error);
+      console.error("Error response:", error.response?.data);
       return rejectWithValue(error.response?.data || error.message);
     }
   }
 );
-
 // 🔹 Slice
 const integrationSlice = createSlice({
   name: "integrations",
@@ -325,13 +335,16 @@ const integrationSlice = createSlice({
       })
       .addCase(importSubAccounts.fulfilled, (state, action) => {
         state.loading = false;
-        if (
-          action.payload?.status === false &&
-          action.payload?.message === "Sub-accounts Already Installed!"
-        ) {
-          console.warn("Sub-accounts already installed. No changes made.");
+
+        // If already installed, just log and don't update state
+        if (action.payload?.alreadyInstalled) {
+          console.log(
+            "✅ Subaccounts already installed, no state update needed"
+          );
           return;
         }
+
+        // Otherwise update state with new data
         state.subAccounts = action.payload?.locations || state.subAccounts;
         state.agencyId = action.payload?.agencyId || state.agencyId;
       })

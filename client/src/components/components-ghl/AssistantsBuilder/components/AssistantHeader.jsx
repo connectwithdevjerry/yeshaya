@@ -23,9 +23,13 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { getAssistantById } from "../../../../store/slices/assistantsSlice";
 import { useCurrentAccount } from "../../../../hooks/useCurrentAccount";
+import { LogsModal } from "./LogsModal";
+import { ExperimentsDropdown } from "./ExperimentsDropdown";
+import { CollabSessionDropdown } from "./CollabSessionDropdown";
 
-const IconButton = ({ icon: Icon, tooltip }) => (
+const IconButton = ({ icon: Icon, tooltip, onClick }) => (
   <button
+    onClick={onClick}
     className="p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors duration-150"
     title={tooltip}
     aria-label={tooltip}
@@ -34,10 +38,52 @@ const IconButton = ({ icon: Icon, tooltip }) => (
   </button>
 );
 
+// Helper function to format model display
+const formatModelDisplay = (model) => {
+  if (!model) return "GPT-4o";
+
+  const modelName = model.model || "gpt-4o";
+
+  // Map common model names to display names
+  const modelMap = {
+    "gpt-4o": "GPT-4o",
+    "gpt-4": "GPT-4",
+    "gpt-3.5-turbo": "GPT-3.5 Turbo",
+    "gpt-4-turbo": "GPT-4 Turbo",
+    "claude-3-opus": "Claude 3 Opus",
+    "claude-3-sonnet": "Claude 3 Sonnet",
+    "claude-3-haiku": "Claude 3 Haiku",
+  };
+
+  return modelMap[modelName] || modelName.toUpperCase().replace(/-/g, " ");
+};
+
+// Helper function to get model provider icon
+const getModelIcon = (model) => {
+  if (!model)
+    return "https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg";
+
+  const provider = model.provider?.toLowerCase() || "";
+
+  if (provider === "openai") {
+    return "https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg";
+  } else if (provider === "anthropic") {
+    return "https://cdn.builtin.com/cdn-cgi/image/f=auto,fit=contain,w=200,h=200,q=100/sites/www.builtin.com/files/2022-09/3_50.jpg";
+  } else if (provider === "google") {
+    return "https://cdn-icons-png.flaticon.com/128/15465/15465679.png";
+  }
+
+  // Default to OpenAI
+  return "https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg";
+};
+
 export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [isIssuesModalOpen, setIsIssuesModalOpen] = useState(false);
+  const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
+  const [isExperimentsOpen, setIsExperimentsOpen] = useState(false);
+  const [isUsersOpen, setIsUsersOpen] = useState(false);
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -94,6 +140,13 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
     setIsRenameModalOpen(false);
   };
 
+  const toggleLogsModal = () => {
+    setIsLogsModalOpen((prev) => !prev);
+    setIsModelModalOpen(false);
+    setIsRenameModalOpen(false);
+    setIsIssuesModalOpen(false);
+  };
+
   // ✅ Navigate back with account context
   const handleGoBack = () => {
     if (account) {
@@ -112,7 +165,9 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
   };
 
   const name = selectedAssistant?.name || "New Blank Assistant";
-  const model = selectedAssistant?.model?.model || "GPT-4o";
+  const model = selectedAssistant?.model;
+  const modelDisplay = formatModelDisplay(model);
+  const modelIcon = getModelIcon(model);
   const id = selectedAssistant?.id || assistantId;
 
   return (
@@ -167,25 +222,51 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
           </button>
           <button
             onClick={toggleModelModal}
-            className="flex items-center px-1 rounded-full text-sm font-medium transition-colors duration-150 "
+            className="flex gap-1 items-center px-1 rounded-full text-sm font-medium transition-colors duration-150 "
           >
             <img
-              src="https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg"
-              alt="OpenAi"
-              className="w-[25px]"
+              src={modelIcon}
+              alt="Model Provider"
+              className="w-[26px] rounded-md"
             />
             <div className="hover:bg-slate-100 flex items-center py-1 rounded-md">
-              <span className="font-normal">{model}</span>
+              <span className="font-normal lowercase">
+                {modelDisplay?.replace(/\s+/g, "-")}
+              </span>
+
               <ChevronDown className="w-4 h-4" />
             </div>
           </button>
         </div>
 
-        <div className="flex items-center space-x-1">
-          <IconButton  icon={FlaskConical} tooltip="Experiments" />
-          <IconButton icon={Users} tooltip="Users" />
+        <div className="flex items-center space-x-1 relative">
+          <IconButton
+            icon={FlaskConical}
+            tooltip="Experiments"
+            onClick={() => setIsExperimentsOpen(!isExperimentsOpen)}
+          />
+          <ExperimentsDropdown
+            isOpen={isExperimentsOpen}
+            onClose={() => setIsExperimentsOpen(false)}
+          />
+
+          <div className="relative">
+            <IconButton
+              icon={Users}
+              tooltip="Users"
+              onClick={() => setIsUsersOpen(!isUsersOpen)}
+            />
+            <CollabSessionDropdown
+              isOpen={isUsersOpen}
+              onClose={() => setIsUsersOpen(false)}
+            />
+          </div>
           <IconButton icon={Rocket} tooltip="Testing Lab" />
-          <IconButton icon={Sparkles} tooltip="Logs" />
+          <IconButton
+            icon={Sparkles}
+            tooltip="Logs"
+            onClick={toggleLogsModal}
+          />
           <IconButton icon={RotateCcw} tooltip="Refresh" />
         </div>
       </div>
@@ -203,7 +284,7 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
 
         <button
           onClick={onSave}
-          className="flex items-center space-x-2 px-2 py-1 bg-green-50 border border-green-5  00 text-green-500 font-medium rounded-md shadow-sm transition"
+          className="flex items-center space-x-2 px-2 py-1 bg-green-50 border border-green-500 text-green-500 font-medium rounded-md shadow-sm transition"
         >
           <Save className="w-4 h-4" />
           <span>Save Changes</span>
@@ -217,6 +298,7 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
         onClose={toggleRenameModal}
       />
       <IssuesModal isOpen={isIssuesModalOpen} onClose={toggleIssuesModal} />
+      <LogsModal isOpen={isLogsModalOpen} onClose={toggleLogsModal} />
     </header>
   );
 };

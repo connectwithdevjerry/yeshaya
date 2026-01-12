@@ -1,102 +1,144 @@
-// src/pages/TagsPage.jsx
 import React, { useState } from 'react';
-import { Search, ChevronLeft, ChevronRight, Ban, Home } from 'lucide-react';
-import CreateActiveTagModal from  '../../components/components-ghl/ActiveTag/ActiveTag';
+import { 
+  Search, 
+  ChevronLeft, 
+  ChevronRight, 
+  Home, 
+  Tag as TagIcon, 
+  MoreHorizontal, 
+  Trash2,
+  MoveRight
+} from 'lucide-react';
+import CreateActiveTagModal from '../../components/components-ghl/ActiveTag/ActiveTag';
 
-const activeTags = []; 
+// Sample data from the image
+const activeTags = [
+  {
+    id: 1,
+    name: 'New Tag zO0xy0',
+    updated: 'Oct 28, 2025 1:43 pm',
+    tagValue: '1761655360642×166378648116133900',
+    assistant: 'Obaloluwa'
+  },
+  {
+    id: 2,
+    name: 'New Tag k6PwBP',
+    updated: 'Oct 28, 2025 4:44 pm',
+    tagValue: '1761663053864×888663562962600000',
+    assistant: 'Jerry'
+  }
+];
 
 const TagsPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const headers = ['NAME', 'UPDATED', 'TAG', 'LINKED ASSISTANT']; 
+  const headers = ['NAME', 'UPDATED', 'TAG', 'LINKED ASSISTANT'];
 
   return (
-    <div className="flex-grow bg-gray-50 p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="flex-grow bg-[#f9fafb]  p-4 md:p-8 font-sans text-gray-900">
+      <div className="max-w-full mx-auto">
         
-        
-        <div className="flex justify-end items-center mb-6">
-          <div className="relative mr-4"> 
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search for anything..." 
-              className="pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-            />
-          </div>
-          
+        {/* Top Action Bar */}
+        <div className="flex justify-end items-center mb-8 gap-4">
           <button
             onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors flex items-center"
+            className="px-4 py-2 bg-[#0f172a] text-white text-sm font-bold rounded-md shadow-sm hover:bg-slate-800 transition-all flex items-center"
           >
-            + Create Active Tag
+            <span className="mr-1">+</span> Create Active Tag
           </button>
         </div>
 
-        <div className="text-sm font-medium text-gray-600 mb-4 flex items-center space-x-2">
-            <Home className='w-4 h-4' />
+        {/* Breadcrumb / Counter */}
+        <div className="text-sm font-bold text-gray-800 mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Home className="w-4 h-4 text-gray-600" />
             <span>Home</span>
-            
-            <span className="ml-auto text-gray-400">0</span>
+          </div>
+          <span className="text-gray-400 text-xs">2</span>
         </div>
 
- 
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                {headers.map((header) => (
-                  <th 
-                    key={header}
-                    scope="col" 
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    {header}
-                  </th>
-                ))}
+        {/* Table Container */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden mb-4">
+          <table className="w-full text-left table-fixed border-collapse">
+            <thead>
+              <tr className="bg-[#f8fafc] text-[#64748b] border-b border-gray-100">
+                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider w-[25%]">NAME</th>
+                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider w-[20%]">UPDATED</th>
+                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider w-[30%]">TAG</th>
+                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider w-[15%]">LINKED ASSISTANT</th>
+                <th className="px-6 py-4 w-[10%]"></th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {activeTags.length === 0 ? (
-                <tr>
-                  <td colSpan={headers.length} className="px-6 py-12 text-center text-gray-500 text-sm">
-                    <div className="flex flex-col items-center justify-center">
-                      <Ban className="w-8 h-8 text-gray-400 mb-2" />
-                      No active tags to display
+            <tbody className="divide-y divide-gray-50">
+              {activeTags.map((tag) => (
+                <tr key={tag.id} className="hover:bg-gray-50/50 transition-colors group">
+                  {/* Name Column */}
+                  <td className="px-6 py-5">
+                    <div className="flex items-center gap-3">
+                      <TagIcon className="w-4 h-4 text-gray-900 shrink-0" />
+                      <span className="text-sm font-bold text-gray-900 truncate">{tag.name}</span>
+                    </div>
+                  </td>
+                  
+                  {/* Updated Column */}
+                  <td className="px-6 py-5 text-sm text-gray-600 truncate">
+                    {tag.updated}
+                  </td>
+                  
+                  {/* Tag ID Column */}
+                  <td className="px-6 py-5 text-sm text-gray-800 font-medium truncate">
+                    {tag.tagValue}
+                  </td>
+                  
+                  {/* Linked Assistant Column */}
+                  <td className="px-6 py-5">
+                    <button className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-md text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors whitespace-nowrap">
+                      {tag.assistant}
+                      <MoveRight size={14} className="text-gray-400" />
+                    </button>
+                  </td>
+
+                  {/* Actions Column */}
+                  <td className="px-6 py-5">
+                    <div className="flex items-center justify-end gap-2">
+                      <button className="p-1.5 border border-gray-200 rounded hover:bg-gray-100 text-gray-400">
+                        <MoreHorizontal size={14} />
+                      </button>
+                      <button className="p-1.5 border border-red-50 rounded hover:bg-red-50 text-red-200 hover:text-red-500 transition-colors">
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </td>
                 </tr>
-              ) : (
-                
-                null
-              )}
+              ))}
             </tbody>
           </table>
         </div>
 
-       
-        <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-          <div className="flex items-center space-x-2 text-sm text-gray-700">
-            <div className="relative">
-              <select className="pl-3 pr-8 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
-                <option>10</option>
-              </select>
+        {/* Footer / Pagination */}
+        <div className="flex flex-col sm:flex-row justify-between items-center px-4 py-3 bg-white border border-gray-200 rounded-lg text-xs text-gray-500">
+          <div className="flex items-center gap-3 mb-4 sm:mb-0">
+            <select className="bg-white border border-gray-200 rounded px-2 py-1 outline-none">
+              <option>10</option>
+            </select>
+            <div className="flex items-center gap-2 border-l border-gray-200 pl-3">
+              <span>Showing 1 - 10</span>
+              <span className="font-bold text-gray-800">2 Results</span>
             </div>
-            <span>Showing 1-10</span>
-            <span className="font-medium text-gray-500">0 Results</span>
           </div>
-          <div className="flex items-center space-x-2 text-sm">
-            <div className="text-gray-500">Page 1 of 1</div>
-            <button className="p-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50 disabled:opacity-50" disabled>
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button className="p-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50" disabled>
-              <ChevronRight className="w-4 h-4" />
-            </button>
+
+          <div className="flex items-center gap-4">
+            <span>Page 1 of 1</span>
+            <div className="flex items-center gap-1">
+              <button disabled className="p-1 text-gray-300 cursor-not-allowed">
+                <ChevronLeft size={18} />
+              </button>
+              <button disabled className="p-1 text-gray-300 cursor-not-allowed">
+                <ChevronRight size={18} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
-
 
       <CreateActiveTagModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </div>

@@ -3,10 +3,10 @@ import {
   ArrowLeft,
   Pencil,
   Search,
-  ListOrdered, 
-  FileText, 
-  Globe, 
-  Type, 
+  ListOrdered,
+  FileText,
+  Globe,
+  Type,
   Trash2,
   MoreVertical,
   Home,
@@ -15,12 +15,14 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import EditNameModal from "./KnowledgeDetails/EditNameModal";
-
+import UploadModal from "./UploadModal";
+import EmbeddingPlaygroundModal from "./EmbeddingPlaygroundModal";
+import DataSourceOptionsModal from "./DataSourceOptionsModal";
 
 const dataSources = [
   {
     id: 1,
-    source: "New data source",
+    source: "Testing Faq upload",
     dataPoints: "2 vectors",
     type: "faq",
     created: "Oct 21, 2025 4:21 pm",
@@ -28,7 +30,7 @@ const dataSources = [
   },
   {
     id: 2,
-    source: "New data source",
+    source: "Testing file upload",
     dataPoints: "1 vectors",
     type: "file",
     created: "Oct 21, 2025 4:22 pm",
@@ -36,7 +38,7 @@ const dataSources = [
   },
   {
     id: 3,
-    source: "New data source",
+    source: "Testing url upload",
     dataPoints: "1 vectors",
     type: "url",
     created: "Oct 21, 2025 4:23 pm",
@@ -44,7 +46,7 @@ const dataSources = [
   },
   {
     id: 4,
-    source: "New data source",
+    source: "Testing text upload",
     dataPoints: "2 vectors",
     type: "text",
     created: "Oct 21, 2025 4:24 pm",
@@ -87,68 +89,76 @@ const StatCard = ({ title, count, colorClass, isActive }) => (
   </div>
 );
 
-const KnowledgeDetailPage = ({isOpen, onClose}) => {
+const KnowledgeDetailPage = () => {
   const totalSources = dataSources.length;
   const completeSources = dataSources.filter(
     (d) => d.status === "Complete"
   ).length;
   const errorSources = dataSources.filter((d) => d.status === "Error").length;
-    const [OpenEditNameModal, setOpenEditNameModal] = useState(false)
+  // States for Modals
+  const [OpenEditNameModal, setOpenEditNameModal] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+  const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
+  const [selectedSource, setSelectedSource] = useState(null);
 
   const headers = ["SOURCE", "DATA POINTS", "TYPE", "CREATED", "STATUS"];
 
-  // Mock function for navigation/action
-  const handleBack = () => console.log("Navigating back to KnowledgePage...");
-  const handleTest = () => console.log("Testing knowledge base...");
-  const handleNewData = () => console.log("Adding new data...");
-  const handleEditName = () => {
-    setOpenEditNameModal(true)
+  const handleBack = () => console.log("Navigating back...");
+  const handleTest = () => {
+    setIsTestModalOpen(true);
   };
+  const handleNewData = () => {
+    setIsUploadModalOpen(true);
+  };
+
+  const handleOpenOptions = (source) => {
+    setSelectedSource(source);
+    setIsOptionsModalOpen(true);
+  };
+
+  const handleEditName = () => setOpenEditNameModal(true);
 
   return (
     <div className="flex-grow  bg-gray-50">
-            {/* Knowledge Base Header */}
-        <div className="flex p-2 bg-white border justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={handleBack}
-              className="p-1 border  rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-              <ArrowLeft className="w-8 h-6" />
-            </button>
-            <div className="">
-              <div className="text-xl flex items-center font-semibold text-gray-900">
-                My Blogs
-                <button
-                  onClick={handleEditName}
-                  className="ml-2"
-                >
-                  <Pencil className="w-6 h-6 p-1 rounded-md  hover:bg-gray-200" />
-                </button>
-              </div>
-              <div className="flex  gap-3 items-center text-sm text-gray-500">
-                1761...6300
-                <Copy className="w-6 h-6 p-1 rounded-md  hover:bg-gray-200" />
-              </div>
+      {/* Knowledge Base Header */}
+      <div className="flex p-2 bg-white border justify-between items-center">
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={handleBack}
+            className="p-1 border  rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <ArrowLeft className="w-8 h-6" />
+          </button>
+          <div className="">
+            <div className="text-xl flex items-center font-semibold text-gray-900">
+              My Blogs
+              <button onClick={handleEditName} className="ml-2">
+                <Pencil className="w-6 h-6 p-1 rounded-md  hover:bg-gray-200" />
+              </button>
+            </div>
+            <div className="flex  gap-3 items-center text-sm text-gray-500">
+              1761...6300
+              <Copy className="w-6 h-6 p-1 rounded-md  hover:bg-gray-200" />
             </div>
           </div>
-          <div className="flex items-center space-x-3 pr-3">
-            <button
-              onClick={handleTest}
-              className="px-4 py-2 text-md  font-medium rounded-lg bg-[#410fcc] text-white border border-blue-600 hover:bg-blue-700 transition-colors"
-            >
-              Test Results
-            </button>
-            <button
-              onClick={handleNewData}
-              className="px-4 py-2 bg-black text-white text-md font-medium rounded-lg shadow-md hover:bg-gray-800 transition-colors flex items-center space-x-1"
-            >
-              + New Data
-            </button>
-          </div>
         </div>
+        <div className="flex items-center space-x-3 pr-3">
+          <button
+            onClick={handleTest}
+            className="px-4 py-2 text-md  font-medium rounded-lg bg-[#410fcc] text-white border border-blue-600 hover:bg-blue-700 transition-colors"
+          >
+            Test Results
+          </button>
+          <button
+            onClick={handleNewData}
+            className="px-4 py-2 bg-black text-white text-md font-medium rounded-lg shadow-md hover:bg-gray-800 flex items-center space-x-1"
+          >
+            + New Data
+          </button>
+        </div>
+      </div>
       <div className="max-w-7xl px-6 mx-auto space-y-8">
-
         {/* Stat Cards */}
         <div className="grid grid-cols-3 gap-6 pt-4">
           <StatCard
@@ -240,12 +250,12 @@ const KnowledgeDetailPage = ({isOpen, onClose}) => {
                   {/* ACTIONS */}
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end items-center space-x-2">
-                      {/* Options Button */}
-                      <button className="p-1 border bg-gray-100 rounded-md text-gray-400 hover:bg-gray-100 transition-colors">
+                      <button
+                        onClick={() => handleOpenOptions(data)}   
+                        className="p-1 border bg-gray-100 rounded-md text-gray-400 hover:bg-gray-200 transition-colors"
+                      >
                         <MoreHorizontal className="w-4 h-4" />
                       </button>
-
-                      {/* Delete Button */}
                       <button className="p-1 border bg-red-200 rounded-md text-red-500 hover:bg-red-100 transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -261,8 +271,24 @@ const KnowledgeDetailPage = ({isOpen, onClose}) => {
         isOpen={OpenEditNameModal}
         onClose={() => setOpenEditNameModal(false)}
       />
-    </div>
 
+      <UploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+      />
+
+      <EmbeddingPlaygroundModal
+        isOpen={isTestModalOpen}
+        onClose={() => setIsTestModalOpen(false)}
+        knowledgeBaseName="My Blogs"
+      />
+
+      <DataSourceOptionsModal 
+        isOpen={isOptionsModalOpen}
+        onClose={() => setIsOptionsModalOpen(false)}
+        dataSource={selectedSource}
+      />
+    </div>
   );
 };
 

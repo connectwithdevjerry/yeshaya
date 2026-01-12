@@ -20,8 +20,10 @@ import { VoiceLabView } from "./VoiceLab";
 import { ToolkitSidebar } from "./AssistantSidebar";
 import { GeneratePromptModal } from "./GeneratePromptModal";
 import DynamicGreetingModal from "./DynamicGreetingModal";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { VoiceMenuDrawer } from "./VoiceMenu";
+import { VoiceSettingsDropdown } from "./VoiceMenuModals/VoiceSettingsDropdown";
+import { PromptSnippetsDropdown } from "./PromptSnippetsModal";
 
 const TabButton = ({ text, isActive, onClick }) => (
   <button
@@ -38,21 +40,128 @@ const TabButton = ({ text, isActive, onClick }) => (
 
 export const GlobalPromptEditor = () => {
   const [activeTab, setActiveTab] = useState("Builder");
-  const [promptContent, setPromptContent] = useState(
-    "Enter your prompt here..."
-  );
+  const [promptContent, setPromptContent] = useState("");
   const [isToolkitOpen, setIsToolkitOpen] = useState(true);
-  const [isGeneratePromptModalOpen, setIsGeneratePromptModalOpen] =
-    useState(false);
-  const [isDynamicGreetingModalOpen, setIsDynamicGreetingModalOpen] =
-    useState(false);
+  const [isGeneratePromptModalOpen, setIsGeneratePromptModalOpen] = useState(false);
+  const [isDynamicGreetingModalOpen, setIsDynamicGreetingModalOpen] = useState(false);
+  const [isSnippetsOpen, setIsSnippetsOpen] = useState(false);
   const maxChars = 8024;
   const charCount = promptContent.length;
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   // ✅ Get assistant data from Redux
   const { selectedAssistant } = useSelector((state) => state.assistants);
-  const [voiceDisplay, setVoiceDisplay] = useState("Marrisa");
+  const [voiceDisplay, setVoiceDisplay] = useState("Select Voice");
+  const [modelDisplay, setModelDisplay] = useState("GPT-4o");
+  const [phoneNumber, setPhoneNumber] = useState("+1222342743");
+  const [assistantTag, setAssistantTag] = useState("");
+
+  // Helper function to format voice display name
+  const formatVoiceDisplay = (voice) => {
+    if (!voice) return "Select Voice";
+    
+    // If it's an Azure voice, extract the name
+    if (voice.provider === "azure" && voice.voiceId) {
+      // Extract name from format like "en-US-EmmaNeural"
+      const parts = voice.voiceId.split("-");
+      const name = parts[parts.length - 1].replace("Neural", "");
+      return name; // Returns "Emma"
+    }
+    
+    // For ElevenLabs or other providers
+    if (voice.provider === "elevenlabs" || voice.provider === "playht") {
+      return voice.voiceId || "Select Voice";
+    }
+    
+    // Default
+    return voice.voiceId || "Select Voice";
+  };
+
+  // Helper function to format model display
+  const formatModelDisplay = (model) => {
+    if (!model) return "GPT-4o";
+    
+    const modelName = model.model || "gpt-4o";
+    
+    // Map common model names to display names
+    const modelMap = {
+      "gpt-4o": "GPT-4o",
+      "gpt-4": "GPT-4",
+      "gpt-3.5-turbo": "GPT-3.5 Turbo",
+      "claude-3-opus": "Claude 3 Opus",
+      "claude-3-sonnet": "Claude 3 Sonnet",
+    };
+    
+    return modelMap[modelName] || modelName;
+  };
+
+  // ✅ Populate all fields when assistant data loads
+  useEffect(() => {
+    if (selectedAssistant) {
+      console.log("📝 Populating assistant data:", selectedAssistant);
+      
+      // Set prompt content
+      const firstMessage = selectedAssistant.firstMessage || "";
+      const endCallPhrases = selectedAssistant.endCallPhrases || [];
+
+      let formattedContent = firstMessage;
+
+      if (endCallPhrases.length > 0) {
+        formattedContent += `\n\n--- End Call Phrases ---\n${endCallPhrases
+          .map((phrase) => `• ${phrase}`)
+          .join("\n")}`;
+      }
+
+      setPromptContent(formattedContent);
+
+      // Set voice display
+      if (selectedAssistant.voice) {
+        setVoiceDisplay(formatVoiceDisplay(selectedAssistant.voice));
+      }
+
+      // Set model display
+      if (selectedAssistant.model) {
+        setModelDisplay(formatModelDisplay(selectedAssistant.model));
+      }
+
+      // Set assistant tag/ID
+      if (selectedAssistant.id) {
+        setAssistantTag(selectedAssistant.id);
+      }
+
+      // Set phone number if available
+      // Note: The API response doesn't include phone number, 
+      // so you might need to fetch it separately or add it to the assistant data
+      if (selectedAssistant.phoneNumber) {
+        setPhoneNumber(selectedAssistant.phoneNumber);
+      }
+    }
+  }, [selectedAssistant]);
+
+  // Helper function to navigate with account context
+  const getContextualPath = (targetRoute) => {
+    const agencyid = searchParams.get("agencyid");
+    const subaccount = searchParams.get("subaccount");
+    const allow = searchParams.get("allow");
+    const myname = searchParams.get("myname");
+    const myemail = searchParams.get("myemail");
+
+    if (agencyid && subaccount) {
+      const params = new URLSearchParams({
+        agencyid,
+        subaccount,
+        ...(allow && { allow }),
+        ...(myname && { myname }),
+        ...(myemail && { myemail }),
+        route: targetRoute,
+      });
+      return `/app?${params.toString()}`;
+    }
+
+    return targetRoute;
+  };
 
   const toggleToolkit = () => setIsToolkitOpen((prev) => !prev);
   const openGeneratePromptModal = () => setIsGeneratePromptModalOpen(true);
@@ -62,30 +171,7 @@ export const GlobalPromptEditor = () => {
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
   const openVoiceMenu = () => setIsVoiceMenuOpen(true);
   const closeVoiceMenu = () => setIsVoiceMenuOpen(false);
-
-  // ✅ Populate prompt content when assistant data loads
-  useEffect(() => {
-    if (selectedAssistant) {
-      const firstMessage = selectedAssistant.firstMessage || "";
-      const endCallPhrases = selectedAssistant.endCallPhrases || [];
-
-      // Format the prompt content
-      let formattedContent = firstMessage;
-
-      if (endCallPhrases.length > 0) {
-        formattedContent += `\n\nEnd Call Phrases:\n${endCallPhrases
-          .map((phrase) => `- ${phrase}`)
-          .join("\n")}`;
-      }
-
-      setPromptContent(formattedContent);
-
-      // Update voice display
-      if (selectedAssistant.voice?.voiceId) {
-        setVoiceDisplay(selectedAssistant.voice.voiceId);
-      }
-    }
-  }, [selectedAssistant]);
+  const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (activeTab !== "Builder") {
@@ -127,9 +213,19 @@ export const GlobalPromptEditor = () => {
               <button className="hover:bg-blue-50 p-2 flex items-center gap-1">
                 <Tags size={15} /> Fields & Values
               </button>
-              <button className="hover:bg-blue-50 p-2 flex items-center gap-1">
-                <Pencil size={15} /> Add Snippet
-              </button>
+              <div className="relative">
+                <button
+                  className="hover:bg-blue-50 p-2 flex items-center gap-1"
+                  onClick={() => setIsSnippetsOpen(!isSnippetsOpen)}
+                >
+                  <Pencil size={15} /> Add Snippet
+                </button>
+
+                <PromptSnippetsDropdown
+                  isOpen={isSnippetsOpen}
+                  onClose={() => setIsSnippetsOpen(false)}
+                />
+              </div>
             </div>
 
             {/* Right Section */}
@@ -167,7 +263,7 @@ export const GlobalPromptEditor = () => {
   return (
     <div className="flex flex-col flex-1 bg-white relative">
       {/* Tabs Header */}
-      <div className="flex justify-between items-center py-2 px-4 border-b border-gray-200 ">
+      <div className="flex justify-between items-center py-2 px-4 border-b border-gray-200">
         <div className="flex space-x-1">
           {["Builder", "Voice Lab", "Chat Lab"].map((tab) => (
             <TabButton
@@ -181,15 +277,40 @@ export const GlobalPromptEditor = () => {
 
         {/* Right Controls */}
         <div className="flex gap-2 items-center">
-          <div
-            onClick={() => navigate("/activetags")}
-            className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer"
-          >
-            <Tag className="w-4 h-4 text-gray-400" />
-            <span className="text-sm font-mono text-gray-700 truncate max-w-[140px]">
-              1761056664694×928651361970399400
-            </span>
-            <div className="flex items-center space-x-2">
+          {/* Assistant Tag */}
+          <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
+            <div
+              className="flex items-center space-x-2"
+              onClick={() => navigate(getContextualPath("/activetags"))}
+            >
+              <Tag className="w-4 h-4 text-gray-400" />
+              <span className="text-sm font-mono text-gray-700 truncate max-w-[140px]">
+                {assistantTag ? `${assistantTag.slice(0, 8)}...${assistantTag.slice(-8)}` : "No ID"}
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2 border-l-2 hover:text-gray-600">
+              <button
+                className="text-gray-400 p-1 rounded-full hover:bg-gray-100"
+                title="Settings"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Phone Number */}
+          <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
+            <div
+              onClick={() => navigate(getContextualPath("/call"))}
+              className="flex items-center space-x-2"
+            >
+              <Phone className="w-4 h-4 text-gray-400" />
+              <span className="text-sm font-mono text-gray-700 truncate max-w-[120px]">
+                {phoneNumber}
+              </span>
+            </div>
+            <div className="flex items-center space-x-2 border-l-2">
               <button
                 className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
                 title="Settings"
@@ -198,39 +319,37 @@ export const GlobalPromptEditor = () => {
               </button>
             </div>
           </div>
-          <div
-            onClick={() => navigate("/numbers")}
-            className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer"
-          >
-            <Phone className="w-4 h-4 text-gray-400" />
-            <span className="text-sm font-mono text-gray-700 truncate max-w-[120px]">
-              +1222342743
-            </span>
-            <div className="flex items-center space-x-2">
-              <button
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
-                title="Settings"
+
+          {/* Voice Selection */}
+          <div className="relative">
+            <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
+              <div
+                className="flex items-center space-x-2"
+                onClick={openVoiceMenu}
               >
-                <Settings className="w-4 h-4" />
-              </button>
+                <Volume2 className="w-4 h-4 text-gray-400" />
+                <span className="text-sm font-mono text-gray-700 truncate max-w-[150px]">
+                  {voiceDisplay}
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-2 border-l-2 pl-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsVoiceSettingsOpen(!isVoiceSettingsOpen);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                  title="Settings"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </div>
-          <div
-            onClick={openVoiceMenu}
-            className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer"
-          >
-            <Volume2 className="w-4 h-4 text-gray-400" />
-            <span className="text-sm font-mono text-gray-700 truncate max-w-[150px]">
-              {voiceDisplay}
-            </span>
-            <div className="flex items-center space-x-2">
-              <button
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
-                title="Settings"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-            </div>
+            <VoiceSettingsDropdown
+              isOpen={isVoiceSettingsOpen}
+              onClose={() => setIsVoiceSettingsOpen(false)}
+            />
           </div>
         </div>
       </div>
