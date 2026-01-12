@@ -27,40 +27,6 @@ app.use("/auth", authRoutes);
 app.use("/integrations", integrationsRoutes);
 app.use("/assistants", assistantsRoutes);
 
-app.get("/dashboard", verifyAccessToken, async (req, res) => {
-  const beaconRequests = await BeaconRequestModel.find({
-    surveyor: req.user,
-  }).sort({
-    createdAt: 1,
-  });
-  const lodgeRequests = await LodgementModel.find({
-    createdBy: req.user,
-  }).sort({ createdAt: 1 });
-
-  const num = Math.random() < 0.5 ? 2 : 3;
-  const lnum = Math.random() < 0.5 ? 2 : 3;
-
-  const beaconReq = await BeaconRequestModel.find({
-    approval_status: APPROVED,
-    surveyor: req.user,
-  });
-  const lodgeReq = await LodgementModel.find({
-    approval_status: APPROVED,
-    createdBy: req.user,
-  });
-
-  return res.send({
-    status: true,
-    recentActivities: [
-      ...beaconRequests.slice(0, num),
-      ...lodgeRequests.slice(0, lnum),
-    ],
-    reqBeaconsTotal: beaconRequests.length,
-    reqLodgeTotal: lodgeRequests.length,
-    approved: beaconReq.length + lodgeReq.length,
-  });
-});
-
 app.get("/", (req, res) => {
   res.send("homepage");
 });

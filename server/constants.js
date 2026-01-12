@@ -36,13 +36,30 @@ const GET_COMPANY_DETAILS = "/company-details";
 const REGISTER_COMPANY = "/register-company";
 const GET_VAPI_NUMBER_IMPORT_STATUS = "/vapi-number-import-status";
 const DELETE_NUM_FROM_VAPI = "/delete-number-from-vapi";
-
+const STRIPE_WEBHOOK = "/stripe/webhook";
+const ADD_TOOL = "/add-tool";
+const DELETE_TOOL = "/delete-tool";
+const ADD_CALENDAR = "/add-calendar";
+const GET_TOOLS = "/get-tools";
+const ADD_DYNAMIC_MESSAGE = "/add-dynamic-message";
+const GET_DYNAMIC_MESSAGE = "/get-dynamic-message";
+const ADD_KNOWLEDGE_BASES = "/add-knowledge-bases";
+const GET_KNOWLEDGE_BASES = "/get-knowledge-bases";
+const GET_ASSISTANT_CALL_LOGS = "/get-assistant-call-logs";
+const GET_FULL_REPORT = "/get-full-report";
+const MAKE_OUTBOUND_CALL = "/make-outbound-call";
+const GET_AVAILABLE_GHL_CALENDARS = "/get-available-ghl-calendars";
+const GET_CONNECTED_CALENDARS = "/get-connected-calendars";
+const DELETE_TWILIO_NUMBER = "/delete-twilio-number";
+const CALL_BILLING_WEBHOOK = "/billing/webhook";
+const GENERATE_OUTBOUND_CALL_URL = "/generate-outbound-call-url";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
 module.exports = {
   USER,
   USER_SIGNUP,
+  STRIPE_WEBHOOK,
   USER_SIGNIN,
   USER_FORGOT_PASS,
   USER_RESET_PASS,
@@ -79,4 +96,20 @@ module.exports = {
   GET_COMPANY_DETAILS,
   REGISTER_COMPANY,
   DELETE_NUM_FROM_VAPI,
+  ADD_TOOL,
+  DELETE_TOOL,
+  ADD_CALENDAR,
+  GET_TOOLS,
+  ADD_DYNAMIC_MESSAGE,
+  GET_DYNAMIC_MESSAGE,
+  ADD_KNOWLEDGE_BASES,
+  GET_KNOWLEDGE_BASES,
+  GET_ASSISTANT_CALL_LOGS,
+  GET_FULL_REPORT,
+  MAKE_OUTBOUND_CALL,
+  GET_AVAILABLE_GHL_CALENDARS,
+  GET_CONNECTED_CALENDARS,
+  DELETE_TWILIO_NUMBER,
+  CALL_BILLING_WEBHOOK,
+  GENERATE_OUTBOUND_CALL_URL,
 };
