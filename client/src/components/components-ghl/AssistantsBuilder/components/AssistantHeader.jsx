@@ -284,7 +284,7 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
 
         <button
           onClick={onSave}
-          className="flex items-center space-x-2 px-2 py-1 bg-green-50 border border-green-500 text-green-500 font-medium rounded-md shadow-sm transition"
+          className="flex items-center space-x-2 px-2 py-1 bg-green-50 border border-green-500 text-green-500 font-medium rounded-md shadow-sm transition hover:bg-green-100"
         >
           <Save className="w-4 h-4" />
           <span>Save Changes</span>

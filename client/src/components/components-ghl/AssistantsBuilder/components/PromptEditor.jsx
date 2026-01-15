@@ -38,9 +38,9 @@ const TabButton = ({ text, isActive, onClick }) => (
   </button>
 );
 
-export const GlobalPromptEditor = () => {
+export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
   const [activeTab, setActiveTab] = useState("Builder");
-  const [promptContent, setPromptContent] = useState("");
+  // const [promptContent, setPromptContent] = useState("");
   const [isToolkitOpen, setIsToolkitOpen] = useState(true);
   const [isGeneratePromptModalOpen, setIsGeneratePromptModalOpen] =
     useState(false);
@@ -60,25 +60,20 @@ export const GlobalPromptEditor = () => {
   const [phoneNumber, setPhoneNumber] = useState("+1222342743");
   const [assistantTag, setAssistantTag] = useState("");
 
-  // ✅ Handle snippet insertion
   const handleAddSnippet = (snippetText) => {
     setPromptContent((prev) => prev + snippetText);
     console.log("✅ Snippet added to prompt");
   };
 
-  // Helper function to format voice display name
   const formatVoiceDisplay = (voice) => {
     if (!voice) return "Select Voice";
 
-    // If it's an Azure voice, extract the name
     if (voice.provider === "azure" && voice.voiceId) {
-      // Extract name from format like "en-US-EmmaNeural"
       const parts = voice.voiceId.split("-");
       const name = parts[parts.length - 1].replace("Neural", "");
-      return name; // Returns "Emma"
+      return name;
     }
 
-    // For ElevenLabs or other providers
     if (voice.provider === "elevenlabs" || voice.provider === "playht") {
       return voice.voiceId || "Select Voice";
     }
@@ -87,13 +82,11 @@ export const GlobalPromptEditor = () => {
     return voice.voiceId || "Select Voice";
   };
 
-  // Helper function to format model display
   const formatModelDisplay = (model) => {
     if (!model) return "GPT-4o";
 
     const modelName = model.model || "gpt-4o";
 
-    // Map common model names to display names
     const modelMap = {
       "gpt-4o": "GPT-4o",
       "gpt-4": "GPT-4",
@@ -107,10 +100,7 @@ export const GlobalPromptEditor = () => {
 
   // ✅ Populate all fields when assistant data loads
   useEffect(() => {
-    if (selectedAssistant) {
-      console.log("📝 Populating assistant data:", selectedAssistant);
-
-      // Set prompt content
+    if (selectedAssistant && !promptContent) {
       const firstMessage = selectedAssistant.firstMessage || "";
       const endCallPhrases = selectedAssistant.endCallPhrases || [];
 
@@ -124,31 +114,22 @@ export const GlobalPromptEditor = () => {
 
       setPromptContent(formattedContent);
 
-      // Set voice display
+      // Set other UI displays
       if (selectedAssistant.voice) {
         setVoiceDisplay(formatVoiceDisplay(selectedAssistant.voice));
       }
-
-      // Set model display
       if (selectedAssistant.model) {
         setModelDisplay(formatModelDisplay(selectedAssistant.model));
       }
-
-      // Set assistant tag/ID
       if (selectedAssistant.id) {
         setAssistantTag(selectedAssistant.id);
       }
-
-      // Set phone number if available
-      // Note: The API response doesn't include phone number,
-      // so you might need to fetch it separately or add it to the assistant data
       if (selectedAssistant.phoneNumber) {
         setPhoneNumber(selectedAssistant.phoneNumber);
       }
     }
   }, [selectedAssistant]);
 
-  // Helper function to navigate with account context
   const getContextualPath = (targetRoute) => {
     const agencyid = searchParams.get("agencyid");
     const subaccount = searchParams.get("subaccount");
