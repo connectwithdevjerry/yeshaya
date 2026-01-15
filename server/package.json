@@ -26,13 +26,17 @@
     "express": "^4.21.2",
     "express-session": "^1.18.2",
     "jsonwebtoken": "^9.0.2",
+    "mammoth": "^1.11.0",
     "mongoose": "^8.17.2",
+    "multer": "^2.0.2",
     "mysql2": "^3.14.0",
     "nodemailer": "^7.0.5",
     "nodemon": "^3.1.9",
     "openai": "^6.7.0",
     "p-limit": "^6.1.0",
+    "pdf-parse-new": "^2.0.0",
     "resend": "^6.2.2",
+    "sanitize-html": "^2.17.0",
     "stripe": "^19.1.0",
     "twilio": "^5.10.4"
   }

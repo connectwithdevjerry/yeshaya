@@ -52,7 +52,14 @@ const GET_AVAILABLE_GHL_CALENDARS = "/get-available-ghl-calendars";
 const GET_CONNECTED_CALENDARS = "/get-connected-calendars";
 const DELETE_TWILIO_NUMBER = "/delete-twilio-number";
 const CALL_BILLING_WEBHOOK = "/billing/webhook";
+const GET_TOOL_DETAILS = "/get-tool-details";
+const GET_FILE_DETAILS = "/get-file-details";
 const GENERATE_OUTBOUND_CALL_URL = "/generate-outbound-call-url";
+const GET_ASSISTANT_KNOWLEDGE_BASES = "/get-assistant-knowledge-bases";
+const LINK_KNOWLEDGE_BASES_2_ASSISTANT = "/link-knowledge-bases-to-assistant";
+const GET_ALL_KNOWLEDGE_BASES = "/get-all-knowledge-bases";
+const RMV_ASSISTANT_KNOWLEDGE = "/remove-knowlege-base-from-assistant";
+const DELETE_KNOWLEDGE_BASE = "/delete-knowlege-base"
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -112,4 +119,11 @@ module.exports = {
   DELETE_TWILIO_NUMBER,
   CALL_BILLING_WEBHOOK,
   GENERATE_OUTBOUND_CALL_URL,
+  GET_TOOL_DETAILS,
+  GET_FILE_DETAILS,
+  GET_ASSISTANT_KNOWLEDGE_BASES,
+  GET_ALL_KNOWLEDGE_BASES,
+  LINK_KNOWLEDGE_BASES_2_ASSISTANT,
+  RMV_ASSISTANT_KNOWLEDGE,
+  DELETE_KNOWLEDGE_BASE
 };
