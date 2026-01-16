@@ -8,6 +8,9 @@ const fs = require("fs");
 const { fillTemplate, extractText } = require("../helperFunctions");
 const { MAKE_OUTBOUND_CALL } = require("../constants");
 
+const CLIENT_ID = process.env.GHL_APP_CLIENT_ID;
+const CLIENT_SECRET = process.env.GHL_APP_CLIENT_SECRET;
+
 const allowableTools = {
   scrape_website:
     "Allows the Al to look at a website. You can prompt the website to scrape or use the contact's website in your instructions.",
@@ -1125,11 +1128,16 @@ const executeToolFromVapi = async (req, res) => {
   }
 };
 
+const getSubAccountTokens = async (accessToken) => {
+  try {
+  } catch (error) {}
+};
+
 const getGhlTokens = async (userId) => {
   const user = await userModel.findById(userId);
   const refreshToken = user.ghlRefreshToken;
-  const CLIENT_ID = process.env.GHL_APP_CLIENT_ID;
-  const CLIENT_SECRET = process.env.GHL_APP_CLIENT_SECRET;
+
+  console.log("agency-id: ", user.ghlAgencyId);
 
   try {
     const url = "https://services.leadconnectorhq.com/oauth/token";
@@ -1820,7 +1828,7 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
 
 const addKnowledgeBase = async (req, res) => {
   const userId = req.user;
-  const { assistantId, knowledgeBaseUrl, type, title } = req.body;
+  const { knowledgeBaseUrl, type, title } = req.body;
 
   try {
     const user = await userModel.findById(userId);
@@ -1842,20 +1850,20 @@ const addKnowledgeBase = async (req, res) => {
     //   return res.send({ status: false, message: "Assistant does not exist!" });
 
     // get assistant model and provider, knowledge base requires it
-    const vapi = new VapiClient({
-      token: VAPI_API_KEY,
-    });
+    // const vapi = new VapiClient({
+    //   token: VAPI_API_KEY,
+    // });
 
-    const massistant = await vapi.assistants.get(assistantId);
+    // const massistant = await vapi.assistants.get(assistantId);
 
     // console.log(
     //   `Successfully retrieved details for Assistant: ${massistant.name} (ID: ${massistant.id})`,
     //   massistant
     // );
 
-    if (!massistant) {
-      return res.send({ status: false, message: "Assistant not found!" });
-    }
+    // if (!massistant) {
+    //   return res.send({ status: false, message: "Assistant not found!" });
+    // }
 
     // --- STEP 1: HARVEST DATA (Firecrawl API vs Local File) ---
     let fileBuffer;
@@ -1964,15 +1972,15 @@ const addKnowledgeBase = async (req, res) => {
 
     console.log(`File uploaded to Vapi with File ID: ${newFileId}`);
 
-    console.log(
-      `Linking Query Tool to Assistant ${assistantId}...`,
-      massistant
-    );
+    // console.log(
+    //   `Linking Query Tool to Assistant ${assistantId}...`,
+    //   massistant
+    // );
 
-    console.log({
-      model: massistant.model.model,
-      provider: massistant.model.provider,
-    });
+    // console.log({
+    //   model: massistant.model.model,
+    //   provider: massistant.model.provider,
+    // });
 
     // STEP 2: Create the Query Tool
     const toolResponse = await axios.post(
@@ -2002,7 +2010,7 @@ const addKnowledgeBase = async (req, res) => {
 
     console.log(`Query Tool created with ID: ${toolId}`);
 
-    console.log(`Query Tool ${toolId} linked to Assistant ${assistantId}`);
+    // console.log(`Query Tool ${toolId} linked to Assistant ${assistantId}`);
 
     // Save knowledge base file ID to database
     // if (!targetAssistant.knowledgeBaseToolIds) {
@@ -2016,9 +2024,9 @@ const addKnowledgeBase = async (req, res) => {
     user.markModified("ghlSubAccountIds");
     await user.save();
 
-    console.log(
-      `Knowledge base added and linked successfully to Assistant ${assistantId}.`
-    );
+    // console.log(
+    //   `Knowledge base added and linked successfully to Assistant ${assistantId}.`
+    // );
 
     return res.send({ status: true, data: toolResponse.data });
   } catch (error) {
