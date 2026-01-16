@@ -14,6 +14,7 @@ const userSchema = mongoose.Schema({
   ghlAgencyId: { type: String, required: false },
   walletBalance: { type: Number, default: 0 },
   autoCardCharging: { type: Boolean, default: false },
+  allKnowledgeBaseToolIds: [String],
   ghlSubAccountIds: [
     {
       accountId: String,
@@ -26,7 +27,7 @@ const userSchema = mongoose.Schema({
           calendar: String,
           inboundDynamicMessage: { type: String, required: false },
           outboundDynamicMessage: { type: String, required: false },
-          knowledgeBaseFileIds: [String],
+          knowledgeBaseToolIds: [String],
           connectedTools: [String],
           numberDetails: [
             {

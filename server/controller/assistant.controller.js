@@ -5,7 +5,7 @@ const VAPI_API_KEY = process.env.VAPI_API_KEY;
 const { VapiClient } = require("@vapi-ai/server-sdk");
 const FormData = require("form-data");
 const fs = require("fs");
-const { fillTemplate } = require("../helperFunctions");
+const { fillTemplate, extractText } = require("../helperFunctions");
 const { MAKE_OUTBOUND_CALL } = require("../constants");
 
 const allowableTools = {
@@ -645,7 +645,7 @@ const deleteNumberFromAssistant = async (req, res) => {
     // remove from vapi
     const response = await axios.delete(url, {
       headers: {
-        Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
+        Authorization: `Bearer ${VAPI_API_KEY}`,
         "Content-Type": "application/json",
       },
     });
@@ -1125,6 +1125,50 @@ const executeToolFromVapi = async (req, res) => {
   }
 };
 
+const getGhlTokens = async (userId) => {
+  const user = await userModel.findById(userId);
+  const refreshToken = user.ghlRefreshToken;
+  const CLIENT_ID = process.env.GHL_APP_CLIENT_ID;
+  const CLIENT_SECRET = process.env.GHL_APP_CLIENT_SECRET;
+
+  try {
+    const url = "https://services.leadconnectorhq.com/oauth/token";
+
+    // process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+    const response = await axios.post(
+      url,
+      {
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      },
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        // httpsAgent, // attach secure agent
+        timeout: 10000, // optional safety timeout
+      }
+    );
+
+    user.ghlRefreshToken = response.data.refresh_token;
+    user.ghlRefreshTokenExpiry = new Date(
+      Date.now() + response.data.expires_in * 1000
+    );
+    await user.save();
+
+    return { status: true, data: response.data };
+  } catch (error) {
+    console.error(
+      "Error refreshing GHL Access Token:",
+      error.response?.data || error.message
+    );
+    throw Error(error.message);
+  }
+};
+
 const addCalendarId = async (req, res) => {
   const userId = req.user;
   const { accountId, assistantId, calendarId } = req.body;
@@ -1163,7 +1207,10 @@ const addCalendarId = async (req, res) => {
   }
 };
 
-const getAvailableCalendars = async (userId, accountId) => {
+const getAvailableCalendars = async (req, res) => {
+  const userId = req.user;
+  const { subaccountId: accountId } = req.query;
+
   const user = await userModel.findById(userId);
 
   const targetSubaccount = user.ghlSubAccountIds.find(
@@ -1174,16 +1221,25 @@ const getAvailableCalendars = async (userId, accountId) => {
     return { status: false, message: "This subaccount does not exist!" };
 
   try {
+    const tkns = await getGhlTokens(userId);
+
+    console.log({ tkns });
+
     const response = await axios.get(
       `https://services.leadconnectorhq.com/calendars`,
       {
-        params: { locationId: accountId },
+        params: {
+          locationId: accountId, // Ensure this is the Location/Sub-Account ID
+        },
         headers: {
-          Authorization: `Bearer ${user.ghlRefreshToken}`,
-          Version: "2021-07-28",
+          Authorization: `Bearer ${tkns.data.access_token}`,
+          Version: "2021-04-15", // Use this version for better compatibility
+          Accept: "application/json",
         },
       }
     );
+
+    console.log({ response });
 
     const calendars = response.data.calendars || [];
 
@@ -1381,34 +1437,431 @@ const addDynamicFMessageToDB = async (req, res) => {
   }
 };
 
-const addKnowledgeBase = async (req, res) => {
+const getToolDetails = async (req, res) => {
+  // const userId = req.user;
+  const { toolId } = req.query;
+
+  try {
+    const response = await axios.get(`https://api.vapi.ai/tool/${toolId}`, {
+      headers: {
+        Authorization: `Bearer ${VAPI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    console.log("Tool Details:", response.data);
+    return res.send({ status: true, data: response.data });
+  } catch (error) {
+    console.error(
+      "Error fetching tool details:",
+      error.response ? error.response.data : error.message
+    );
+    return res.send({
+      status: false,
+      message: error.message,
+      data: response.data,
+    });
+  }
+};
+
+const getFileDetails = async (req, res) => {
+  const { fileId } = req.query;
+
+  try {
+    const response = await axios.get(`https://api.vapi.ai/file/${fileId}`, {
+      headers: {
+        Authorization: `Bearer ${VAPI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    console.log("File Details:", response.data);
+    return res.send({ status: true, data: response.data });
+  } catch (error) {
+    console.error(
+      "Error fetching file details:",
+      error.response ? error.response.data : error.message
+    );
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
+const linkKnowledgeBaseToAssistant = async (req, res) => {
   const userId = req.user;
-  const { assistantId, knowledgeBaseUrl, type } = req.body;
+  const { assistantId, toolId } = req.body;
+  try {
+    const vapi = new VapiClient({
+      token: VAPI_API_KEY,
+    });
+
+    const massistant = await vapi.assistants.get(assistantId);
+    let updatedTools = [...(massistant.model.toolIds || [])];
+    if (!updatedTools.includes(toolId) && toolId) {
+      updatedTools.push(toolId);
+    }
+
+    // console.log({ massistant });
+
+    const response = await axios.patch(
+      `https://api.vapi.ai/assistant/${assistantId}`,
+      {
+        model: {
+          provider: massistant.model.provider || "openai",
+          model: massistant.model.model || "gpt-4o",
+          toolIds: [...(updatedTools || [])],
+        },
+      },
+      {
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+      }
+    );
+
+    let foundAssistant;
+
+    const user = await userModel.findById(userId);
+    for (const sub of user.ghlSubAccountIds) {
+      foundAssistant = sub.vapiAssistants.find(
+        (a) => a.assistantId === assistantId
+      );
+      if (foundAssistant) {
+        console.log({ foundAssistant });
+        if (!foundAssistant?.knowledgeBaseToolIds)
+          foundAssistant.knowledgeBaseToolIds = [];
+        const isAlreadyLinked =
+          foundAssistant?.knowledgeBaseToolIds &&
+          foundAssistant.knowledgeBaseToolIds.includes(toolId);
+        if (!isAlreadyLinked) foundAssistant.knowledgeBaseToolIds.push(toolId);
+        console.log({ isAlreadyLinked });
+        break;
+      }
+    }
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    // console.log(
+    //   `Knowledge Base linked to Assistant ${assistantId}:`,
+    //   response.data
+    // );
+    return res.send({
+      status: true,
+      data: response.data,
+    });
+  } catch (error) {
+    console.error(
+      "Error linking knowledge base:",
+      error.response?.data || error.message
+    );
+    return res.send({
+      status: false,
+      message: error.message,
+      data: error.response?.data,
+    });
+  }
+};
+
+const getAllKnowledgeBases = async (req, res) => {
+  const userId = req.user;
 
   try {
     const user = await userModel.findById(userId);
 
+    const toolPromises = user.allKnowledgeBaseToolIds.map(
+      (id) =>
+        axios
+          .get(`https://api.vapi.ai/tool/${id}`, {
+            headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+          })
+          .then((res) => res.data)
+          .catch(() => null) // Handle deleted tools gracefully
+    );
+
+    const allTools = await Promise.all(toolPromises);
+
+    const knowledgeBaseTools = allTools.filter(
+      (tool) => tool && tool.type === "query"
+    );
+
+    return res.send({ status: true, data: knowledgeBaseTools || [] });
+  } catch (error) {
+    console.error(
+      "Error fetching knowledge bases:",
+      error.response ? error.response.data : error.message
+    );
+    return res.send({
+      status: false,
+      message: error.message,
+      data: error.response?.data,
+    });
+  }
+};
+
+const deleteAllFilesFromTool = async (toolId) => {
+  try {
+    // 1. Fetch the tool to get the list of linked files
+    const toolResponse = await axios.get(`https://api.vapi.ai/tool/${toolId}`, {
+      headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+    });
+
+    const tool = toolResponse.data;
+
+    // Check if it's a query tool with files
+    if (tool.type === "query" && tool.knowledgeBases) {
+      // Extract all file IDs from all knowledge base providers linked to this tool
+      const fileIds = tool.knowledgeBases.flatMap((kb) => kb.fileIds || []);
+
+      console.log(`Found ${fileIds.length} files to delete...`);
+
+      // 2. Delete each file individually
+      const deletePromises = fileIds.map((fileId) =>
+        axios
+          .delete(`https://api.vapi.ai/file/${fileId}`, {
+            headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+          })
+          .then(() => console.log(`Deleted file: ${fileId}`))
+          .catch((err) =>
+            console.error(`Failed to delete file ${fileId}:`, err.message)
+          )
+      );
+
+      // Wait for all file deletions to finish
+      await Promise.all(deletePromises);
+
+      console.log("All linked files have been processed.");
+      return true;
+    } else {
+      console.log("This tool does not have any linked files.");
+      throw Error("No linked files found for this tool.");
+    }
+  } catch (error) {
+    console.error(
+      "Error in cleanup process:",
+      error.response?.data || error.message
+    );
+    throw Error("Error in cleanup process:" + error.message);
+  }
+};
+
+const removeToolFromAllAssistants = async (TARGET_TOOL_ID) => {
+  try {
+    // 1. Get the list of all assistants
+    const { data: assistants } = await axios.get(
+      "https://api.vapi.ai/assistant",
+      {
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+      }
+    );
+
+    console.log(`Checking ${assistants.length} assistants...`);
+
+    for (const assistant of assistants) {
+      const toolIds = assistant.model?.toolIds || [];
+
+      // 2. Check if this assistant uses the tool
+      if (toolIds.includes(TARGET_TOOL_ID)) {
+        console.log(
+          `Removing tool from assistant: ${assistant.name} (${assistant.id})`
+        );
+
+        // Filter out the target tool ID
+        const updatedToolIds = toolIds.filter((id) => id !== TARGET_TOOL_ID);
+
+        // 3. Update the assistant
+        // NOTE: You must include provider/model to avoid "missing field" errors
+        await axios.patch(
+          `https://api.vapi.ai/assistant/${assistant.id}`,
+          {
+            model: {
+              provider: assistant.model.provider,
+              model: assistant.model.model,
+              toolIds: updatedToolIds,
+            },
+          },
+          {
+            headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+          }
+        );
+
+        console.log(`Successfully updated ${assistant.name}`);
+      }
+    }
+
+    console.log("Finished cleanup.");
+    return true;
+  } catch (error) {
+    console.error(
+      "Error during batch removal:",
+      error.response?.data || error.message
+    );
+    throw Error(error.message);
+  }
+};
+
+const deleteKnowledgeBase = async (req, res) => {
+  const { toolId } = req.query;
+  const userId = req.user;
+
+  // delete knowledge base tool from vapi
+  // delete knowledge base tool id from database too (allKnowledgeBaseToolIds and knowledgeBaseToolIds)
+  // delete linked files from vapi too
+
+  console.log({ toolId });
+
+  try {
+    const removalStatus = await removeToolFromAllAssistants(toolId);
+    console.log("tool assistants removal completed!");
+
+    const deletionStatus = await deleteAllFilesFromTool(toolId);
+    console.log("finished files deletion...");
+
+    await axios.delete(`https://api.vapi.ai/tool/${toolId}`, {
+      headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+    });
+
+    // break knowledgebase linkage with assistant
+
+    // delete knowledge base tool id from database too (allKnowledgeBaseToolIds and knowledgeBaseToolIds)
+    await userModel.updateOne(
+      { _id: userId },
+      {
+        $pull: {
+          allKnowledgeBaseToolIds: toolId,
+          "ghlSubAccountIds.$[].vapiAssistants.$[].knowledgeBaseToolIds":
+            toolId,
+        },
+      }
+    );
+
+    console.log(`Knowledge base tool ${toolId} deleted successfully.`);
+
+    return res.send({
+      status: true,
+      message: "Knowledge base deleted successfully.",
+    });
+  } catch (error) {
+    console.error(
+      "Error deleting knowledge base:",
+      error.response ? error.response.data : error.message
+    );
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
+const removeKnowledgeBaseFromAssistant = async (req, res) => {
+  const userId = req.user;
+  const { assistantId, toolId } = req.query;
+
+  const vapi = new VapiClient({
+    token: VAPI_API_KEY,
+  });
+
+  const massistant = await vapi.assistants.get(assistantId);
+
+  try {
+    const user = await userModel.findById(userId);
     const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
       sub.vapiAssistants.some(
         (ast) => ast.assistantId === assistantId && sub.connected
       )
     );
 
-    if (!targetSubaccount)
+    if (!targetSubaccount) {
       return res.send({ status: false, message: "Subaccount not found!" });
+    }
 
     const targetAssistant = targetSubaccount.vapiAssistants.find(
       (target) => target.assistantId === assistantId
     );
 
-    if (!targetAssistant)
-      return res.send({ status: false, message: "Assistant does not exist!" });
+    if (!targetAssistant) {
+      return res.send({ status: false, message: "Assistant not found!" });
+    }
+
+    const remainingTools = massistant.model.toolIds.filter(
+      (id) => id !== toolId
+    );
+
+    const response = await axios.patch(
+      `https://api.vapi.ai/assistant/${assistantId}`,
+      {
+        model: {
+          toolIds: [...remainingTools],
+        },
+      },
+      {
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+      }
+    );
+
+    targetAssistant.knowledgeBaseToolIds = [...remainingTools];
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    return res.send({
+      status: true,
+      data: response.data,
+    });
+  } catch (error) {
+    console.error(
+      "Error removing knowledge base from assistant:",
+      error.response?.data || error.message
+    );
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
+const addKnowledgeBase = async (req, res) => {
+  const userId = req.user;
+  const { assistantId, knowledgeBaseUrl, type, title } = req.body;
+
+  try {
+    const user = await userModel.findById(userId);
+
+    // const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
+    //   sub.vapiAssistants.some(
+    //     (ast) => ast.assistantId === assistantId && sub.connected
+    //   )
+    // );
+
+    // if (!targetSubaccount)
+    //   return res.send({ status: false, message: "Subaccount not found!" });
+
+    // const targetAssistant = targetSubaccount.vapiAssistants.find(
+    //   (target) => target.assistantId === assistantId
+    // );
+
+    // if (!targetAssistant)
+    //   return res.send({ status: false, message: "Assistant does not exist!" });
+
+    // get assistant model and provider, knowledge base requires it
+    const vapi = new VapiClient({
+      token: VAPI_API_KEY,
+    });
+
+    const massistant = await vapi.assistants.get(assistantId);
+
+    // console.log(
+    //   `Successfully retrieved details for Assistant: ${massistant.name} (ID: ${massistant.id})`,
+    //   massistant
+    // );
+
+    if (!massistant) {
+      return res.send({ status: false, message: "Assistant not found!" });
+    }
 
     // --- STEP 1: HARVEST DATA (Firecrawl API vs Local File) ---
     let fileBuffer;
     let fileName;
 
-    if (type === "url" || knowledgeBaseUrl.startsWith("http")) {
+    if (type === "url") {
       console.log("Scraping website with Firecrawl API...");
 
       const firecrawlRes = await axios.post(
@@ -1435,10 +1888,54 @@ const addKnowledgeBase = async (req, res) => {
       // Firecrawl returns the data inside data.data.markdown
       fileBuffer = Buffer.from(firecrawlRes.data.data.markdown);
       fileName = `scraped_${Date.now()}.md`;
-    } else if (type === "file" || fs.existsSync(knowledgeBaseUrl)) {
+    } else if (type === "file") {
+      if (!req.file) {
+        return res.send({
+          status: false,
+          message: "No file provided",
+        });
+      }
+
       console.log("Processing local file...");
-      fileBuffer = fs.readFileSync(knowledgeBaseUrl);
-      fileName = knowledgeBaseUrl.split("/").pop();
+
+      const text = await extractText(req.file);
+
+      // console.log("Extracted Text:", text);
+
+      if (!text || text.trim().length < 50) {
+        return res.send({
+          status: false,
+          message: "Extracted text is empty or too small",
+        });
+      }
+
+      // const response = await axios.post(
+      //   `https://api.vapi.ai/assistants/${assistantId}/knowledge-bases`,
+      //   {
+      //     model: { ...massistant.model },
+      //     knowledgeBase: {
+      //       type: "text",
+      //       documents: [
+      //         {
+      //           title,
+      //           content: text,
+      //         },
+      //       ],
+      //     },
+      //   },
+      //   {
+      //     headers: {
+      //       Authorization: `Bearer ${VAPI_API_KEY}`,
+      //       "Content-Type": "application/json",
+      //     },
+      //     timeout: 30_000,
+      //   }
+      // );
+
+      // console.log("Knowledge base added successfully:", response.data);
+
+      fileBuffer = Buffer.from(text);
+      fileName = `file_${Date.now()}.txt`;
     } else if (type === "faq") {
       // knowledgeBaseUrl expected as: [{q: "...", a: "..."}]
       const faqMd = knowledgeBaseUrl
@@ -1459,32 +1956,63 @@ const addKnowledgeBase = async (req, res) => {
     const uploadRes = await axios.post("https://api.vapi.ai/file", form, {
       headers: {
         ...form.getHeaders(),
-        Authorization: `Bearer ${process.env.VAPI_TOKEN}`,
+        Authorization: `Bearer ${VAPI_API_KEY}`,
       },
     });
 
     const newFileId = uploadRes.data.id;
 
-    // --- STEP 3: LINK TO ASSISTANT ---
-    const response = await axios.patch(
-      `https://api.vapi.ai/assistant/${assistantId}`,
+    console.log(`File uploaded to Vapi with File ID: ${newFileId}`);
+
+    console.log(
+      `Linking Query Tool to Assistant ${assistantId}...`,
+      massistant
+    );
+
+    console.log({
+      model: massistant.model.model,
+      provider: massistant.model.provider,
+    });
+
+    // STEP 2: Create the Query Tool
+    const toolResponse = await axios.post(
+      "https://api.vapi.ai/tool",
       {
-        model: {
-          knowledgeBase: {
+        type: "query",
+        function: {
+          name: "knowledge_search",
+          description: "Searches the uploaded document for information.",
+        },
+        knowledgeBases: [
+          {
+            model: "gemini-2.5-pro",
+            provider: "google", // only accepted value here
+            name: fileName,
+            description: title,
             fileIds: [newFileId],
           },
-        },
+        ],
       },
       {
-        headers: { Authorization: `Bearer ${process.env.VAPI_TOKEN}` },
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
       }
     );
 
+    const toolId = toolResponse.data.id;
+
+    console.log(`Query Tool created with ID: ${toolId}`);
+
+    console.log(`Query Tool ${toolId} linked to Assistant ${assistantId}`);
+
     // Save knowledge base file ID to database
-    if (!targetAssistant.knowledgeBaseFileIds) {
-      targetAssistant.knowledgeBaseFileIds = [];
-    }
-    targetAssistant.knowledgeBaseFileIds.push(newFileId);
+    // if (!targetAssistant.knowledgeBaseToolIds) {
+    //   targetAssistant.knowledgeBaseToolIds = [];
+    // }
+    // targetAssistant.knowledgeBaseToolIds.push(toolId);
+    // user.markModified("ghlSubAccountIds");
+    // await user.save();
+
+    user.allKnowledgeBaseToolIds.push(toolId);
     user.markModified("ghlSubAccountIds");
     await user.save();
 
@@ -1492,7 +2020,7 @@ const addKnowledgeBase = async (req, res) => {
       `Knowledge base added and linked successfully to Assistant ${assistantId}.`
     );
 
-    return res.send({ status: true, data: response.data, fileId: newFileId });
+    return res.send({ status: true, data: toolResponse.data });
   } catch (error) {
     console.error(
       "Failed to add knowledge base:",
@@ -1506,7 +2034,7 @@ const addKnowledgeBase = async (req, res) => {
   }
 };
 
-const getKnowledgeBases = async (req, res) => {
+const getAssistantKnowledgeBases = async (req, res) => {
   const userId = req.user;
   const { assistantId } = req.query;
 
@@ -1514,9 +2042,7 @@ const getKnowledgeBases = async (req, res) => {
     const user = await userModel.findById(userId);
 
     const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
-      sub.vapiAssistants.some(
-        (ast) => ast.assistantId === assistantId && sub.connected
-      )
+      sub.vapiAssistants.some((ast) => ast.assistantId === assistantId)
     );
 
     if (!targetSubaccount)
@@ -1529,9 +2055,30 @@ const getKnowledgeBases = async (req, res) => {
     if (!targetAssistant)
       return res.send({ status: false, message: "Assistant does not exist!" });
 
+    const toolPromises = targetAssistant.knowledgeBaseToolIds.map(
+      (id) =>
+        axios
+          .get(`https://api.vapi.ai/tool/${id}`, {
+            headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+          })
+          .then((res) => res.data)
+          .catch(() => null) // Handle deleted tools gracefully
+    );
+
+    const allTools = await Promise.all(toolPromises);
+
+    // 3. Filter for Knowledge Base (Query) tools
+    const knowledgeBaseTools = allTools.filter(
+      (tool) => tool && tool.type === "query"
+    );
+
+    console.log(
+      `Found ${knowledgeBaseTools.length} knowledge base tools attached.`
+    );
+
     return res.send({
       status: true,
-      data: targetAssistant.knowledgeBaseFileIds || [],
+      data: knowledgeBaseTools || [],
     });
   } catch (error) {
     console.error("Failed to get knowledge bases:", error.message);
@@ -1544,7 +2091,6 @@ const getKnowledgeBases = async (req, res) => {
 
 const getAssistantCallLogs = async (req, res) => {
   const { assistantIds } = req.body; // Expecting ["id1", "id2"]
-  const vapiToken = process.env.VAPI_TOKEN;
 
   if (!Array.isArray(assistantIds) || assistantIds.length === 0) {
     return res.send({
@@ -1561,7 +2107,7 @@ const getAssistantCallLogs = async (req, res) => {
           assistantId: id,
           limit: 100, // Adjust limit as needed (Max 1000)
         },
-        headers: { Authorization: `Bearer ${vapiToken}` },
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
       })
     );
 
@@ -1597,25 +2143,57 @@ const getAssistantCallLogs = async (req, res) => {
 };
 
 const getAssistantFullReport = async (req, res) => {
-  const { assistantIds } = req.body;
-  const vapiToken = process.env.VAPI_TOKEN;
+  // const { assistantIds } = req.query;
+  const userId = req.user;
+  const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+  const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+
+  const user = await userModel.findById(userId);
+  const assistantIds = user.ghlSubAccountIds.flatMap((subAccount) =>
+    subAccount.vapiAssistants.map((assistant) => assistant.assistantId)
+  );
+
+  const phoneNumbers = user.ghlSubAccountIds.flatMap((subAccount) =>
+    subAccount.vapiAssistants.flatMap((assistant) =>
+      assistant.numberDetails.map((detail) => ({
+        phoneNum: detail.phoneNum,
+        phoneSid: detail.phoneSid,
+      }))
+    )
+  );
+
+  console.log({ assistantIds, phoneNumbers });
 
   try {
     const reportPromises = assistantIds.map(async (id) => {
       // 1. Parallel fetch for Voice Calls and Text Messages/Chats
-      const [callsRes, messagesRes] = await Promise.all([
+      const [callsRes] = await Promise.all([
         axios.get(`https://api.vapi.ai/call`, {
           params: { assistantId: id, limit: 1000 },
-          headers: { Authorization: `Bearer ${vapiToken}` },
+          headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
         }),
-        axios.get(`https://api.vapi.ai/message`, {
-          params: { assistantId: id, limit: 1000 },
-          headers: { Authorization: `Bearer ${vapiToken}` },
-        }),
+        // axios.get(`https://api.vapi.ai/message`, {
+        //   params: { assistantId: id, limit: 1000 },
+        //   headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+        // }),
       ]);
 
+      const calls = callsRes.data;
+
+      console.log({ calls });
+
+      if (!calls.length) {
+        // console.log(
+        //   "Request worked, but no calls matched the Phone Number and Status."
+        // );
+        throw Error(
+          "Request worked, but no calls matched the Phone Number and Status."
+        );
+        // return res.send({ status: true, data: calls });
+      }
+
       const voiceData = callsRes.data;
-      const textData = messagesRes.data;
+      const textData = callsRes.data;
 
       // 2. Initialize Aggregators
       const stats = {
@@ -1686,22 +2264,37 @@ const getAssistantFullReport = async (req, res) => {
       // A. Fetch Call Usage Costs for this specific number
       // Endpoint: https://api.twilio.com/2010-04-01/Accounts/{Sid}/Calls.json
       const callsRes = await axios.get(
-        `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Calls.json`,
+        `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls.json`,
         {
-          params: { To: num, Status: "completed" },
-          headers: { Authorization: twilioAuthHeader },
+          params: {
+            To: num.phoneNum,
+            Status: "completed",
+          },
+          // Twilio requires Basic Auth, NOT Bearer
+          auth: {
+            username: TWILIO_ACCOUNT_SID,
+            password: TWILIO_AUTH_TOKEN,
+          },
         }
       );
 
       // B. Fetch Monthly Lease (MRC)
       // Endpoint: https://api.twilio.com/2010-04-01/Accounts/{Sid}/IncomingPhoneNumbers.json
       const numbersRes = await axios.get(
-        `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/IncomingPhoneNumbers.json`,
+        `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/IncomingPhoneNumbers.json`,
         {
-          params: { PhoneNumber: num },
-          headers: { Authorization: twilioAuthHeader },
+          params: {
+            PhoneNumber: num.phoneNum, // Ensure this is formatted like '+12223334444'
+          },
+          // Switch from Headers to 'auth' object
+          auth: {
+            username: TWILIO_ACCOUNT_SID,
+            password: TWILIO_AUTH_TOKEN,
+          },
         }
       );
+
+      console.log({ numbersRes, callsRes });
 
       const usageCost = (callsRes.data.calls || []).reduce(
         (acc, c) => acc + Math.abs(parseFloat(c.price || 0)),
@@ -1726,10 +2319,14 @@ const getAssistantFullReport = async (req, res) => {
 
     // end of twilio report promises
 
-    const [assistantReport, twilioReport] = await Promise.all([
-      reportPromises,
-      twilioReportPromises,
-    ]);
+    try {
+      const [assistantReport, twilioReport] = await Promise.all([
+        reportPromises,
+        twilioReportPromises,
+      ]);
+    } catch (error) {
+      throw Error(error.message);
+    }
     res.send({ status: true, data: { assistantReport, twilioReport } });
   } catch (error) {
     res.send({ status: false, message: error.message });
@@ -1808,7 +2405,7 @@ const makeOutboundCall = async (req, res) => {
         },
       },
       {
-        headers: { Authorization: `Bearer ${process.env.VAPI_TOKEN}` },
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
       }
     );
 
@@ -1852,7 +2449,7 @@ module.exports = {
   getAssistantTools,
   addDynamicFMessageToDB,
   addKnowledgeBase,
-  getKnowledgeBases,
+  getAssistantKnowledgeBases,
   getAssistantCallLogs,
   getAssistantFullReport,
   makeOutboundCall,
@@ -1860,4 +2457,15 @@ module.exports = {
   getConnectedCalendar,
   generateOutBoundCallUrl,
   getDynamicFMessage,
+  getToolDetails,
+  getFileDetails,
+  getAllKnowledgeBases,
+  linkKnowledgeBaseToAssistant,
+  deleteKnowledgeBase,
+  removeKnowledgeBaseFromAssistant,
 };
+
+// what's left
+// tools and calendars
+// apis to be called when a tool is called
+// assistant call logs and reports (how much was charged)
