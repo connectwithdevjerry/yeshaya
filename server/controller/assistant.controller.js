@@ -1798,6 +1798,8 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
       `https://api.vapi.ai/assistant/${assistantId}`,
       {
         model: {
+          provider: massistant.model.provider || "openai",
+          model: massistant.model.model || "gpt-4o",
           toolIds: [...remainingTools],
         },
       },

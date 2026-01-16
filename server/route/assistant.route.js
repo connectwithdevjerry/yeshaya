@@ -89,7 +89,7 @@ router.get(GET_DYNAMIC_MESSAGE, verifyAccessToken, getDynamicFMessage);
 router.get(GET_TOOL_DETAILS, verifyAccessToken, getToolDetails);
 router.get(GET_FILE_DETAILS, verifyAccessToken, getFileDetails);
 router.delete(DELETE_KNOWLEDGE_BASE, verifyAccessToken, deleteKnowledgeBase);
-router.get(
+router.delete(
   RMV_ASSISTANT_KNOWLEDGE,
   verifyAccessToken,
   removeKnowledgeBaseFromAssistant
