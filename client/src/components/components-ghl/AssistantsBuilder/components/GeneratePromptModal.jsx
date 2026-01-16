@@ -1,14 +1,63 @@
 // src/components/assistant/GeneratePromptModal.jsx
-import React from 'react';
-import { X, Sparkle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { X, Sparkle, Loader2 } from 'lucide-react';
+import { generatePrompt, clearGeneratedPrompt } from '../../../../store/slices/assistantsSlice';
 
-export const GeneratePromptModal = ({ isOpen, onClose }) => {
+export const GeneratePromptModal = ({ isOpen, onClose, onPromptGenerated }) => {
+    const dispatch = useDispatch();
+    const [description, setDescription] = useState('');
+    
+    const { generatingPrompt, generatedPrompt, promptError } = useSelector(
+        (state) => state.assistants
+    );
+
+    useEffect(() => {
+        if (generatedPrompt) {
+            if (onPromptGenerated) {
+                onPromptGenerated(generatedPrompt);
+            }
+
+            setDescription('');
+            dispatch(clearGeneratedPrompt());
+            onClose();
+        }
+    }, [generatedPrompt, onPromptGenerated, onClose, dispatch]);
+
+    useEffect(() => {
+        if (!isOpen) {
+            setDescription('');
+            dispatch(clearGeneratedPrompt());
+        }
+    }, [isOpen, dispatch]);
+
+    const handleGenerate = async () => {
+        if (!description.trim()) {
+            return;
+        }
+
+        try {
+            await dispatch(generatePrompt({ description: description.trim() })).unwrap();
+        } catch (error) {
+            console.error('Failed to generate prompt:', error);
+
+        }
+    };
+
+    const handleClose = () => {
+        if (!generatingPrompt) {
+            setDescription('');
+            dispatch(clearGeneratedPrompt());
+            onClose();
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
         <div 
             className="fixed inset-0 bg-black bg-opacity-30 z-50 flex justify-center items-center"
-            onClick={onClose} 
+            onClick={handleClose} 
         >
             {/* Modal Content */}
             <div 
@@ -18,7 +67,11 @@ export const GeneratePromptModal = ({ isOpen, onClose }) => {
                 {/* Header */}
                 <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
                     <h3 className="text-xl font-semibold text-gray-900">Generate Prompt</h3>
-                    <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-full">
+                    <button 
+                        onClick={handleClose} 
+                        className="p-1 text-gray-400 hover:text-gray-600 rounded-full disabled:opacity-50"
+                        disabled={generatingPrompt}
+                    >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -30,24 +83,46 @@ export const GeneratePromptModal = ({ isOpen, onClose }) => {
                     </label>
                     <textarea
                         id="prompt-description"
-                        className="w-full h-96 p-3 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-800 resize-none"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        className="w-full h-96 p-3 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-800 resize-none disabled:bg-gray-50 disabled:cursor-not-allowed"
                         placeholder="Explain exactly what you want in as much detail as you can..."
+                        disabled={generatingPrompt}
                     />
+                    
+                    {/* Error Message */}
+                    {promptError && (
+                        <p className="mt-2 text-sm text-red-600">
+                            {promptError}
+                        </p>
+                    )}
                 </div>
 
                 {/* Footer Buttons */}
                 <div className="flex justify-end space-x-3">
                     <button
-                        onClick={onClose}
-                        className="px-5 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-150"
+                        onClick={handleClose}
+                        className="px-5 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={generatingPrompt}
                     >
                         Cancel
                     </button>
                     <button
-                        className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-150 flex items-center space-x-2"
+                        onClick={handleGenerate}
+                        disabled={generatingPrompt || !description.trim()}
+                        className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-150 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <Sparkle className="w-4 h-4" />
-                        <span>Generate Prompt</span>
+                        {generatingPrompt ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>Generating...</span>
+                            </>
+                        ) : (
+                            <>
+                                <Sparkle className="w-4 h-4" />
+                                <span>Generate Prompt</span>
+                            </>
+                        )}
                     </button>
                 </div>
             </div>

@@ -76,20 +76,17 @@ export const updateAssistant = createAsyncThunk(
 
       const response = await apiClient.put("/assistants/update", payload);
 
-      // Check response status
       if (!response.data.status) {
         return rejectWithValue(response.data.message || "Update failed");
       }
 
       console.log("✅ Assistant updated successfully:", response.data.data);
 
-      // Return the updated assistant data
       return response.data.data;
     } catch (error) {
       console.error("❌ Update assistant error:", error);
 
       if (error.response) {
-        // Server responded with error
         return rejectWithValue(
           error.response.data?.message ||
             error.response.data?.error ||
@@ -132,7 +129,6 @@ export const addDynamicMessage = createAsyncThunk(
   async ({ assistantId, message, type }, { rejectWithValue }) => {
     try {
       console.log("🔄 Adding dynamic message:", { assistantId, message, type });
-      // payload: { assistantId, message, type: 'inbound' | 'outbound' }
       const response = await apiClient.post("/assistants/add-dynamic-message", {
         assistantId,
         message,
@@ -156,6 +152,141 @@ export const addDynamicMessage = createAsyncThunk(
   }
 );
 
+// 🆕 1. Generate Prompt
+export const generatePrompt = createAsyncThunk(
+  "assistants/generatePrompt",
+  async ({ description }, { rejectWithValue }) => {
+    try {
+      console.log("🔄 Generating prompt for description:", description);
+      const response = await apiClient.post("/assistants/generate-prompt", {
+        description,
+      });
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to generate prompt"
+        );
+      }
+
+      console.log("✅ Prompt generated successfully:", response.data.data);
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error generating prompt"
+      );
+    }
+  }
+);
+
+// 🆕 2. Get Dynamic Message
+export const getDynamicMessage = createAsyncThunk(
+  "assistants/getDynamicMessage",
+  async ({ subaccountId, assistantId }, { rejectWithValue }) => {
+    try {
+      console.log("🔄 Fetching dynamic message:", { subaccountId, assistantId });
+      const response = await apiClient.get(
+        `/assistants/get-dynamic-message?subaccountId=${subaccountId}&assistantId=${assistantId}`
+      );
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to fetch dynamic message"
+        );
+      }
+
+      console.log("✅ Dynamic message fetched:", response.data.data);
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error fetching dynamic message"
+      );
+    }
+  }
+);
+
+// 🆕 3. Add Knowledge Base
+export const addKnowledgeBase = createAsyncThunk(
+  "assistants/addKnowledgeBase",
+  async ({ assistantId, knowledgeBaseUrl, title, type }, { rejectWithValue }) => {
+    try {
+      console.log("🔄 Adding knowledge base:", { assistantId, title, type });
+      const payload = {
+        assistantId,
+        knowledgeBaseUrl,
+        title,
+        type,
+      };
+
+      const response = await apiClient.post("/assistants/add-knowledge-bases", payload);
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to add knowledge base"
+        );
+      }
+
+      console.log("✅ Knowledge base added:", response.data.data);
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error adding knowledge base"
+      );
+    }
+  }
+);
+
+// 🆕 4. Delete Knowledge Base
+export const deleteKnowledgeBase = createAsyncThunk(
+  "assistants/deleteKnowledgeBase",
+  async ({ toolId }, { rejectWithValue }) => {
+    try {
+      console.log("🔄 Deleting knowledge base:", toolId);
+      const response = await apiClient.delete(
+        `/assistants/delete-knowlege-base?toolId=${toolId}`
+      );
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to delete knowledge base"
+        );
+      }
+
+      console.log("✅ Knowledge base deleted successfully");
+      return toolId;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error deleting knowledge base"
+      );
+    }
+  }
+);
+
+// 🆕 5. Get File Details
+export const getFileDetails = createAsyncThunk(
+  "assistants/getFileDetails",
+  async ({ fileId }, { rejectWithValue }) => {
+    try {
+      console.log("🔄 Fetching file details:", fileId);
+      const response = await apiClient.get(
+        `/assistants/get-file-details?fileId=${fileId}`
+      );
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to fetch file details"
+        );
+      }
+
+      console.log("✅ File details fetched:", response.data.data);
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error fetching file details"
+      );
+    }
+  }
+);
+
 const assistantsSlice = createSlice({
   name: "assistants",
   initialState: {
@@ -163,10 +294,23 @@ const assistantsSlice = createSlice({
     selectedAssistant: null,
     loading: false,
     error: null,
-    updating: false, // Track update status separately
+    updating: false,
     updateError: null,
     savingMessage: false,
     messageError: null,
+    // New states for the additional endpoints
+    generatingPrompt: false,
+    generatedPrompt: null,
+    promptError: null,
+    dynamicMessage: null,
+    fetchingDynamicMessage: false,
+    dynamicMessageError: null,
+    addingKnowledgeBase: false,
+    knowledgeBaseError: null,
+    deletingKnowledgeBase: false,
+    fileDetails: null,
+    fetchingFileDetails: false,
+    fileDetailsError: null,
   },
   reducers: {
     clearSelectedAssistant: (state) => {
@@ -175,11 +319,21 @@ const assistantsSlice = createSlice({
     clearUpdateError: (state) => {
       state.updateError = null;
     },
-    // Optimistic update for better UX
+    clearGeneratedPrompt: (state) => {
+      state.generatedPrompt = null;
+      state.promptError = null;
+    },
+    clearDynamicMessage: (state) => {
+      state.dynamicMessage = null;
+      state.dynamicMessageError = null;
+    },
+    clearFileDetails: (state) => {
+      state.fileDetails = null;
+      state.fileDetailsError = null;
+    },
     optimisticUpdate: (state, action) => {
       const { assistantId, updateData } = action.payload;
 
-      // Update in list
       const index = state.data.findIndex(
         (a) => a.id === assistantId || a.assistantId === assistantId
       );
@@ -187,7 +341,6 @@ const assistantsSlice = createSlice({
         state.data[index] = { ...state.data[index], ...updateData };
       }
 
-      // Update selected assistant
       if (
         state.selectedAssistant?.assistantId === assistantId ||
         state.selectedAssistant?.id === assistantId
@@ -247,7 +400,6 @@ const assistantsSlice = createSlice({
       .addCase(updateAssistant.fulfilled, (state, action) => {
         state.updating = false;
 
-        // ✅ Update the assistant inside the list
         const index = state.data.findIndex(
           (a) =>
             a.id === action.payload.id || a.assistantId === action.payload.id
@@ -256,7 +408,6 @@ const assistantsSlice = createSlice({
           state.data[index] = { ...state.data[index], ...action.payload };
         }
 
-        // ✅ Update the selected assistant too
         if (
           state.selectedAssistant?.assistantId === action.payload.id ||
           state.selectedAssistant?.id === action.payload.id
@@ -315,7 +466,6 @@ const assistantsSlice = createSlice({
           );
         }
 
-        // Update selected assistant
         if (
           state.selectedAssistant?.id === assistantId ||
           state.selectedAssistant?.assistantId === assistantId
@@ -327,14 +477,102 @@ const assistantsSlice = createSlice({
           };
         }
       })
-
       .addCase(addDynamicMessage.rejected, (state, action) => {
         state.savingMessage = false;
         state.messageError = action.payload;
+      })
+
+      // 🔹 Generate Prompt
+      .addCase(generatePrompt.pending, (state) => {
+        state.generatingPrompt = true;
+        state.promptError = null;
+      })
+      .addCase(generatePrompt.fulfilled, (state, action) => {
+        state.generatingPrompt = false;
+        state.generatedPrompt = action.payload;
+      })
+      .addCase(generatePrompt.rejected, (state, action) => {
+        state.generatingPrompt = false;
+        state.promptError = action.payload;
+      })
+
+      // 🔹 Get Dynamic Message
+      .addCase(getDynamicMessage.pending, (state) => {
+        state.fetchingDynamicMessage = true;
+        state.dynamicMessageError = null;
+      })
+      .addCase(getDynamicMessage.fulfilled, (state, action) => {
+        state.fetchingDynamicMessage = false;
+        state.dynamicMessage = action.payload;
+      })
+      .addCase(getDynamicMessage.rejected, (state, action) => {
+        state.fetchingDynamicMessage = false;
+        state.dynamicMessageError = action.payload;
+      })
+
+      // 🔹 Add Knowledge Base
+      .addCase(addKnowledgeBase.pending, (state) => {
+        state.addingKnowledgeBase = true;
+        state.knowledgeBaseError = null;
+      })
+      .addCase(addKnowledgeBase.fulfilled, (state, action) => {
+        state.addingKnowledgeBase = false;
+        // You might want to update the selectedAssistant with the new knowledge base
+        if (state.selectedAssistant) {
+          if (!state.selectedAssistant.knowledgeBases) {
+            state.selectedAssistant.knowledgeBases = [];
+          }
+          state.selectedAssistant.knowledgeBases.push(action.payload);
+        }
+      })
+      .addCase(addKnowledgeBase.rejected, (state, action) => {
+        state.addingKnowledgeBase = false;
+        state.knowledgeBaseError = action.payload;
+      })
+
+      // 🔹 Delete Knowledge Base
+      .addCase(deleteKnowledgeBase.pending, (state) => {
+        state.deletingKnowledgeBase = true;
+        state.knowledgeBaseError = null;
+      })
+      .addCase(deleteKnowledgeBase.fulfilled, (state, action) => {
+        state.deletingKnowledgeBase = false;
+        // Remove the knowledge base from selectedAssistant
+        if (state.selectedAssistant?.knowledgeBases) {
+          state.selectedAssistant.knowledgeBases = 
+            state.selectedAssistant.knowledgeBases.filter(
+              (kb) => kb.toolId !== action.payload
+            );
+        }
+      })
+      .addCase(deleteKnowledgeBase.rejected, (state, action) => {
+        state.deletingKnowledgeBase = false;
+        state.knowledgeBaseError = action.payload;
+      })
+
+      // 🔹 Get File Details
+      .addCase(getFileDetails.pending, (state) => {
+        state.fetchingFileDetails = true;
+        state.fileDetailsError = null;
+      })
+      .addCase(getFileDetails.fulfilled, (state, action) => {
+        state.fetchingFileDetails = false;
+        state.fileDetails = action.payload;
+      })
+      .addCase(getFileDetails.rejected, (state, action) => {
+        state.fetchingFileDetails = false;
+        state.fileDetailsError = action.payload;
       });
   },
 });
 
-export const { clearSelectedAssistant, clearUpdateError, optimisticUpdate } =
-  assistantsSlice.actions;
+export const { 
+  clearSelectedAssistant, 
+  clearUpdateError, 
+  optimisticUpdate,
+  clearGeneratedPrompt,
+  clearDynamicMessage,
+  clearFileDetails,
+} = assistantsSlice.actions;
+
 export default assistantsSlice.reducer;

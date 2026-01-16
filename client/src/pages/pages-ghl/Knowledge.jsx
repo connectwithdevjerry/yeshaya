@@ -15,6 +15,7 @@ import TabButton from "../../components/components-ghl/TabButton";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useCurrentAccount } from "../../hooks/useCurrentAccount";
 import { useDispatch, useSelector } from "react-redux";
+import UploadModal from "../../components/components-ghl/Knowledge/UploadModal";
 
 const knowledgeBases = [
   {
@@ -207,7 +208,7 @@ const KnowledgePage = () => {
           </div>
         </div>
       </div>
-      <NewKnowledgeBaseModal
+      <UploadModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       />
