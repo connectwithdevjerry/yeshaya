@@ -195,6 +195,10 @@ const VAPI_ASSISTANT_CONFIG = ({
     temperature: 0.7,
     maxTokens: 150,
   },
+  server: {
+    url: `${process.env.SERVER_URL}/integrations/billing/webhook`,
+    timeoutSeconds: 20, // Optional: time to wait for your server to respond
+  },
   voice: {
     voiceId,
     provider: v_provider,
@@ -2219,7 +2223,18 @@ const getAssistantKnowledgeBases = async (req, res) => {
 };
 
 const getAssistantCallLogs = async (req, res) => {
-  const { assistantIds } = req.body; // Expecting ["id1", "id2"]
+  // const { assistantIds } = req.body; // Expecting ["id1", "id2"]
+  const userId = req.user;
+
+  const user = await userModel.findById(userId);
+
+  const validAssistantIds = user.ghlSubAccountIds.flatMap((subAccount) =>
+    subAccount.vapiAssistants.map((assistant) => assistant.assistantId)
+  );
+
+  const assistantIds = validAssistantIds;
+
+  console.log("Fetching call logs for Assistant IDs:", assistantIds);
 
   if (!Array.isArray(assistantIds) || assistantIds.length === 0) {
     return res.send({

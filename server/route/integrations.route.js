@@ -95,6 +95,6 @@ router.get(GET_PURCHASED_NUMBER, verifyAccessToken, getPurchasedNumbers);
 router.get(DELETE_TWILIO_NUMBER, verifyAccessToken, deleteTwilioNumber);
 
 // router for payments integration
-router.get(CALL_BILLING_WEBHOOK, express.json(), callBillingWebhook);
+router.post(CALL_BILLING_WEBHOOK, express.json(), callBillingWebhook);
 
 module.exports = router;
