@@ -63,6 +63,7 @@ const LINK_KNOWLEDGE_BASES_2_ASSISTANT = "/link-knowledge-bases-to-assistant";
 const GET_ALL_KNOWLEDGE_BASES = "/get-all-knowledge-bases";
 const RMV_ASSISTANT_KNOWLEDGE = "/remove-knowlege-base-from-assistant";
 const DELETE_KNOWLEDGE_BASE = "/delete-knowlege-base";
+const SEND_CHAT_MESSAGE = "/send-chat-message";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -132,4 +133,5 @@ module.exports = {
   RMV_ASSISTANT_KNOWLEDGE,
   DELETE_KNOWLEDGE_BASE,
   EXECUTE_TOOL,
+  SEND_CHAT_MESSAGE,
 };

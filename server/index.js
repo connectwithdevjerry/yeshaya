@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./route/user.route");
 const integrationsRoutes = require("./route/integrations.route");
+const session = require("express-session");
 const assistantsRoutes = require("./route/assistant.route");
 const cookieParser = require("cookie-parser");
 const { verifyAccessToken } = require("./jwt_helpers");
@@ -15,6 +16,15 @@ const corsOptions = {
   credentials: false,
   optionsSuccessStatus: 200, // Fixed typo: optionSuccessStatus -> optionsSuccessStatus
 };
+
+app.use(
+  session({
+    secret: "0c83b09a933ee6f028d62", // Change this to a random string
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false }, // Set to true if using HTTPS
+  })
+);
 
 app.use(cors(corsOptions));
 

@@ -55,7 +55,7 @@ const getSubGhlTokens = async (userId, accountId) => {
       "Error refreshing GHL Access Token:",
       error.response?.data || error.message
     );
-    throw Error(error.message);
+    throw new Error(error.message);
   }
 };
 

@@ -30,6 +30,7 @@ const {
   removeKnowledgeBaseFromAssistant,
   deleteKnowledgeBase,
   executeToolFromVapi,
+  sendChatMessage,
 } = require("../controller/assistant.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
 
@@ -62,6 +63,7 @@ const {
   RMV_ASSISTANT_KNOWLEDGE,
   EXECUTE_TOOL,
   DELETE_KNOWLEDGE_BASE,
+  SEND_CHAT_MESSAGE,
 } = require("../constants");
 
 const upload = multer({
@@ -83,6 +85,7 @@ router.delete(
 
 // new routers
 router.post(ADD_TOOL, verifyAccessToken, addATool);
+router.post(SEND_CHAT_MESSAGE, verifyAccessToken, sendChatMessage);
 router.post(EXECUTE_TOOL, verifyAccessToken, executeToolFromVapi);
 router.delete(DELETE_TOOL, verifyAccessToken, deleteAssistantTool);
 router.post(ADD_CALENDAR, verifyAccessToken, addCalendarId);

@@ -199,7 +199,7 @@ const VAPI_ASSISTANT_CONFIG = ({
     voiceId,
     provider: v_provider,
   },
-  firstMessage: prompt,
+  firstMessage: "Hello! How can I assist you today?",
   language: "en",
   endCallPhrases: ["goodbye", "thanks, that's all"],
   transcriber: {
@@ -2556,6 +2556,59 @@ const makeOutboundCall = async (req, res) => {
   }
 };
 
+const sendChatMessage = async (req, res) => {
+  const { userText, assistantId } = req.body;
+
+  if (!req.session.chatHistory) {
+    req.session.chatHistory = {};
+  }
+  if (!req.session.chatHistory[assistantId]) {
+    req.session.chatHistory[assistantId] = [];
+  }
+
+  try {
+    const currentHistory = req.session.chatHistory[assistantId];
+    const messages = [
+      ...currentHistory.slice(-10),
+      { role: "user", content: userText },
+    ];
+
+    console.log("Sending messages to Vapi:", messages);
+
+    const response = await axios.post(
+      "https://api.vapi.ai/chat", // Corrected Endpoint
+      {
+        assistantId: assistantId, // Passed in the body
+        input: messages, // Vapi expects 'input' or 'messages'
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    req.session.chatHistory[assistantId].push({
+      role: "user",
+      content: userText,
+    });
+    req.session.chatHistory[assistantId].push(response.data.output[0]);
+
+    return res.send({ status: true, reply: response.data.output });
+  } catch (error) {
+    console.error(
+      "Error sending chat message:",
+      error.response ? error.response.data : error.message
+    );
+    return res.send({
+      status: false,
+      message: error.message,
+      data: error.response?.data,
+    });
+  }
+};
+
 // instructions for 1. call settings, enable recording, max call time, silence timeout, background noise and volume, silence timeout, rules of engagement, enable voicemail detection and message, incoming call webhook, post call webhook
 
 // record, sleep mode, enable purposeful misspellings, response channels
@@ -2593,6 +2646,7 @@ module.exports = {
   linkKnowledgeBaseToAssistant,
   deleteKnowledgeBase,
   removeKnowledgeBaseFromAssistant,
+  sendChatMessage,
 };
 
 // what's left
