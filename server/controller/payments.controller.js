@@ -326,6 +326,8 @@ const callBillingWebhook = async (req, res) => {
   try {
     const { type, call } = req.body;
 
+    console.log("Received billing webhook:", req.body);
+
     if (!call || !call.id || !call.assistantId) {
       return res.status(400).send("Invalid payload");
     }
