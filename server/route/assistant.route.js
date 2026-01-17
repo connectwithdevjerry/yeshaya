@@ -29,6 +29,7 @@ const {
   getAllKnowledgeBases,
   removeKnowledgeBaseFromAssistant,
   deleteKnowledgeBase,
+  executeToolFromVapi,
 } = require("../controller/assistant.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
 
@@ -59,6 +60,7 @@ const {
   GET_ALL_KNOWLEDGE_BASES,
   LINK_KNOWLEDGE_BASES_2_ASSISTANT,
   RMV_ASSISTANT_KNOWLEDGE,
+  EXECUTE_TOOL,
   DELETE_KNOWLEDGE_BASE,
 } = require("../constants");
 
@@ -80,8 +82,9 @@ router.delete(
 );
 
 // new routers
-router.get(ADD_TOOL, verifyAccessToken, addATool);
-router.get(DELETE_TOOL, verifyAccessToken, deleteAssistantTool);
+router.post(ADD_TOOL, verifyAccessToken, addATool);
+router.post(EXECUTE_TOOL, verifyAccessToken, executeToolFromVapi);
+router.delete(DELETE_TOOL, verifyAccessToken, deleteAssistantTool);
 router.post(ADD_CALENDAR, verifyAccessToken, addCalendarId);
 router.get(GET_TOOLS, verifyAccessToken, getAssistantTools);
 router.post(ADD_DYNAMIC_MESSAGE, verifyAccessToken, addDynamicFMessageToDB);

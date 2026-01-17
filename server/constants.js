@@ -13,7 +13,7 @@ const GHL_OAUTH_CALLBACK = "/oauth/callback";
 const STRIPE_AUTHORIZE = "/stripe/authorize";
 const STRIPE_OAUTH_CALLBACK = "/payment/oauth/callback";
 const GHL_SUB_AUTHORIZE = "/sub/ghl/authorize";
-const GHL_SUB_OAUTH_CALLBACK =  "/sub/oauth/callback";
+const GHL_SUB_OAUTH_CALLBACK = "/sub/oauth/callback";
 const TEST_OPENAI_KEY = "/test/openai-key";
 const CONNECT_OPENAI = "/connect/openai";
 const TEST_STRIPE_TOKEN = "/test/stripe-token";
@@ -43,6 +43,7 @@ const ADD_TOOL = "/add-tool";
 const DELETE_TOOL = "/delete-tool";
 const ADD_CALENDAR = "/add-calendar";
 const GET_TOOLS = "/get-tools";
+const EXECUTE_TOOL = "/execute-tool/:userId";
 const ADD_DYNAMIC_MESSAGE = "/add-dynamic-message";
 const GET_DYNAMIC_MESSAGE = "/get-dynamic-message";
 const ADD_KNOWLEDGE_BASES = "/add-knowledge-bases";
@@ -130,4 +131,5 @@ module.exports = {
   LINK_KNOWLEDGE_BASES_2_ASSISTANT,
   RMV_ASSISTANT_KNOWLEDGE,
   DELETE_KNOWLEDGE_BASE,
+  EXECUTE_TOOL,
 };

@@ -26,7 +26,7 @@ const userSchema = mongoose.Schema({
         {
           assistantId: String,
           description: String,
-          calendar: String,
+          calendar: { type: String, required: false },
           inboundDynamicMessage: { type: String, required: false },
           outboundDynamicMessage: { type: String, required: false },
           knowledgeBaseToolIds: [String],

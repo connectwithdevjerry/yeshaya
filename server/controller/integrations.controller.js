@@ -221,6 +221,8 @@ const getGhlTokens = async (userId) => {
   const user = await userModel.findById(userId);
   const refreshToken = user.ghlRefreshToken;
 
+  console.log({ refreshToken });
+
   try {
     const url = "https://services.leadconnectorhq.com/oauth/token";
 
@@ -233,6 +235,7 @@ const getGhlTokens = async (userId) => {
         client_secret: CLIENT_SECRET,
         grant_type: "refresh_token",
         refresh_token: refreshToken,
+        user_type: "Company",
       },
       {
         headers: {
