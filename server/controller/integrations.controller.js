@@ -3,7 +3,11 @@ const jwt = require("jsonwebtoken");
 const OpenAI = require("openai");
 const stateModel = require("../model/state.model");
 const axios = require("axios");
-const { GHL_OAUTH_CALLBACK, STRIPE_OAUTH_CALLBACK } = require("../constants");
+const {
+  GHL_OAUTH_CALLBACK,
+  STRIPE_OAUTH_CALLBACK,
+  GHL_SUB_OAUTH_CALLBACK,
+} = require("../constants");
 const userModel = require("../model/user.model");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Stripe = require("stripe");
@@ -17,7 +21,9 @@ const VoiceResponse = require("twilio").twiml.VoiceResponse;
 
 const SUB_PATH = "/integrations";
 const CLIENT_ID = process.env.GHL_APP_CLIENT_ID;
+const SUB_CLIENT_ID = process.env.GHL_SUB_CLIENT_ID;
 const CLIENT_SECRET = process.env.GHL_APP_CLIENT_SECRET;
+const SUB_CLIENT_SECRET = process.env.GHL_SUB_CLIENT_SECRET;
 const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const ACCOUNT_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const VAPI_API_KEY = process.env.VAPI_API_KEY;
@@ -28,7 +34,7 @@ const httpsAgent = new https.Agent({
 });
 
 // GOHIGHLEVEL AUTHENTICATION AND SSO DECRYPTION
-const generateSecureState = async (myId) => {
+const generateSecureState = async (myId, accountId = "") => {
   /**
    Generates a random state string and stores it in the user's session.
    */
@@ -39,6 +45,7 @@ const generateSecureState = async (myId) => {
   const saveState = await stateModel({
     state: state,
     cust_id: myId,
+    accountId,
   });
   await saveState.save();
 
@@ -1042,7 +1049,7 @@ const twilioCallReceiver = async (req, res) => {
 
     const checkMessageAvailability =
       inboundDynamicMessage && inboundDynamicMessage.trim() !== "";
-    
+
     const refreshGhlTokensValue = await getGhlTokens(userId);
 
     if (!refreshGhlTokensValue.status) {
@@ -1452,9 +1459,137 @@ const deleteTwilioNumber = async (req, res) => {
   }
 };
 
+const ghlSubAuthorize = async (req, res) => {
+  const userId = req.user;
+  const { accountId } = req.query;
+  const scopes =
+    "locations.readonly+oauth.write+oauth.readonly+businesses.write+businesses.readonly+calendars.write+calendars.readonly+calendars%2Fevents.readonly+calendars%2Fevents.write+calendars%2Fgroups.readonly+calendars%2Fgroups.write+calendars%2Fresources.readonly+calendars%2Fresources.write&version_id=696ade02ea0d940c862c9efd";
+
+  const REDIRECT_URI = encodeURIComponent(
+    `${process.env.SERVER_URL}${SUB_PATH}${GHL_SUB_OAUTH_CALLBACK}`
+  ); // Must match GHL settings!
+
+  // The 'state' parameter is crucial for security (CSRF protection)
+  const state = await generateSecureState(userId, accountId);
+
+  const authUrl = `https://marketplace.leadconnectorhq.com/oauth/chooselocation?response_type=code&redirect_uri=${REDIRECT_URI}&client_id=${SUB_CLIENT_ID}&scope=${scopes}&version_id=6905111141b5e7b749099891&state=${state}`;
+
+  console.log("Redirecting to GHL OAuth URL:", authUrl);
+
+  return res.send({
+    status: true,
+    authUrl,
+    message: "GHL Authorization URL generated.",
+  });
+};
+
+const ghlSubOauthCallback = async (req, res) => {
+  // This function will handle the OAuth callback and exchange the code for tokens
+  // Implementation would go here
+
+  const REDIRECT_URI = `${process.env.SERVER_URL}${SUB_PATH}${GHL_SUB_OAUTH_CALLBACK}`;
+
+  const { code, state: receivedState } = req.query;
+
+  console.log({ code, receivedState });
+
+  const reqState = await stateModel.findOne({ state: receivedState });
+  const storedState = reqState ? reqState.state : null;
+  const userId = reqState ? reqState.cust_id : null;
+  const accountId = reqState ? reqState.accountId : null;
+
+  // 1. STATE VERIFICATION (CSRF Protection)
+  if (!receivedState || receivedState !== storedState) {
+    // Clear the state from the session after use
+    await stateModel.deleteOne({ state: receivedState });
+
+    console.error("State mismatch or missing state");
+    const errorMsg = "CSRF check failed: Invalid state parameter.";
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
+        errorMsg
+      )}`
+    );
+  }
+
+  await stateModel.deleteOne({ state: receivedState });
+
+  if (!code) {
+    const errorMsg = "Authorization code missing in callback.";
+
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
+        errorMsg
+      )}`
+    );
+  }
+
+  const highLevel = new HighLevel({
+    clientId: SUB_CLIENT_ID,
+    clientSecret: SUB_CLIENT_SECRET,
+  });
+
+  try {
+    const response = await highLevel.oauth.getAccessToken({
+      client_id: SUB_CLIENT_ID,
+      client_secret: SUB_CLIENT_SECRET,
+      grant_type: "authorization_code",
+      code,
+      user_type: "Location",
+    });
+    console.log({ response });
+
+    const updateUser = await userModel.findById(userId);
+
+    const subAccount = updateUser.ghlSubAccountIds.find(
+      (acc) => acc.accountId === accountId
+    );
+
+    // save agency id
+    if (!subAccount) {
+      throw Error("Cannot find Subaccount, please reinstall!");
+    }
+
+    if (accountId !== response.locationId) {
+      throw Error("Account Cross-Breeding Not allowed!");
+    }
+
+    subAccount.ghlSubRefreshToken = response.refresh_token;
+    subAccount.ghlSubRefreshTokenExpiry = new Date(
+      Date.now() + response.expires_in * 1000
+    );
+
+    await updateUser.save();
+
+    const successMsg = "GHL Connection successful!";
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/connection-success/${encodeURIComponent(
+        successMsg
+      )}`
+    );
+  } catch (error) {
+    console.error(
+      "Token Exchange Error:",
+      error.response ? error.response.data : error.message
+    );
+
+    const errorMsg =
+      error.message ||
+      "Failed to exchange authorization code for access token.";
+
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
+        errorMsg
+      )}`
+    );
+  }
+};
+
 module.exports = {
   ghlAuthorize,
   ghlOauthCallback,
+  ghlSubAuthorize,
+  ghlSubOauthCallback,
   ghlSsoLoginHandler,
   stripeOauthCallback,
   testOpenAIKey,

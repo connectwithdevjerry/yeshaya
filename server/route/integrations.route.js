@@ -21,6 +21,8 @@ const {
   getPurchasedNumbers,
   getVapiNumberImportStatus,
   deleteTwilioNumber,
+  ghlSubAuthorize,
+  ghlSubOauthCallback,
   // admin_super_signup,
 } = require("../controller/integrations.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
@@ -48,6 +50,8 @@ const {
   STRIPE_WEBHOOK,
   DELETE_TWILIO_NUMBER,
   CALL_BILLING_WEBHOOK,
+  GHL_SUB_AUTHORIZE,
+  GHL_SUB_OAUTH_CALLBACK,
 } = require("../constants");
 const {
   stripeWebhook,
@@ -56,6 +60,8 @@ const {
 
 router.get(GHL_AUTHORIZE, verifyAccessToken, ghlAuthorize);
 router.get(GHL_OAUTH_CALLBACK, ghlOauthCallback);
+router.get(GHL_SUB_AUTHORIZE, verifyAccessToken, ghlSubAuthorize);
+router.get(GHL_SUB_OAUTH_CALLBACK, ghlSubOauthCallback);
 router.get(STRIPE_AUTHORIZE, verifyAccessToken, stripeAuthorize);
 router.get(STRIPE_OAUTH_CALLBACK, stripeOauthCallback);
 router.post(

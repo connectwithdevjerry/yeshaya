@@ -12,6 +12,8 @@ const GHL_AUTHORIZE = "/ghl/authorize";
 const GHL_OAUTH_CALLBACK = "/oauth/callback";
 const STRIPE_AUTHORIZE = "/stripe/authorize";
 const STRIPE_OAUTH_CALLBACK = "/payment/oauth/callback";
+const GHL_SUB_AUTHORIZE = "/sub/ghl/authorize";
+const GHL_SUB_OAUTH_CALLBACK =  "/sub/oauth/callback";
 const TEST_OPENAI_KEY = "/test/openai-key";
 const CONNECT_OPENAI = "/connect/openai";
 const TEST_STRIPE_TOKEN = "/test/stripe-token";
@@ -49,7 +51,7 @@ const GET_ASSISTANT_CALL_LOGS = "/get-assistant-call-logs";
 const GET_FULL_REPORT = "/get-full-report";
 const MAKE_OUTBOUND_CALL = "/make-outbound-call";
 const GET_AVAILABLE_GHL_CALENDARS = "/get-available-ghl-calendars";
-const GET_CONNECTED_CALENDARS = "/get-connected-calendars";
+const GET_CONNECTED_CALENDARS = "/get-connected-calendar";
 const DELETE_TWILIO_NUMBER = "/delete-twilio-number";
 const CALL_BILLING_WEBHOOK = "/billing/webhook";
 const GET_TOOL_DETAILS = "/get-tool-details";
@@ -59,7 +61,7 @@ const GET_ASSISTANT_KNOWLEDGE_BASES = "/get-assistant-knowledge-bases";
 const LINK_KNOWLEDGE_BASES_2_ASSISTANT = "/link-knowledge-bases-to-assistant";
 const GET_ALL_KNOWLEDGE_BASES = "/get-all-knowledge-bases";
 const RMV_ASSISTANT_KNOWLEDGE = "/remove-knowlege-base-from-assistant";
-const DELETE_KNOWLEDGE_BASE = "/delete-knowlege-base"
+const DELETE_KNOWLEDGE_BASE = "/delete-knowlege-base";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -77,6 +79,8 @@ module.exports = {
   REFRESH_TOKEN,
   GHL_AUTHORIZE,
   GHL_OAUTH_CALLBACK,
+  GHL_SUB_AUTHORIZE,
+  GHL_SUB_OAUTH_CALLBACK,
   TEST_OPENAI_KEY,
   STRIPE_AUTHORIZE,
   STRIPE_OAUTH_CALLBACK,
@@ -125,5 +129,5 @@ module.exports = {
   GET_ALL_KNOWLEDGE_BASES,
   LINK_KNOWLEDGE_BASES_2_ASSISTANT,
   RMV_ASSISTANT_KNOWLEDGE,
-  DELETE_KNOWLEDGE_BASE
+  DELETE_KNOWLEDGE_BASE,
 };

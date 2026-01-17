@@ -18,6 +18,8 @@ const userSchema = mongoose.Schema({
   ghlSubAccountIds: [
     {
       accountId: String,
+      ghlSubRefreshToken: String,
+      ghlSubRefreshTokenExpiry: Date,
       connected: { type: Boolean, default: false },
       installationType: String,
       vapiAssistants: [

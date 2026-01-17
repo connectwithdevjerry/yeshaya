@@ -1128,16 +1128,19 @@ const executeToolFromVapi = async (req, res) => {
   }
 };
 
-const getSubAccountTokens = async (accessToken) => {
-  try {
-  } catch (error) {}
-};
-
-const getGhlTokens = async (userId) => {
+const getSubGhlTokens = async (userId, accountId) => {
   const user = await userModel.findById(userId);
-  const refreshToken = user.ghlRefreshToken;
+  const ghlSubAccountIds = user.ghlSubAccountIds;
+  const SUB_CLIENT_ID = process.env.GHL_SUB_CLIENT_ID;
+  const SUB_CLIENT_SECRET = process.env.GHL_SUB_CLIENT_SECRET;
 
-  console.log("agency-id: ", user.ghlAgencyId);
+  const targetSubaccount = ghlSubAccountIds.find(
+    (sub) => sub.accountId === accountId && sub.connected
+  );
+
+  const refreshToken = targetSubaccount.ghlSubRefreshToken;
+
+  console.log({ refreshToken });
 
   try {
     const url = "https://services.leadconnectorhq.com/oauth/token";
@@ -1147,8 +1150,8 @@ const getGhlTokens = async (userId) => {
     const response = await axios.post(
       url,
       {
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
+        client_id: SUB_CLIENT_ID,
+        client_secret: SUB_CLIENT_SECRET,
         grant_type: "refresh_token",
         refresh_token: refreshToken,
       },
@@ -1161,10 +1164,11 @@ const getGhlTokens = async (userId) => {
       }
     );
 
-    user.ghlRefreshToken = response.data.refresh_token;
-    user.ghlRefreshTokenExpiry = new Date(
+    targetSubaccount.ghlSubRefreshToken = response.data.refresh_token;
+    targetSubaccount.ghlSubRefreshTokenExpiry = new Date(
       Date.now() + response.data.expires_in * 1000
     );
+    user.markModified("ghlSubAccountIds");
     await user.save();
 
     return { status: true, data: response.data };
@@ -1183,7 +1187,7 @@ const addCalendarId = async (req, res) => {
 
   try {
     const result = await userModel.updateOne(
-      { _id: new mongoose.Types.ObjectId(userId) },
+      { _id: userId },
       {
         // $addToSet ensures we don't add the same calendar ID twice
         $addToSet: {
@@ -1229,25 +1233,25 @@ const getAvailableCalendars = async (req, res) => {
     return { status: false, message: "This subaccount does not exist!" };
 
   try {
-    const tkns = await getGhlTokens(userId);
+    const tkns = await getSubGhlTokens(userId, accountId);
 
     console.log({ tkns });
 
     const response = await axios.get(
-      `https://services.leadconnectorhq.com/calendars`,
+      `https://services.leadconnectorhq.com/calendars/`,
       {
         params: {
-          locationId: accountId, // Ensure this is the Location/Sub-Account ID
+          locationId: accountId, // This is correct, GHL expects locationId here
         },
         headers: {
+          // Access token must be valid and not expired
           Authorization: `Bearer ${tkns.data.access_token}`,
-          Version: "2021-04-15", // Use this version for better compatibility
+          // Version 2021-04-15 is the standard for GHL API v2
+          Version: "2021-04-15",
           Accept: "application/json",
         },
       }
     );
-
-    console.log({ response });
 
     const calendars = response.data.calendars || [];
 
@@ -1283,10 +1287,36 @@ const getConnectedCalendar = async (req, res) => {
       message: "This assistant does not exist!",
     });
 
-  return res.send({
-    status: true,
-    data: targetAssistant.calendar || [],
-  });
+  const tkns = await getSubGhlTokens(userId, accountId);
+
+  let config = {
+    method: "get",
+    maxBodyLength: Infinity,
+    // url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
+    url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${tkns.data.access_token}`,
+      Version: "2021-04-15",
+    },
+  };
+
+  axios
+    .request(config)
+    .then((response) => {
+      // console.log(JSON.stringify(response.data));
+      return res.send({
+        status: true,
+        data: response.data || {},
+      });
+    })
+    .catch((error) => {
+      // console.log(error);
+      return res.send({
+        status: false,
+        message: error.message || "This assistant does not exist!",
+      });
+    });
 };
 
 const deleteAssistantTool = async (req, res) => {
@@ -2479,3 +2509,7 @@ module.exports = {
 // tools and calendars
 // apis to be called when a tool is called
 // assistant call logs and reports (how much was charged)
+// payments charging
+// chat and voice labs
+// testing
+// whitelabel

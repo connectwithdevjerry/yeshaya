@@ -82,7 +82,7 @@ router.delete(
 // new routers
 router.get(ADD_TOOL, verifyAccessToken, addATool);
 router.get(DELETE_TOOL, verifyAccessToken, deleteAssistantTool);
-router.get(ADD_CALENDAR, verifyAccessToken, addCalendarId);
+router.post(ADD_CALENDAR, verifyAccessToken, addCalendarId);
 router.get(GET_TOOLS, verifyAccessToken, getAssistantTools);
 router.post(ADD_DYNAMIC_MESSAGE, verifyAccessToken, addDynamicFMessageToDB);
 router.get(GET_DYNAMIC_MESSAGE, verifyAccessToken, getDynamicFMessage);
