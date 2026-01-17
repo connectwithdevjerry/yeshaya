@@ -16,7 +16,7 @@ const { HighLevel } = require("@gohighlevel/api-client");
 const https = require("https");
 const twilio = require("twilio");
 const { getVapiPhoneId } = require("./assistant.controller");
-const { extractVariables, fillTemplate } = require("../helperFunctions");
+const { extractVariables, fillTemplate, getSubGhlTokens } = require("../helperFunctions");
 const VoiceResponse = require("twilio").twiml.VoiceResponse;
 
 const SUB_PATH = "/integrations";
@@ -1053,7 +1053,7 @@ const twilioCallReceiver = async (req, res) => {
     const checkMessageAvailability =
       inboundDynamicMessage && inboundDynamicMessage.trim() !== "";
 
-    const refreshGhlTokensValue = await getGhlTokens(userId);
+    const refreshGhlTokensValue = await getSubGhlTokens(userId, subaccount);
 
     if (!refreshGhlTokensValue.status) {
       throw new Error(
