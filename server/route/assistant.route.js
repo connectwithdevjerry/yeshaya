@@ -29,6 +29,8 @@ const {
   getAllKnowledgeBases,
   removeKnowledgeBaseFromAssistant,
   deleteKnowledgeBase,
+  executeToolFromVapi,
+  sendChatMessage,
 } = require("../controller/assistant.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
 
@@ -59,7 +61,9 @@ const {
   GET_ALL_KNOWLEDGE_BASES,
   LINK_KNOWLEDGE_BASES_2_ASSISTANT,
   RMV_ASSISTANT_KNOWLEDGE,
+  EXECUTE_TOOL,
   DELETE_KNOWLEDGE_BASE,
+  SEND_CHAT_MESSAGE,
 } = require("../constants");
 
 const upload = multer({
@@ -80,16 +84,18 @@ router.delete(
 );
 
 // new routers
-router.get(ADD_TOOL, verifyAccessToken, addATool);
-router.get(DELETE_TOOL, verifyAccessToken, deleteAssistantTool);
-router.get(ADD_CALENDAR, verifyAccessToken, addCalendarId);
+router.post(ADD_TOOL, verifyAccessToken, addATool);
+router.post(SEND_CHAT_MESSAGE, verifyAccessToken, sendChatMessage);
+router.post(EXECUTE_TOOL, verifyAccessToken, executeToolFromVapi);
+router.delete(DELETE_TOOL, verifyAccessToken, deleteAssistantTool);
+router.post(ADD_CALENDAR, verifyAccessToken, addCalendarId);
 router.get(GET_TOOLS, verifyAccessToken, getAssistantTools);
 router.post(ADD_DYNAMIC_MESSAGE, verifyAccessToken, addDynamicFMessageToDB);
 router.get(GET_DYNAMIC_MESSAGE, verifyAccessToken, getDynamicFMessage);
 router.get(GET_TOOL_DETAILS, verifyAccessToken, getToolDetails);
 router.get(GET_FILE_DETAILS, verifyAccessToken, getFileDetails);
 router.delete(DELETE_KNOWLEDGE_BASE, verifyAccessToken, deleteKnowledgeBase);
-router.get(
+router.delete(
   RMV_ASSISTANT_KNOWLEDGE,
   verifyAccessToken,
   removeKnowledgeBaseFromAssistant

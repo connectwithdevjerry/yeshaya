@@ -8,52 +8,107 @@ const fs = require("fs");
 const { fillTemplate, extractText } = require("../helperFunctions");
 const { MAKE_OUTBOUND_CALL } = require("../constants");
 
-const allowableTools = {
-  scrape_website:
-    "Allows the Al to look at a website. You can prompt the website to scrape or use the contact's website in your instructions.",
-  update_user_details:
-    "Updates the contact's information in the CRM. The fields that can be updated using this tool are first name, last name, email, phone number, full address, timezone and website.",
-  search_the_web:
-    "Searches the web and returns search engine answers to a query. Use this tool to search the web.",
-  get_availability:
-    "Gets your calendar availability. Always call this tool to get the most up-to-date information about your calendar ID's availability.",
-  book_appointment:
-    "Books an appointment with the user. Always get your availability before using this tool to confirm the chosen spot is still available before proceeding to book. Use this tool to book an appointment from an available...",
-  get_user_calendar_events:
-    "Gets all calendar events schedule with the user and data associated. Use this tool to check the user's current, past and future appointments and get appointment IDs for the events.",
-};
-
 const toolsProperties = {
-  scrape_website: { property: {}, requiredValues: [] },
-  update_user_details: { property: {}, requiredValues: [] },
-  search_the_web: { property: {}, requiredValues: [] },
-  get_availability: { property: {}, requiredValues: [] },
-  book_appointment: { property: {}, requiredValues: [] },
-  get_user_calendar_events: { property: {}, requiredValues: [] },
+  scrape_website: {
+    description:
+      "Allows the Al to look at a website. You can prompt the website to scrape or use the contact's website in your instructions.",
+    properties: {
+      url: { type: "string", description: "The URL of the website to scrape" },
+    },
+    requiredValues: ["url"],
+  },
+  update_user_details: {
+    description:
+      "Updates the contact's information in the CRM. The fields that can be updated using this tool are first name, last name, email, phone number, full address, timezone and website.",
+    properties: {
+      firstName: { type: "string", description: "The customer's first name" },
+      lastName: { type: "string", description: "The customer's last name" },
+      email: { type: "string", description: "The customer's email address" },
+      notes: {
+        type: "string",
+        description:
+          "Any additional context or preferences the customer mentioned",
+      },
+    },
+    required: ["firstName"],
+  },
+  search_the_web: {
+    description:
+      "Searches the web and returns search engine answers to a query. Use this tool to search the web.",
+    properties: {
+      query: {
+        type: "string",
+        description: "The specific search string to look up on Google or Bing.",
+      },
+      search_type: {
+        type: "string",
+        enum: ["news", "general", "places"],
+        description: "The type of search to perform.",
+      },
+    },
+    required: ["query"],
+  },
+  check_availability: {
+    description:
+      "Gets your calendar availability. Always call this tool to get the most up-to-date information about your calendar ID's availability.",
+    properties: {
+      startTime: {
+        type: "string",
+        description:
+          "The ISO 8601 timestamp to start checking from (e.g., 2024-05-01T09:00:00Z)",
+      },
+      endTime: {
+        type: "string",
+        description: "The ISO 8601 timestamp to stop checking at.",
+      },
+      timezone: {
+        type: "string",
+        description: "The customer's timezone (e.g., 'America/New_York')",
+      },
+    },
+    required: ["startTime"],
+  },
+  book_appointment: {
+    description:
+      "Books an appointment with the user. Always get your availability before using this tool to confirm the chosen spot is still available before proceeding to book. Use this tool to book an appointment from an available...",
+    properties: {
+      customerName: { type: "string", description: "The name of the caller" },
+      customerEmail: { type: "string", description: "The email of the caller" },
+      requestedTime: {
+        type: "string",
+        description: "The ISO string of the appointment time",
+      },
+    },
+    requiredValues: ["customerName", "customerEmail", "requestedTime"],
+  },
+  get_user_calendar_events: {
+    description:
+      "Gets all calendar events schedule with the user and data associated. Use this tool to check the user's current, past and future appointments and get appointment IDs for the events.",
+    properties: {
+      startDate: {
+        type: "string",
+        description:
+          "The start date and time to begin fetching events from (ISO 8601 format).",
+      },
+      endDate: {
+        type: "string",
+        description:
+          "The end date and time to stop fetching events (ISO 8601 format).",
+      },
+    },
+    required: ["startDate"],
+  },
 };
 
-const toolData = (
-  toolName,
-  description,
-  userCompName,
-  userCompEmail,
-  userId
-) => ({
+const toolData = (toolName, userId) => ({
   type: "function",
   function: {
     name: toolName,
-    description,
+    description: toolsProperties[toolName].description,
     parameters: {
       type: "object",
-      properties: {
-        firstName: { type: "string", description: userCompName },
-        email: { type: "string", description: userCompEmail },
-        startTime: {
-          type: "string",
-          description: new Date().toISOString(),
-        },
-      },
-      required: ["firstName", "email", "startTime"],
+      properties: toolsProperties[toolName].properties,
+      required: toolsProperties[toolName].required,
     },
   },
   server: {
@@ -140,11 +195,15 @@ const VAPI_ASSISTANT_CONFIG = ({
     temperature: 0.7,
     maxTokens: 150,
   },
+  server: {
+    url: `${process.env.SERVER_URL}/integrations/billing/webhook`,
+    timeoutSeconds: 20, // Optional: time to wait for your server to respond
+  },
   voice: {
     voiceId,
     provider: v_provider,
   },
-  firstMessage: prompt,
+  firstMessage: "Hello! How can I assist you today?",
   language: "en",
   endCallPhrases: ["goodbye", "thanks, that's all"],
   transcriber: {
@@ -731,16 +790,11 @@ const getVapiPhoneId = async (phoneNum) => {
   }
 };
 
-const createTool = async (
-  toolName,
-  description,
-  userCompName,
-  userCompEmail
-) => {
+const createTool = async (toolName, userId) => {
   try {
     const response = await axios.post(
       "https://api.vapi.ai/tool",
-      toolData(toolName, description, userCompName, userCompEmail),
+      toolData(toolName, userId),
       {
         headers: {
           Authorization: `Bearer ${VAPI_API_KEY}`,
@@ -750,89 +804,122 @@ const createTool = async (
     );
 
     console.log("Tool Created! ID:", response.data.id);
-    return { toolId: response.data.id };
+    return response.data.id;
   } catch (error) {
     console.error(
       "Error creating tool:",
       error.response?.data || error.message
     );
-    return { message: error.response?.data || error.message };
+    throw new Error(
+      `Error creating tool: ${error.response?.data || error.message}`
+    );
   }
 };
 
-const linkToolToAssistant = async (assistantId, toolId) => {
+const linkToolToAssistant = async (assistantId, toolId, userId) => {
   try {
-    await axios.patch(
+    const vapi = new VapiClient({
+      token: VAPI_API_KEY,
+    });
+
+    // 1. Update the Assistant on Vapi's side
+    const massistant = await vapi.assistants.get(assistantId);
+    let updatedTools = [...(massistant.model.toolIds || [])];
+
+    if (toolId && !updatedTools.includes(toolId)) {
+      updatedTools.push(toolId);
+    }
+
+    const response = await axios.patch(
       `https://api.vapi.ai/assistant/${assistantId}`,
       {
         model: {
-          tools: [
-            {
-              type: "function",
-              toolId: toolId, // The ID returned from the creation step
-            },
-          ],
+          provider: massistant.model.provider || "openai",
+          model: massistant.model.model || "gpt-4o",
+          toolIds: updatedTools,
         },
       },
       {
         headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
       }
     );
-    console.log(`Tool ${toolId} linked to Assistant ${assistantId}`);
-    return {
-      status: true,
-      message: `Tool ${toolId} linked to Assistant ${assistantId}`,
-    };
+
+    // 2. Update your local MongoDB database
+    const user = await userModel.findById(userId);
+    if (!user) throw new Error("User not found");
+
+    let assistantFoundInDb = false;
+
+    for (const sub of user.ghlSubAccountIds) {
+      const foundAssistant = sub.vapiAssistants.find(
+        (a) => a.assistantId === assistantId
+      );
+
+      if (foundAssistant) {
+        // Initialize the array if it doesn't exist
+        if (!foundAssistant.connectedTools) {
+          foundAssistant.connectedTools = [];
+        }
+
+        // Check for duplicates before pushing
+        const isAlreadyLinked = foundAssistant.connectedTools.includes(toolId);
+
+        if (!isAlreadyLinked && toolId) {
+          foundAssistant.connectedTools.push(toolId);
+          assistantFoundInDb = true;
+        }
+        break; // Stop looking once the assistant is found and updated
+      }
+    }
+
+    if (assistantFoundInDb) {
+      // Mark as modified because ghlSubAccountIds is a nested array
+      user.markModified("ghlSubAccountIds");
+      await user.save();
+    }
+
+    return toolId;
   } catch (error) {
     console.error("Error linking tool:", error.response?.data || error.message);
-    return {
-      status: false,
-      message: `Error linking tool: ${error.response?.data || error.message}`,
-    };
+    throw new Error(
+      `Error linking tool: ${error.response?.data || error.message}`
+    );
   }
 };
 
 // start test from here
 const addATool = async (req, res) => {
-  const userId = req.user;
-  const { assistantId, toolName } = req.body;
+  try {
+    const userId = req.user;
+    const { assistantId, toolName } = req.body;
 
-  const user = await userModel.findById(userId);
-  const userCompName = user.company.name || user.firstName;
-  const userCompEmail = user.email;
+    const toolId = await createTool(toolName, userId);
 
-  const toolDescription = allowableTools[toolName];
+    console.log({ toolId });
 
-  if (!toolDescription)
-    return res.send({ status: false, message: "toolName not permitted!" });
+    // save tool id into database
+    // get connected calendar ids and save them into database
 
-  const toolCreateAttempt = await createTool(
-    toolName,
-    toolDescription,
-    userCompName,
-    userCompEmail
-  );
+    const data = await linkToolToAssistant(assistantId, toolId, userId);
 
-  console.log({ toolCreateAttempt });
-
-  if (toolCreateAttempt.message)
-    return res.send({ status: false, message: toolCreateAttempt.message });
-
-  // save tool id into database
-  // get connected calendar ids and save them into database
-
-  const linkToolAttempt = await linkToolToAssistant(
-    assistantId,
-    toolCreateAttempt.toolId
-  );
-
-  return res.send(linkToolAttempt);
+    return res.send({ status: true, data });
+  } catch (error) {
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
 };
 
 const executeToolFromVapi = async (req, res) => {
   const { message } = req.body;
   const { userId } = req.params;
+
   if (message.type !== "tool-calls") return res.status(200).send();
+
+  console.log("Received tool call from Vapi:", message);
+
+  console.log("..........................................................");
 
   const toolCall = message.toolCalls[0];
   const assistantId = message.assistantId; // Vapi sends this automatically
@@ -868,20 +955,21 @@ const executeToolFromVapi = async (req, res) => {
 
     // 3. Get Credentials
     const locationId = targetSubAccount.accountId;
-    const calendarId = targetAssistant.calendar; // Uses the first calendar in your [String] array
-    const refreshToken = user.ghlRefreshToken;
+    const calendarId = targetAssistant.calendar; // Uses the first calendar
 
     // 4. IMPORTANT: GHL API v2 requires an Access Token (not just a refresh token)
     // You must have a helper to refresh this token, as they expire every 20 hours.
-    const accessToken = await getFreshAccessToken(user);
+    const tkns = await getSubGhlTokens(userId, locationId);
+
+    const accessToken = tkns.data.access_token;
 
     const { name, arguments: args } = toolCall.function;
 
     // 1 --- TOOL: CHECK AVAILABILITY ---
     if (name === "check_availability") {
-      const { date } = args; // "YYYY-MM-DD"
-      const startMs = new Date(`${date}T00:00:00Z`).getTime();
-      const endMs = new Date(`${date}T23:59:59Z`).getTime();
+      const { startTime } = args; // "YYYY-MM-DD"
+      const startMs = new Date(`${startTime}T00:00:00Z`).getTime();
+      const endMs = new Date(`${startTime}T23:59:59Z`).getTime();
 
       const response = await axios.get(
         `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`,
@@ -893,7 +981,7 @@ const executeToolFromVapi = async (req, res) => {
           },
         }
       );
-
+      // Return available slots to Vapi
       return res.json({
         results: [
           {
@@ -906,12 +994,12 @@ const executeToolFromVapi = async (req, res) => {
 
     // 2 --- TOOL: BOOK APPOINTMENT ---
     if (name === "book_appointment") {
-      const { email, firstName, lastName, startTime } = args;
+      const { customerEmail, customerName, startTime } = args;
 
       // Step A: Upsert Contact
       const contactRes = await axios.post(
         "https://services.leadconnectorhq.com/contacts/upsert",
-        { email, firstName, lastName, locationId },
+        { email: customerEmail, firstName: customerName, locationId },
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -928,7 +1016,7 @@ const executeToolFromVapi = async (req, res) => {
           locationId,
           contactId: contactRes.data.contact.id,
           startTime,
-          title: `Vapi Booking: ${firstName}`,
+          title: `Vapi Booking: ${customerName}`,
         },
         {
           headers: {
@@ -945,8 +1033,8 @@ const executeToolFromVapi = async (req, res) => {
 
     // 3 --- TOOL: UPDATE USER DETAILS ---
     if (name === "update_user_details") {
-      const { firstName, lastName, email, phone, address, timezone, website } =
-        args;
+      const { firstName, lastName, email } = args;
+      // phone,address,timezone,website
 
       // Use the accessToken from your helper function
       const accessToken = await getFreshAccessToken(user);
@@ -956,10 +1044,10 @@ const executeToolFromVapi = async (req, res) => {
         firstName,
         lastName,
         email,
-        phone,
-        address1: address, // GHL uses 'address1' for the primary address field
-        timezone,
-        website,
+        // phone,
+        // address1: address, // GHL uses 'address1' for the primary address field
+        // timezone,
+        // website,
       };
 
       const response = await axios.post(
@@ -1125,11 +1213,19 @@ const executeToolFromVapi = async (req, res) => {
   }
 };
 
-const getGhlTokens = async (userId) => {
+const getSubGhlTokens = async (userId, accountId) => {
   const user = await userModel.findById(userId);
-  const refreshToken = user.ghlRefreshToken;
-  const CLIENT_ID = process.env.GHL_APP_CLIENT_ID;
-  const CLIENT_SECRET = process.env.GHL_APP_CLIENT_SECRET;
+  const ghlSubAccountIds = user.ghlSubAccountIds;
+  const SUB_CLIENT_ID = process.env.GHL_SUB_CLIENT_ID;
+  const SUB_CLIENT_SECRET = process.env.GHL_SUB_CLIENT_SECRET;
+
+  const targetSubaccount = ghlSubAccountIds.find(
+    (sub) => sub.accountId === accountId && sub.connected
+  );
+
+  const refreshToken = targetSubaccount.ghlSubRefreshToken;
+
+  console.log({ refreshToken });
 
   try {
     const url = "https://services.leadconnectorhq.com/oauth/token";
@@ -1139,10 +1235,11 @@ const getGhlTokens = async (userId) => {
     const response = await axios.post(
       url,
       {
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
+        client_id: SUB_CLIENT_ID,
+        client_secret: SUB_CLIENT_SECRET,
         grant_type: "refresh_token",
         refresh_token: refreshToken,
+        user_type: "Location",
       },
       {
         headers: {
@@ -1153,10 +1250,11 @@ const getGhlTokens = async (userId) => {
       }
     );
 
-    user.ghlRefreshToken = response.data.refresh_token;
-    user.ghlRefreshTokenExpiry = new Date(
+    targetSubaccount.ghlSubRefreshToken = response.data.refresh_token;
+    targetSubaccount.ghlSubRefreshTokenExpiry = new Date(
       Date.now() + response.data.expires_in * 1000
     );
+    user.markModified("ghlSubAccountIds");
     await user.save();
 
     return { status: true, data: response.data };
@@ -1175,10 +1273,10 @@ const addCalendarId = async (req, res) => {
 
   try {
     const result = await userModel.updateOne(
-      { _id: new mongoose.Types.ObjectId(userId) },
+      { _id: userId },
       {
-        // $addToSet ensures we don't add the same calendar ID twice
-        $addToSet: {
+        $set: {
+          // Use $set to assign the string value directly
           "ghlSubAccountIds.$[sub].vapiAssistants.$[ast].calendar": calendarId,
         },
       },
@@ -1221,25 +1319,25 @@ const getAvailableCalendars = async (req, res) => {
     return { status: false, message: "This subaccount does not exist!" };
 
   try {
-    const tkns = await getGhlTokens(userId);
+    const tkns = await getSubGhlTokens(userId, accountId);
 
     console.log({ tkns });
 
     const response = await axios.get(
-      `https://services.leadconnectorhq.com/calendars`,
+      `https://services.leadconnectorhq.com/calendars/`,
       {
         params: {
-          locationId: accountId, // Ensure this is the Location/Sub-Account ID
+          locationId: accountId, // This is correct, GHL expects locationId here
         },
         headers: {
+          // Access token must be valid and not expired
           Authorization: `Bearer ${tkns.data.access_token}`,
-          Version: "2021-04-15", // Use this version for better compatibility
+          // Version 2021-04-15 is the standard for GHL API v2
+          Version: "2021-04-15",
           Accept: "application/json",
         },
       }
     );
-
-    console.log({ response });
 
     const calendars = response.data.calendars || [];
 
@@ -1275,10 +1373,36 @@ const getConnectedCalendar = async (req, res) => {
       message: "This assistant does not exist!",
     });
 
-  return res.send({
-    status: true,
-    data: targetAssistant.calendar || [],
-  });
+  const tkns = await getSubGhlTokens(userId, accountId);
+
+  let config = {
+    method: "get",
+    maxBodyLength: Infinity,
+    // url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
+    url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${tkns.data.access_token}`,
+      Version: "2021-04-15",
+    },
+  };
+
+  axios
+    .request(config)
+    .then((response) => {
+      // console.log(JSON.stringify(response.data));
+      return res.send({
+        status: true,
+        data: response.data || {},
+      });
+    })
+    .catch((error) => {
+      // console.log(error);
+      return res.send({
+        status: false,
+        message: error.message || "This assistant does not exist!",
+      });
+    });
 };
 
 const deleteAssistantTool = async (req, res) => {
@@ -1328,49 +1452,56 @@ const deleteAssistantTool = async (req, res) => {
 
 const getAssistantTools = async (req, res) => {
   const userId = req.user;
-  const { accountId, assistantId } = req.query;
-
-  const user = await userModel.findById(userId);
-
-  const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === accountId && sub.connected
-  );
-  if (!targetSubaccount)
-    return res.send({
-      status: false,
-      message: "This subaccount does not exist!",
-    });
-
-  const targetAssistant = targetSubaccount.vapiAssistants.find(
-    (target) => target.assistantId === assistantId
-  );
-
-  if (!targetAssistant)
-    return res.send({
-      status: false,
-      message: "This assistant does not exist!",
-    });
+  const { assistantId } = req.query;
 
   try {
-    const response = await axios.get(
-      `https://api.vapi.ai/assistant/${assistantId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${VAPI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
+    const user = await userModel.findById(userId);
+
+    const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
+      sub.vapiAssistants.some((ast) => ast.assistantId === assistantId)
     );
 
-    const tools = response.data.model.tools || [];
+    if (!targetSubaccount)
+      return res.send({ status: false, message: "Subaccount not found!" });
+
+    const targetAssistant = targetSubaccount.vapiAssistants.find(
+      (target) => target.assistantId === assistantId
+    );
+
+    if (!targetAssistant)
+      return res.send({ status: false, message: "Assistant does not exist!" });
+
+    const toolPromises = targetAssistant.connectedTools.map(
+      (id) =>
+        axios
+          .get(`https://api.vapi.ai/tool/${id}`, {
+            headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+          })
+          .then((res) => res.data)
+          .catch(() => null) // Handle deleted tools gracefully
+    );
+
+    const allTools = await Promise.all(toolPromises);
+
+    // 3. Filter for Knowledge Base (Query) tools
+    const connectedTools = allTools.filter(
+      (tool) => tool && tool.type !== "query"
+    );
+
+    console.log(
+      `Found ${connectedTools.length} knowledge base tools attached.`
+    );
 
     return res.send({
       status: true,
-      data: tools,
+      data: connectedTools || [],
     });
   } catch (error) {
-    console.error("Error fetching assistant tools:", error.message);
-    return res.send({ status: false, message: error.message });
+    // console.error("Failed to get knowledge bases:", error.message);
+    return res.send({
+      status: false,
+      message: error.message,
+    });
   }
 };
 
@@ -1790,6 +1921,8 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
       `https://api.vapi.ai/assistant/${assistantId}`,
       {
         model: {
+          provider: massistant.model.provider || "openai",
+          model: massistant.model.model || "gpt-4o",
           toolIds: [...remainingTools],
         },
       },
@@ -1820,7 +1953,7 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
 
 const addKnowledgeBase = async (req, res) => {
   const userId = req.user;
-  const { assistantId, knowledgeBaseUrl, type, title } = req.body;
+  const { knowledgeBaseUrl, type, title } = req.body;
 
   try {
     const user = await userModel.findById(userId);
@@ -1842,20 +1975,20 @@ const addKnowledgeBase = async (req, res) => {
     //   return res.send({ status: false, message: "Assistant does not exist!" });
 
     // get assistant model and provider, knowledge base requires it
-    const vapi = new VapiClient({
-      token: VAPI_API_KEY,
-    });
+    // const vapi = new VapiClient({
+    //   token: VAPI_API_KEY,
+    // });
 
-    const massistant = await vapi.assistants.get(assistantId);
+    // const massistant = await vapi.assistants.get(assistantId);
 
     // console.log(
     //   `Successfully retrieved details for Assistant: ${massistant.name} (ID: ${massistant.id})`,
     //   massistant
     // );
 
-    if (!massistant) {
-      return res.send({ status: false, message: "Assistant not found!" });
-    }
+    // if (!massistant) {
+    //   return res.send({ status: false, message: "Assistant not found!" });
+    // }
 
     // --- STEP 1: HARVEST DATA (Firecrawl API vs Local File) ---
     let fileBuffer;
@@ -1964,15 +2097,15 @@ const addKnowledgeBase = async (req, res) => {
 
     console.log(`File uploaded to Vapi with File ID: ${newFileId}`);
 
-    console.log(
-      `Linking Query Tool to Assistant ${assistantId}...`,
-      massistant
-    );
+    // console.log(
+    //   `Linking Query Tool to Assistant ${assistantId}...`,
+    //   massistant
+    // );
 
-    console.log({
-      model: massistant.model.model,
-      provider: massistant.model.provider,
-    });
+    // console.log({
+    //   model: massistant.model.model,
+    //   provider: massistant.model.provider,
+    // });
 
     // STEP 2: Create the Query Tool
     const toolResponse = await axios.post(
@@ -2002,7 +2135,7 @@ const addKnowledgeBase = async (req, res) => {
 
     console.log(`Query Tool created with ID: ${toolId}`);
 
-    console.log(`Query Tool ${toolId} linked to Assistant ${assistantId}`);
+    // console.log(`Query Tool ${toolId} linked to Assistant ${assistantId}`);
 
     // Save knowledge base file ID to database
     // if (!targetAssistant.knowledgeBaseToolIds) {
@@ -2016,9 +2149,9 @@ const addKnowledgeBase = async (req, res) => {
     user.markModified("ghlSubAccountIds");
     await user.save();
 
-    console.log(
-      `Knowledge base added and linked successfully to Assistant ${assistantId}.`
-    );
+    // console.log(
+    //   `Knowledge base added and linked successfully to Assistant ${assistantId}.`
+    // );
 
     return res.send({ status: true, data: toolResponse.data });
   } catch (error) {
@@ -2090,7 +2223,18 @@ const getAssistantKnowledgeBases = async (req, res) => {
 };
 
 const getAssistantCallLogs = async (req, res) => {
-  const { assistantIds } = req.body; // Expecting ["id1", "id2"]
+  // const { assistantIds } = req.body; // Expecting ["id1", "id2"]
+  const userId = req.user;
+
+  const user = await userModel.findById(userId);
+
+  const validAssistantIds = user.ghlSubAccountIds.flatMap((subAccount) =>
+    subAccount.vapiAssistants.map((assistant) => assistant.assistantId)
+  );
+
+  const assistantIds = validAssistantIds;
+
+  console.log("Fetching call logs for Assistant IDs:", assistantIds);
 
   if (!Array.isArray(assistantIds) || assistantIds.length === 0) {
     return res.send({
@@ -2427,6 +2571,59 @@ const makeOutboundCall = async (req, res) => {
   }
 };
 
+const sendChatMessage = async (req, res) => {
+  const { userText, assistantId } = req.body;
+
+  if (!req.session.chatHistory) {
+    req.session.chatHistory = {};
+  }
+  if (!req.session.chatHistory[assistantId]) {
+    req.session.chatHistory[assistantId] = [];
+  }
+
+  try {
+    const currentHistory = req.session.chatHistory[assistantId];
+    const messages = [
+      ...currentHistory.slice(-10),
+      { role: "user", content: userText },
+    ];
+
+    console.log("Sending messages to Vapi:", messages);
+
+    const response = await axios.post(
+      "https://api.vapi.ai/chat", // Corrected Endpoint
+      {
+        assistantId: assistantId, // Passed in the body
+        input: messages, // Vapi expects 'input' or 'messages'
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    req.session.chatHistory[assistantId].push({
+      role: "user",
+      content: userText,
+    });
+    req.session.chatHistory[assistantId].push(response.data.output[0]);
+
+    return res.send({ status: true, reply: response.data.output });
+  } catch (error) {
+    console.error(
+      "Error sending chat message:",
+      error.response ? error.response.data : error.message
+    );
+    return res.send({
+      status: false,
+      message: error.message,
+      data: error.response?.data,
+    });
+  }
+};
+
 // instructions for 1. call settings, enable recording, max call time, silence timeout, background noise and volume, silence timeout, rules of engagement, enable voicemail detection and message, incoming call webhook, post call webhook
 
 // record, sleep mode, enable purposeful misspellings, response channels
@@ -2442,6 +2639,7 @@ module.exports = {
   deleteAssistant,
   generatePrompt,
   deleteNumberFromAssistant,
+  executeToolFromVapi,
   getVapiPhoneId,
   addATool,
   deleteAssistantTool,
@@ -2463,9 +2661,15 @@ module.exports = {
   linkKnowledgeBaseToAssistant,
   deleteKnowledgeBase,
   removeKnowledgeBaseFromAssistant,
+  sendChatMessage,
 };
 
 // what's left
-// tools and calendars
+// tools
+// inbound and outbound call handling
 // apis to be called when a tool is called
 // assistant call logs and reports (how much was charged)
+// payments charging
+// chat and voice labs
+// testing
+// whitelabel

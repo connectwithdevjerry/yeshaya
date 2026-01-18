@@ -18,13 +18,15 @@ const userSchema = mongoose.Schema({
   ghlSubAccountIds: [
     {
       accountId: String,
+      ghlSubRefreshToken: String,
+      ghlSubRefreshTokenExpiry: Date,
       connected: { type: Boolean, default: false },
       installationType: String,
       vapiAssistants: [
         {
           assistantId: String,
           description: String,
-          calendar: String,
+          calendar: { type: String, required: false },
           inboundDynamicMessage: { type: String, required: false },
           outboundDynamicMessage: { type: String, required: false },
           knowledgeBaseToolIds: [String],

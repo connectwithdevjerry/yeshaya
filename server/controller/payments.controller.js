@@ -324,10 +324,17 @@ const autoTopUpLowWalletUsers = async () => {
 
 const callBillingWebhook = async (req, res) => {
   try {
-    const { type, call } = req.body;
+    const { type, call, artifact } = req.body.message;
+
+    console.log("Received billing webhook:", req.body);
 
     if (!call || !call.id || !call.assistantId) {
       return res.status(400).send("Invalid payload");
+    }
+
+    if (type !== "end-of-call-report") {
+      console.log(`Call ${call.id} is currently ${call.status}`);
+      return res.sendStatus(200);
     }
 
     const user = await userModel.findOne({
