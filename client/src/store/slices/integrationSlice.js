@@ -1,7 +1,6 @@
 // src/store/slices/integrationSlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../api/config"; // using interceptor instance
-import axios from "axios";
 
 // 🔹 GoHighLevel
 export const connectGoHighLevel = createAsyncThunk(
@@ -21,7 +20,7 @@ export const connectGoHighLevel = createAsyncThunk(
       console.error("❌ GHL Error:", error.response?.data || error.message);
       return rejectWithValue(error.response?.data || error.message);
     }
-  }
+  },
 );
 
 // 🔹 Stripe
@@ -42,7 +41,7 @@ export const connectStripe = createAsyncThunk(
       console.error("❌ Stripe Error:", error.response?.data || error.message);
       return rejectWithValue(error.response?.data || error.message);
     }
-  }
+  },
 );
 
 // 🔹 OpenAI
@@ -60,7 +59,7 @@ export const connectOpenAI = createAsyncThunk(
       console.error("❌ OpenAI Error:", error.response?.data || error.message);
       return rejectWithValue(error.response?.data || error.message);
     }
-  }
+  },
 );
 
 export const testOpenAiKey = createAsyncThunk(
@@ -75,7 +74,7 @@ export const testOpenAiKey = createAsyncThunk(
       console.error("❌ OpenAI Error:", error.response?.data || error.message);
       return rejectWithValue(error.response?.data || error.message);
     }
-  }
+  },
 );
 
 // 🔹 Get Integration Status
@@ -90,7 +89,7 @@ export const getIntegrationStatus = createAsyncThunk(
       console.error("🔴 Failed to fetch integration status:", error);
       return rejectWithValue(error.response?.data || error.message);
     }
-  }
+  },
 );
 
 // ✅ Fetch all GoHighLevel Subaccounts
@@ -99,7 +98,7 @@ export const fetchSubAccounts = createAsyncThunk(
   async ({ userType = "anon" } = {}, { rejectWithValue }) => {
     try {
       const response = await apiClient.get(
-        `/integrations/get-subaccounts?userType=${userType}`
+        `/integrations/get-subaccounts?userType=${userType}`,
       );
 
       // safe extraction: response.data.data.locations is where the array lives
@@ -110,17 +109,17 @@ export const fetchSubAccounts = createAsyncThunk(
 
       console.log(
         "🟢 Fetched Subaccounts (locations length):",
-        locations.length
+        locations.length,
       );
       return { locations, agencyId };
     } catch (error) {
       console.error(
         "🔴 Failed to fetch subaccounts:",
-        error.response?.data || error.message
+        error.response?.data || error.message,
       );
       return rejectWithValue(error.response?.data || error.message);
     }
-  }
+  },
 );
 
 //Fetch imported subaccounts
@@ -137,21 +136,20 @@ export const fetchImportedSubAccounts = createAsyncThunk(
     } catch (error) {
       console.error(
         "🔴 Failed to fetch subaccounts:",
-        error.response?.data || error.message
+        error.response?.data || error.message,
       );
       return rejectWithValue(error.response?.data || error.message);
     }
-  }
+  },
 );
 
 export const importSubAccounts = createAsyncThunk(
   "importSubAccounts/import",
   async (accountIds, { rejectWithValue }) => {
     try {
-
       const response = await apiClient.post(
         "/integrations/import-sub-accounts",
-        { accountIds }
+        { accountIds },
       );
       console.log("📥 RESPONSE DATA:", response.data);
 
@@ -172,8 +170,45 @@ export const importSubAccounts = createAsyncThunk(
       console.error("Error response:", error.response?.data);
       return rejectWithValue(error.response?.data || error.message);
     }
+  },
+);
+
+// 🔹 GoHighLevel Authorization
+export const authorizeGoHighLevel = createAsyncThunk(
+  "integrations/authorizeGoHighLevel",
+  async (
+    {
+      accountId,
+      accountType = "Company",
+      installationType = "directInstallation",
+    },
+    { rejectWithValue }
+  ) => {
+    try {
+      // Execute GET request with all data in the query string
+      const response = await apiClient.get("/integrations/sub/ghl/authorize", {
+        params: {
+          accountId,
+          accountType,
+          installationType,
+        },
+      });
+
+      // Handle the redirect URL if provided
+      if (response.data?.authUrl) {
+        window.location.href = response.data.authUrl;
+        return { status: "redirecting" };
+      }
+
+      console.log("✅ GHL Response:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("❌ GHL Error:", error.response?.data || error.message);
+      return rejectWithValue(error.response?.data || error.message);
+    }
   }
 );
+
 // 🔹 Slice
 const integrationSlice = createSlice({
   name: "integrations",
@@ -339,7 +374,7 @@ const integrationSlice = createSlice({
         // If already installed, just log and don't update state
         if (action.payload?.alreadyInstalled) {
           console.log(
-            "✅ Subaccounts already installed, no state update needed"
+            "✅ Subaccounts already installed, no state update needed",
           );
           return;
         }
@@ -351,6 +386,22 @@ const integrationSlice = createSlice({
       .addCase(importSubAccounts.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload || action.error;
+      })
+
+      // Authorize GoHighLevel for Subaccount
+      .addCase(authorizeGoHighLevel.pending, (state) => {
+        state.goHighLevel.loading = true;
+        state.goHighLevel.error = null;
+      })
+      .addCase(authorizeGoHighLevel.fulfilled, (state, action) => {
+        state.goHighLevel.loading = false;
+        state.goHighLevel.connected =
+          action.payload?.status === "connected" ||
+          action.payload?.status === "redirecting";
+      })
+      .addCase(authorizeGoHighLevel.rejected, (state, action) => {
+        state.goHighLevel.loading = false;
+        state.goHighLevel.error = action.payload || "Connection failed";
       });
   },
 });

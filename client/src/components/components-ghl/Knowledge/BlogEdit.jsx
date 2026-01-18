@@ -18,6 +18,8 @@ import EditNameModal from "./KnowledgeDetails/EditNameModal";
 import UploadModal from "./UploadModal";
 import EmbeddingPlaygroundModal from "./EmbeddingPlaygroundModal";
 import DataSourceOptionsModal from "./DataSourceOptionsModal";
+import { useCurrentAccount } from "../../../hooks/useCurrentAccount";
+import { useNavigate } from "react-router-dom";
 
 const dataSources = [
   {
@@ -101,10 +103,28 @@ const KnowledgeDetailPage = () => {
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
   const [selectedSource, setSelectedSource] = useState(null);
+  const account = useCurrentAccount();
+  const navigate = useNavigate();
 
   const headers = ["SOURCE", "DATA POINTS", "TYPE", "CREATED", "STATUS"];
 
-  const handleBack = () => console.log("Navigating back...");
+  // ✅ Navigate back with account context
+  const handleGoBack = () => {
+    if (account) {
+      const params = new URLSearchParams({
+        agencyid: account.agencyid,
+        subaccount: account.subaccount,
+        allow: account.allow,
+        myname: account.myname,
+        myemail: account.myemail,
+        route: "/knowledge",
+      });
+      navigate(`/app?${params.toString()}`);
+    } else {
+      navigate("/knowledge");
+    }
+  };
+
   const handleTest = () => {
     setIsTestModalOpen(true);
   };
@@ -125,7 +145,7 @@ const KnowledgeDetailPage = () => {
       <div className="flex p-2 bg-white border justify-between items-center">
         <div className="flex items-center space-x-3">
           <button
-            onClick={handleBack}
+            onClick={handleGoBack}
             className="p-1 border  rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
           >
             <ArrowLeft className="w-8 h-6" />
@@ -251,7 +271,7 @@ const KnowledgeDetailPage = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end items-center space-x-2">
                       <button
-                        onClick={() => handleOpenOptions(data)}   
+                        onClick={() => handleOpenOptions(data)}
                         className="p-1 border bg-gray-100 rounded-md text-gray-400 hover:bg-gray-200 transition-colors"
                       >
                         <MoreHorizontal className="w-4 h-4" />
@@ -283,7 +303,7 @@ const KnowledgeDetailPage = () => {
         knowledgeBaseName="My Blogs"
       />
 
-      <DataSourceOptionsModal 
+      <DataSourceOptionsModal
         isOpen={isOptionsModalOpen}
         onClose={() => setIsOptionsModalOpen(false)}
         dataSource={selectedSource}
