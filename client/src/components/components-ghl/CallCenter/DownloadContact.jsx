@@ -228,7 +228,7 @@ const DownloadContact = () => {
 
         {/* Filters Section */}
         <div className="bg-white border border-gray-200 rounded-lg p-2 mb-2">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
               <Filter size={16} className="text-gray-600" />
               <h3 className="text-sm font-semibold text-gray-700">Filters</h3>
@@ -288,14 +288,14 @@ const DownloadContact = () => {
             </select>
 
             {/* Date Range */}
-            <div className="flex gap-1">
+            <div className="flex  gap-1">
               <input
                 type="date"
                 value={dateRange.start}
                 onChange={(e) =>
                   setDateRange({ ...dateRange, start: e.target.value })
                 }
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="flex-1  py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Start date"
               />
               <input
@@ -304,7 +304,7 @@ const DownloadContact = () => {
                 onChange={(e) =>
                   setDateRange({ ...dateRange, end: e.target.value })
                 }
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="flex-1  py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="End date"
               />
             </div>
@@ -361,35 +361,35 @@ const DownloadContact = () => {
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-sm text-left table-fixed border-collapse min-w-[900px]">
                   <thead className="sticky top-0 bg-[#f8fafc] z-10">
-                    <tr className="text-[#64748b] border-b border-gray-100">
+                    <tr className="text-[#64748b] border-b border-gray-200">
                       {tableHeaders.map((header) => (
                         <th
                           key={header.label}
-                          className={`px-4 py-4 font-semibold truncate ${header.width}`}
+                          className={`px-4 py-2 font-semibold truncate ${header.width}`}
                         >
                           {header.label}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-gray-100">
                     {currentData.map((call, idx) => (
                       <tr
                         key={call.id || idx}
                         className="hover:bg-gray-50/50 transition-colors"
                       >
-                        <td className="px-4 py-4 truncate font-medium text-xs">
+                        <td className="px-4 py-3 truncate font-medium text-xs">
                           {call.timestamp}
                         </td>
-                        <td className="px-4 py-4 truncate text-gray-600">
+                        <td className="px-4 py-3 truncate text-gray-600">
                           <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">
                             {call.type}
                           </span>
                         </td>
-                        <td className="px-4 py-4 truncate font-bold">
+                        <td className="px-4 py-3 truncate font-bold">
                           {call.duration}
                         </td>
-                        <td className="px-4 py-4 truncate">
+                        <td className="px-4 py-3 truncate">
                           <span
                             className={`px-2 py-1 rounded text-xs ${
                               call.status === "Ended"
@@ -400,10 +400,10 @@ const DownloadContact = () => {
                             {call.status}
                           </span>
                         </td>
-                        <td className="px-4 py-4 truncate text-xs text-gray-600">
+                        <td className="px-4 py-3 truncate text-xs text-gray-600">
                           {call.endReason}
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-3">
                           <div
                             className="truncate text-xs text-gray-500"
                             title={call.transcript}
@@ -411,7 +411,7 @@ const DownloadContact = () => {
                             {call.transcript.substring(0, 80)}...
                           </div>
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() =>
