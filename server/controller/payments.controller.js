@@ -44,6 +44,13 @@ const chargeCustomerCard = async (req, res) => {
   const user = await userModel.findById(req.user);
   const connectedAccountId = await user.stripeUserId;
 
+  console.log(
+    "Charging card for user:",
+    req.user,
+    "on account:",
+    connectedAccountId,
+  );
+
   if (!connectedAccountId) {
     // return res
     //   .status(404)
@@ -118,6 +125,8 @@ const paymentConfirmation = async (req, res) => {
 const stripeWebhook = async (req, res) => {
   const sig = req.headers["stripe-signature"];
   let event;
+
+  console.log("Received Stripe webhook:", req.body);
 
   try {
     event = stripe.webhooks.constructEvent(

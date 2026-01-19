@@ -6,10 +6,17 @@ const session = require("express-session");
 const assistantsRoutes = require("./route/assistant.route");
 const cookieParser = require("cookie-parser");
 const { verifyAccessToken } = require("./jwt_helpers");
+const { stripeWebhook } = require("./controller/payments.controller");
 require("dotenv").config();
 
 const app = express();
 const PORT = 60001;
+
+app.post(
+  "/integrations/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  stripeWebhook,
+);
 
 const corsOptions = {
   origin: true, // Accepts all origins
@@ -23,7 +30,7 @@ app.use(
     resave: false,
     saveUninitialized: true,
     cookie: { secure: false }, // Set to true if using HTTPS
-  })
+  }),
 );
 
 app.use(cors(corsOptions));
