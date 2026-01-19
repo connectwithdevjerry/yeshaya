@@ -12,6 +12,7 @@ const {
   signUpSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  updateCompanySchema,
 } = require("../validation_schema");
 const { REFRESH_TOKEN } = require("../constants");
 const client = require("../jwt_db_access");
@@ -59,7 +60,7 @@ const signup = async (req, res, next) => {
     emailHelper(
       result.email,
       "Password Activation Link",
-      `Your activation link: <a href="${reset_link}">Click Here...</a>`
+      `Your activation link: <a href="${reset_link}">Click Here...</a>`,
     );
 
     // transporter.sendMail(mailOptions, (error, info) => {
@@ -157,7 +158,7 @@ const activateUser = async (req, res) => {
     const updateUser = await userModel.findOneAndUpdate(
       { email: decoded },
       { isActive: true },
-      { new: true }
+      { new: true },
     );
 
     // console.log({ updateUser });
@@ -201,7 +202,7 @@ const forgotPassword = async (req, res) => {
     emailHelper(
       email,
       "Password Reset Link",
-      `Your reset link: <a href="${reset_link}">Click Here...</a>`
+      `Your reset link: <a href="${reset_link}">Click Here...</a>`,
     );
 
     return res.send({
@@ -331,45 +332,54 @@ const exchangeToken = async (req, res, next) => {
 
 const updateCompanyDetails = async (req, res, next) => {
   try {
-    const result = await signUpSchema.validateAsync(req.body);
-    console.log({ result });
+    // Validate only text fields
+    const result = await updateCompanySchema.validateAsync(req.body, {
+      abortEarly: false,
+    });
 
-    const isUser = await userModel.findById(req.user);
+    const user = await userModel.findById(req.user);
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: "User does not exist",
+      });
+    }
 
-    if (!isUser)
-      return res.send({ status: false, message: "User does not exist" });
+    let uploadedLogo = null;
 
-    console.log("Saving profile picture...");
+    if (req.file) {
+      console.log("Uploading company logo...");
 
-    const pic = await saveImageToDB(
-      "data:image/jpeg;base64," + result.companyLogo,
-      "brand-logo",
-      "image"
-    );
+      uploadedLogo = await saveImageToDB(
+        req.file.buffer,
+        "brand-logo",
+        "image",
+      );
+    }
 
-    console.log({ pic });
+    const company = user.company;
 
-    const updatedUser = await userModel.findOneAndUpdate(
-      { email: result.email },
-      {
-        ...result,
-        profilePicture: pic.secure_url,
-      },
-      { new: true }
-    );
+    Object.assign(company, result);
 
-    return res.send({
+    if (uploadedLogo) {
+      company.logoId = uploadedLogo.public_id;
+      company.logo = uploadedLogo.secure_url;
+    }
+
+    await user.save();
+
+    return res.json({
       status: true,
-      message: "User details updated successfully",
-      data: updatedUser,
+      message: "Company details updated successfully",
+      data: company,
     });
   } catch (error) {
-    if (error.isJoi === true) {
-      error.status = 422;
-      console.log(error.message);
-      return res.send({ status: false, message: error.message });
+    if (error.isJoi) {
+      return res.status(422).json({
+        status: false,
+        message: error.message,
+      });
     }
-    next(error);
   }
 };
 
@@ -396,12 +406,12 @@ const getGhlTokens = async (userId) => {
         },
         // httpsAgent, // attach secure agent
         timeout: 10000, // optional safety timeout
-      }
+      },
     );
 
     user.ghlRefreshToken = response.data.refresh_token;
     user.ghlRefreshTokenExpiry = new Date(
-      Date.now() + response.data.expires_in * 1000
+      Date.now() + response.data.expires_in * 1000,
     );
     await user.save();
 
@@ -409,7 +419,7 @@ const getGhlTokens = async (userId) => {
   } catch (error) {
     console.error(
       "Error refreshing GHL Access Token:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return {
       status: false,
@@ -462,10 +472,14 @@ const getGhlCompanyDetails = async (req, res, next) => {
 const createCompanyDetails = async (req, res, next) => {
   console.log("Creating company...");
 
-  const { name, phoneNum, address, website, industry, imageBase64 } = req.body;
+  const { name, phoneNum, address, website, industry } = req.body;
 
   try {
-    const saveImage = await saveImageToDB(imageBase64, "company-logo", "image");
+    let saveImage = null;
+
+    if (req.file) {
+      saveImage = await saveImageToDB(req.file.buffer, "company-logo", "image");
+    }
 
     console.log({ saveImage });
 
@@ -476,7 +490,10 @@ const createCompanyDetails = async (req, res, next) => {
     company.address = address;
     company.website = website;
     company.industry = industry;
-    company.logo = saveImage.secure_url;
+    if (saveImage) {
+      company.logoId = saveImage.public_id;
+      company.logo = saveImage.secure_url;
+    }
     await user.save();
 
     return res.send({

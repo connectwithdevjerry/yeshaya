@@ -59,6 +59,7 @@ const userSchema = mongoose.Schema({
   },
   company: {
     name: { type: String, required: false },
+    logoId: { type: String, required: false },
     website: { type: String, required: false },
     industry: { type: String, required: false },
     logo: { type: String, default: "" },

@@ -35,6 +35,8 @@ const TWILIO_SMS_RECEIVER = "/smsurl/:userId/:subaccount/:assistant";
 const IMPORT_PHONE_NUM_TO_VAPI = "/import-number-to-vapi";
 const GET_PURCHASED_NUMBER = "/purchased-numbers";
 const GET_COMPANY_DETAILS = "/company-details";
+const UPDATE_COMPANY_DETAILS = "/company-details/update";
+const CONFIRM_PAYMENT = "/confirm-payment";
 const REGISTER_COMPANY = "/register-company";
 const GET_VAPI_NUMBER_IMPORT_STATUS = "/vapi-number-import-status";
 const DELETE_NUM_FROM_VAPI = "/delete-number-from-vapi";
@@ -64,6 +66,7 @@ const GET_ALL_KNOWLEDGE_BASES = "/get-all-knowledge-bases";
 const RMV_ASSISTANT_KNOWLEDGE = "/remove-knowlege-base-from-assistant";
 const DELETE_KNOWLEDGE_BASE = "/delete-knowlege-base";
 const SEND_CHAT_MESSAGE = "/send-chat-message";
+const GET_WALLET_BALANCE = "/get-wallet-balance";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -121,6 +124,7 @@ module.exports = {
   GET_FULL_REPORT,
   MAKE_OUTBOUND_CALL,
   GET_AVAILABLE_GHL_CALENDARS,
+  GET_WALLET_BALANCE,
   GET_CONNECTED_CALENDARS,
   DELETE_TWILIO_NUMBER,
   CALL_BILLING_WEBHOOK,
@@ -134,4 +138,6 @@ module.exports = {
   DELETE_KNOWLEDGE_BASE,
   EXECUTE_TOOL,
   SEND_CHAT_MESSAGE,
+  UPDATE_COMPANY_DETAILS,
+  CONFIRM_PAYMENT,
 };

@@ -16,7 +16,11 @@ const { HighLevel } = require("@gohighlevel/api-client");
 const https = require("https");
 const twilio = require("twilio");
 const { getVapiPhoneId } = require("./assistant.controller");
-const { extractVariables, fillTemplate, getSubGhlTokens } = require("../helperFunctions");
+const {
+  extractVariables,
+  fillTemplate,
+  getSubGhlTokens,
+} = require("../helperFunctions");
 const VoiceResponse = require("twilio").twiml.VoiceResponse;
 
 const SUB_PATH = "/integrations";
@@ -58,7 +62,7 @@ const ghlAuthorize = async (req, res, next) => {
     "locations.write+locations.readonly+saas/company.read+saas/company.write+saas/location.read+saas/location.write+users.readonly+users.write+snapshots.readonly+snapshots.write";
 
   const REDIRECT_URI = encodeURIComponent(
-    `${process.env.SERVER_URL}${SUB_PATH}${GHL_OAUTH_CALLBACK}`
+    `${process.env.SERVER_URL}${SUB_PATH}${GHL_OAUTH_CALLBACK}`,
   ); // Must match GHL settings!
 
   // The 'state' parameter is crucial for security (CSRF protection)
@@ -98,8 +102,8 @@ const ghlOauthCallback = async (req, res) => {
     const errorMsg = "CSRF check failed: Invalid state parameter.";
     return res.redirect(
       `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
-        errorMsg
-      )}`
+        errorMsg,
+      )}`,
     );
   }
 
@@ -110,8 +114,8 @@ const ghlOauthCallback = async (req, res) => {
 
     return res.redirect(
       `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
-        errorMsg
-      )}`
+        errorMsg,
+      )}`,
     );
   }
 
@@ -147,7 +151,7 @@ const ghlOauthCallback = async (req, res) => {
 
     updateUser.ghlRefreshToken = response.refresh_token;
     updateUser.ghlRefreshTokenExpiry = new Date(
-      Date.now() + response.expires_in * 1000
+      Date.now() + response.expires_in * 1000,
     );
 
     await updateUser.save();
@@ -155,21 +159,21 @@ const ghlOauthCallback = async (req, res) => {
     const successMsg = "GHL Connection successful!";
     return res.redirect(
       `${process.env.FRONTEND_URL}/connection-success/${encodeURIComponent(
-        successMsg
-      )}`
+        successMsg,
+      )}`,
     );
   } catch (error) {
     console.error(
       "Token Exchange Error:",
-      error.response ? error.response.data : error.message
+      error.response ? error.response.data : error.message,
     );
 
     const errorMsg = "Failed to exchange authorization code for access token.";
 
     return res.redirect(
       `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
-        errorMsg
-      )}`
+        errorMsg,
+      )}`,
     );
   }
 };
@@ -243,12 +247,12 @@ const getGhlTokens = async (userId) => {
         },
         // httpsAgent, // attach secure agent
         timeout: 10000, // optional safety timeout
-      }
+      },
     );
 
     user.ghlRefreshToken = response.data.refresh_token;
     user.ghlRefreshTokenExpiry = new Date(
-      Date.now() + response.data.expires_in * 1000
+      Date.now() + response.data.expires_in * 1000,
     );
     await user.save();
 
@@ -256,7 +260,7 @@ const getGhlTokens = async (userId) => {
   } catch (error) {
     console.error(
       "Error refreshing GHL Access Token:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return {
       status: false,
@@ -279,7 +283,7 @@ const callGetSubaccounts = async (req, res) => {
 
     const user = await userModel.findById(userId);
     const installedSubAccounts = user.ghlSubAccountIds.map(
-      (account) => account.connected === true && account.accountId
+      (account) => account.connected === true && account.accountId,
     );
 
     if (userType == "anon") {
@@ -290,7 +294,7 @@ const callGetSubaccounts = async (req, res) => {
     }
 
     const filteredSubAccounts = subAccounts.locations.filter((subAccount) =>
-      installedSubAccounts.includes(subAccount.id)
+      installedSubAccounts.includes(subAccount.id),
     );
 
     return res.send({
@@ -356,7 +360,7 @@ const importGhlSubaccount = async (req, res) => {
   const user = await userModel.findById(userId);
 
   const subAccountInDb = user.ghlSubAccountIds.filter(
-    (account) => account.accountId === subAccountId
+    (account) => account.accountId === subAccountId,
   );
 
   if (subAccountInDb.length > 0)
@@ -415,13 +419,13 @@ const importGhlSubaccounts = async (req, res) => {
   const user = await userModel.findById(userId);
 
   const subAccountsInDb = user.ghlSubAccountIds.map(
-    (account) => account.accountId
+    (account) => account.accountId,
   );
 
   console.log(subAccountsInDb);
 
   const missing = subAccountIds.filter(
-    (item) => !subAccountsInDb.includes(item)
+    (item) => !subAccountsInDb.includes(item),
   );
 
   if (missing.length === 0)
@@ -441,7 +445,7 @@ const importGhlSubaccounts = async (req, res) => {
 
   const limit = pLimit(5); // 5 at a time
   const promises = missing.map((id) =>
-    limit(() => getSubAccount(access_token, id))
+    limit(() => getSubAccount(access_token, id)),
   );
 
   const results = await Promise.all(promises);
@@ -547,7 +551,7 @@ const connectOpenAI = async (req, res) => {
       console.error("API Key is invalid or expired (401 Unauthorized).");
     } else if (error.status === 429) {
       console.warn(
-        "API Key is valid but currently rate-limited or has insufficient usage credit (429)."
+        "API Key is valid but currently rate-limited or has insufficient usage credit (429).",
       );
     } else {
       console.error(`An unexpected error occurred: ${error.message}`);
@@ -582,7 +586,7 @@ const testOpenAIKey = async (req, res) => {
       console.error("API Key is invalid or expired (401 Unauthorized).");
     } else if (error.status === 429) {
       console.warn(
-        "API Key is valid but currently rate-limited or has insufficient usage credit (429)."
+        "API Key is valid but currently rate-limited or has insufficient usage credit (429).",
       );
     } else {
       console.error(`An unexpected error occurred: ${error.message}`);
@@ -620,7 +624,7 @@ const checkIntegrationStatus = async (req, res) => {
       console.error("API Key is invalid or expired (401 Unauthorized).");
     } else if (error.status === 429) {
       console.warn(
-        "API Key is valid but currently rate-limited or has insufficient usage credit (429)."
+        "API Key is valid but currently rate-limited or has insufficient usage credit (429).",
       );
     } else {
       console.error(`An unexpected error occurred: ${error.message}`);
@@ -773,8 +777,8 @@ const stripeOauthCallback = async (req, res) => {
       `${
         process.env.FRONTEND_URL
       }/payment/connection-failed/${encodeURIComponent(
-        "CSRF check failed: Invalid state parameter."
-      )}`
+        "CSRF check failed: Invalid state parameter.",
+      )}`,
     );
   }
 
@@ -829,8 +833,8 @@ const stripeOauthCallback = async (req, res) => {
       }/payment/connection-success/${encodeURIComponent(
         `Stripe Connection successful! Payments Enabled: ${
           paymentsEnabled ? "Yes" : "No"
-        } \n Stripe Account ID: ${stripe_user_id}`
-      )}`
+        } \n Stripe Account ID: ${stripe_user_id}`,
+      )}`,
     );
   } catch (e) {
     console.error("Token Exchange Failed:", e.message);
@@ -839,8 +843,8 @@ const stripeOauthCallback = async (req, res) => {
       `${
         process.env.FRONTEND_URL
       }/payment/connection-failed/${encodeURIComponent(
-        "Token exchange failed. Please try again."
-      )}`
+        "Token exchange failed. Please try again.",
+      )}`,
     );
   }
 };
@@ -848,7 +852,7 @@ const stripeOauthCallback = async (req, res) => {
 const chargeUserCustomers = async (req, res) => {
   // 1. Lookup the connected account's ID for the customer being paid
   // In a real app, this ID comes from your database based on who the customer is paying.
-  const { amount, currency } = req.body;
+  const { amount } = req.body;
   const user = await userModel.findById(req.user);
   const connectedAccountId = await user.stripeUserId;
 
@@ -866,13 +870,13 @@ const chargeUserCustomers = async (req, res) => {
     const paymentIntent = await stripe.paymentIntents.create(
       {
         payment_method_types: ["card"],
-        amount, // in cents ($10.00 for 1000 cents)
-        currency,
+        amount: amount * 100, // in cents ($10.00 for 1000 cents)
+        currency: "usd",
         // CRITICAL: Use the Stripe-Account header to act on their behalf
       },
       {
         stripeAccount: connectedAccountId,
-      }
+      },
     );
 
     // The connected account receives the funds and pays Stripe fees.
@@ -888,7 +892,7 @@ const chargeUserCustomers = async (req, res) => {
   } catch (error) {
     console.error(
       "Error creating Payment Intent on behalf of connected account:",
-      error
+      error,
     );
     return res.send({
       status: false,
@@ -910,7 +914,7 @@ const buyUsPhoneNumber = async (req, res) => {
     const user = await userModel.findById(userId);
 
     const getSubAccount = user.ghlSubAccountIds?.filter(
-      (account) => account.accountId === subaccount
+      (account) => account.accountId === subaccount,
     );
 
     if (!getSubAccount.length) {
@@ -921,7 +925,7 @@ const buyUsPhoneNumber = async (req, res) => {
     }
 
     const getAssistant = getSubAccount[0]?.vapiAssistants.filter(
-      (massistant) => massistant.assistantId === assistant
+      (massistant) => massistant.assistantId === assistant,
     );
 
     if (!getAssistant.length) {
@@ -1031,15 +1035,15 @@ const twilioCallReceiver = async (req, res) => {
     const user = await userModel.findById(userId);
 
     const targetSubaccount = user.ghlSubAccountIds.filter(
-      (account) => account.accountId === subaccount
+      (account) => account.accountId === subaccount,
     );
 
     const targetAssistant = targetSubaccount[0].vapiAssistants.filter(
-      (vapiAssistant) => vapiAssistant.assistantId === assistant
+      (vapiAssistant) => vapiAssistant.assistantId === assistant,
     );
 
     const targetPhoneNumber = targetAssistant[0].numberDetails.filter(
-      (number) => number.phoneNum === receiverNumber
+      (number) => number.phoneNum === receiverNumber,
     );
 
     const VAPI_PHONE_NUMBER_ID = targetPhoneNumber[0].vapiPhoneNumId;
@@ -1057,7 +1061,7 @@ const twilioCallReceiver = async (req, res) => {
 
     if (!refreshGhlTokensValue.status) {
       throw new Error(
-        `Failed to refresh GHL tokens: ${refreshGhlTokensValue.message}`
+        `Failed to refresh GHL tokens: ${refreshGhlTokensValue.message}`,
       );
     }
 
@@ -1076,7 +1080,7 @@ const twilioCallReceiver = async (req, res) => {
             Version: "2021-07-28", // Required GHL API Version
             Accept: "application/json",
           },
-        }
+        },
       );
 
       console.log({ ghlContactSearchResponse: response.data });
@@ -1120,7 +1124,7 @@ const twilioCallReceiver = async (req, res) => {
           Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     // Vapi returns the TwiML needed to transfer control back to Vapi's SIP server
@@ -1132,7 +1136,7 @@ const twilioCallReceiver = async (req, res) => {
   } catch (error) {
     console.error(
       "Error handling Twilio incoming call:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     // Send a default TwiML response to Twilio to avoid connection errors
     const twimlError =
@@ -1168,7 +1172,7 @@ const twilioSmsReceiver = async (req, res) => {
           Authorization: `Bearer ${VAPI_PRIVATE_API_KEY}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     // Vapi returns the TwiML needed to transfer control back to Vapi's SIP server
@@ -1180,7 +1184,7 @@ const twilioSmsReceiver = async (req, res) => {
   } catch (error) {
     console.error(
       "Error handling Twilio incoming call:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     // Send a default TwiML response to Twilio to avoid connection errors
     const twimlError =
@@ -1209,11 +1213,11 @@ const importTwilioNumberToVapi = async (req, res) => {
     // if (newPhoneNumberId) {
     const user = await userModel.findById(userId);
     const getSubAccount = user.ghlSubAccountIds.filter(
-      (subaccount) => subaccount.accountId === subaccountId
+      (subaccount) => subaccount.accountId === subaccountId,
     );
 
     const getAssistant = getSubAccount[0]?.vapiAssistants.filter(
-      (assistant) => assistant.assistantId === assistantId
+      (assistant) => assistant.assistantId === assistantId,
     );
 
     if (!getAssistant.length) {
@@ -1224,7 +1228,7 @@ const importTwilioNumberToVapi = async (req, res) => {
     }
 
     const getPhoneNumber = getAssistant[0]?.numberDetails.filter(
-      (number) => number.phoneNum === twilioNumber
+      (number) => number.phoneNum === twilioNumber,
     );
 
     if (!getPhoneNumber.length) {
@@ -1259,14 +1263,14 @@ const importTwilioNumberToVapi = async (req, res) => {
           Authorization: `Bearer ${VAPI_API_KEY}`,
           // "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     // The response data contains the newly created phone number object
     const newPhoneNumberId = response.data.id;
 
     console.log(
-      `Imported Twilio number. VAPI_PHONE_NUMBER_ID: ${newPhoneNumberId}`
+      `Imported Twilio number. VAPI_PHONE_NUMBER_ID: ${newPhoneNumberId}`,
     );
 
     console.log(getPhoneNumber);
@@ -1294,7 +1298,7 @@ const importTwilioNumberToVapi = async (req, res) => {
     await user.save();
 
     console.log(
-      `Successfully imported Twilio number. VAPI_PHONE_NUMBER_ID: ${newPhoneNumberId}`
+      `Successfully imported Twilio number. VAPI_PHONE_NUMBER_ID: ${newPhoneNumberId}`,
     );
     return res.send({
       status: true,
@@ -1334,14 +1338,14 @@ const getPurchasedNumbers = async (req, res) => {
     const user = await userModel.findById(userId);
 
     const targetSubaccount = user.ghlSubAccountIds.filter(
-      (account) => account.accountId === subaccountId
+      (account) => account.accountId === subaccountId,
     );
 
     console.log({ targetSubaccount });
     console.log({ m: targetSubaccount[0].vapiAssistants });
 
     const targetAssistant = targetSubaccount[0].vapiAssistants.filter(
-      (vapiAssistant) => vapiAssistant.assistantId === assistantId
+      (vapiAssistant) => vapiAssistant.assistantId === assistantId,
     );
 
     if (!targetAssistant.length) {
@@ -1374,7 +1378,7 @@ const getPurchasedNumbers = async (req, res) => {
             phoneNumber: number.phoneNum,
           };
         }
-      })
+      }),
     );
 
     const phoneNumbers = await Promise.all(promises);
@@ -1440,7 +1444,7 @@ const deleteTwilioNumber = async (req, res) => {
     user.ghlSubAccountIds.forEach((subaccount) => {
       subaccount.vapiAssistants.forEach((assistant) => {
         assistant.numberDetails = assistant.numberDetails.filter(
-          (number) => number.phoneSid !== phoneSid
+          (number) => number.phoneSid !== phoneSid,
         );
       });
     });
@@ -1449,7 +1453,7 @@ const deleteTwilioNumber = async (req, res) => {
     user.ghlSubAccountIds.forEach((subaccount) => {
       subaccount.vapiAssistants.forEach((assistant) => {
         assistant.numberDetails = assistant.numberDetails.filter(
-          (number) => number.phoneSid !== phoneSid
+          (number) => number.phoneSid !== phoneSid,
         );
       });
     });
@@ -1469,7 +1473,7 @@ const ghlSubAuthorize = async (req, res) => {
     "locations.readonly+oauth.write+oauth.readonly+businesses.write+businesses.readonly+calendars.write+calendars.readonly+calendars%2Fevents.readonly+calendars%2Fevents.write+calendars%2Fgroups.readonly+calendars%2Fgroups.write+calendars%2Fresources.readonly+calendars%2Fresources.write&version_id=696ade02ea0d940c862c9efd";
 
   const REDIRECT_URI = encodeURIComponent(
-    `${process.env.SERVER_URL}${SUB_PATH}${GHL_SUB_OAUTH_CALLBACK}`
+    `${process.env.SERVER_URL}${SUB_PATH}${GHL_SUB_OAUTH_CALLBACK}`,
   ); // Must match GHL settings!
 
   // The 'state' parameter is crucial for security (CSRF protection)
@@ -1510,8 +1514,8 @@ const ghlSubOauthCallback = async (req, res) => {
     const errorMsg = "CSRF check failed: Invalid state parameter.";
     return res.redirect(
       `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
-        errorMsg
-      )}`
+        errorMsg,
+      )}`,
     );
   }
 
@@ -1522,8 +1526,8 @@ const ghlSubOauthCallback = async (req, res) => {
 
     return res.redirect(
       `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
-        errorMsg
-      )}`
+        errorMsg,
+      )}`,
     );
   }
 
@@ -1545,7 +1549,7 @@ const ghlSubOauthCallback = async (req, res) => {
     const updateUser = await userModel.findById(userId);
 
     const subAccount = updateUser.ghlSubAccountIds.find(
-      (acc) => acc.accountId === accountId
+      (acc) => acc.accountId === accountId,
     );
 
     // save agency id
@@ -1559,7 +1563,7 @@ const ghlSubOauthCallback = async (req, res) => {
 
     subAccount.ghlSubRefreshToken = response.refresh_token;
     subAccount.ghlSubRefreshTokenExpiry = new Date(
-      Date.now() + response.expires_in * 1000
+      Date.now() + response.expires_in * 1000,
     );
 
     await updateUser.save();
@@ -1567,13 +1571,13 @@ const ghlSubOauthCallback = async (req, res) => {
     const successMsg = "GHL Connection successful!";
     return res.redirect(
       `${process.env.FRONTEND_URL}/connection-success/${encodeURIComponent(
-        successMsg
-      )}`
+        successMsg,
+      )}`,
     );
   } catch (error) {
     console.error(
       "Token Exchange Error:",
-      error.response ? error.response.data : error.message
+      error.response ? error.response.data : error.message,
     );
 
     const errorMsg =
@@ -1582,8 +1586,8 @@ const ghlSubOauthCallback = async (req, res) => {
 
     return res.redirect(
       `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(
-        errorMsg
-      )}`
+        errorMsg,
+      )}`,
     );
   }
 };
@@ -1599,7 +1603,6 @@ module.exports = {
   stripeAuthorize,
   testStripeToken,
   connectOpenAI,
-  chargeUserCustomers,
   importGhlSubaccount,
   importGhlSubaccounts,
   callGetSubaccounts,

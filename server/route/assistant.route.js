@@ -31,6 +31,7 @@ const {
   deleteKnowledgeBase,
   executeToolFromVapi,
   sendChatMessage,
+  checkWalletBalance,
 } = require("../controller/assistant.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
 
@@ -64,6 +65,7 @@ const {
   EXECUTE_TOOL,
   DELETE_KNOWLEDGE_BASE,
   SEND_CHAT_MESSAGE,
+  GET_WALLET_BALANCE,
 } = require("../constants");
 
 const upload = multer({
@@ -80,7 +82,7 @@ router.post(GENERATE_PROMPT, verifyAccessToken, generatePrompt);
 router.delete(
   DELETE_NUM_FROM_VAPI,
   verifyAccessToken,
-  deleteNumberFromAssistant
+  deleteNumberFromAssistant,
 );
 
 // new routers
@@ -98,38 +100,39 @@ router.delete(DELETE_KNOWLEDGE_BASE, verifyAccessToken, deleteKnowledgeBase);
 router.delete(
   RMV_ASSISTANT_KNOWLEDGE,
   verifyAccessToken,
-  removeKnowledgeBaseFromAssistant
+  removeKnowledgeBaseFromAssistant,
 );
 router.post(
   ADD_KNOWLEDGE_BASES,
   verifyAccessToken,
   upload.single("knowledgeBaseUrl"),
-  addKnowledgeBase
+  addKnowledgeBase,
 );
 router.get(
   GET_ASSISTANT_KNOWLEDGE_BASES,
   verifyAccessToken,
-  getAssistantKnowledgeBases
+  getAssistantKnowledgeBases,
 );
 router.get(GET_ALL_KNOWLEDGE_BASES, verifyAccessToken, getAllKnowledgeBases);
 router.post(
   LINK_KNOWLEDGE_BASES_2_ASSISTANT,
   verifyAccessToken,
-  linkKnowledgeBaseToAssistant
+  linkKnowledgeBaseToAssistant,
 );
 router.get(GET_ASSISTANT_CALL_LOGS, verifyAccessToken, getAssistantCallLogs);
 router.get(GET_FULL_REPORT, verifyAccessToken, getAssistantFullReport);
-router.post(MAKE_OUTBOUND_CALL, verifyAccessToken, makeOutboundCall);
+router.post(MAKE_OUTBOUND_CALL, makeOutboundCall);
 router.get(
   GET_AVAILABLE_GHL_CALENDARS,
   verifyAccessToken,
-  getAvailableCalendars
+  getAvailableCalendars,
 );
 router.get(
   GENERATE_OUTBOUND_CALL_URL,
   verifyAccessToken,
-  generateOutBoundCallUrl
+  generateOutBoundCallUrl,
 );
 router.get(GET_CONNECTED_CALENDARS, verifyAccessToken, getConnectedCalendar);
+router.get(GET_WALLET_BALANCE, verifyAccessToken, checkWalletBalance);
 
 module.exports = router;

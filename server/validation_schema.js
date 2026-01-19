@@ -20,6 +20,16 @@ const forgotPasswordSchema = Joi.object({
   email: Joi.string().email().lowercase().required(),
 });
 
+const updateCompanySchema = Joi.object({
+  name: Joi.string().optional(),
+  phoneNum: Joi.string().optional(),
+  address: Joi.string().optional(),
+  website: Joi.string().uri().optional(),
+  documentationURL: Joi.string().uri().optional(),
+  industry: Joi.string().optional(),
+  hex: Joi.string().optional(),
+});
+
 const resetPasswordSchema = Joi.object({
   token: Joi.string().min(10).required("token is required"),
   newPassword: Joi.string().min(5).required("new password is required"),
@@ -33,4 +43,5 @@ module.exports = {
   signUpSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  updateCompanySchema,
 };
