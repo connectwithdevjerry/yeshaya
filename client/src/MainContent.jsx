@@ -1,8 +1,7 @@
 // src/MainContent.jsx
 import React, { useEffect, useMemo } from "react";
-import { Routes, Route, useLocation, useSearchParams } from "react-router-dom";
+import { Routes, Route, useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import { Header } from "./components/components-ui/Header";
-import { useNavigate } from "react-router-dom";
 
 // ---- Pages from Agency section ----
 import Agency from "./pages/pages-ui/Agency";
@@ -33,14 +32,13 @@ import GHLSettings from "./pages/pages-ghl/Settings";
 import { AssistantBuilderPage } from "./components/components-ghl/AssistantsBuilder/AssistantsBuilder";
 import KnowledgeDetailPage from "./components/components-ghl/Knowledge/BlogEdit";
 
+// ✅ Component to render based on route parameter
 const AppRouter = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  
-  // Default to assistants if no route is specified
   const route = searchParams.get("route") || "/assistants";
 
+  // Store account data in sessionStorage
   useEffect(() => {
-    // Extract both possible naming conventions (GHL uses lowercase usually)
     const agencyid = searchParams.get("agencyid");
     const subaccount = searchParams.get("subaccount");
     const allow = searchParams.get("allow");
@@ -56,16 +54,18 @@ const AppRouter = () => {
         myemail,
       };
       sessionStorage.setItem("currentAccount", JSON.stringify(accountData));
-      
-      // If we have IDs but no route, redirect to assistants while KEEPING the IDs
+      console.log("✅ Account stored:", accountData);
+
+      // Sync URL if route param is missing to ensure UI highlighting works
       if (!searchParams.get("route")) {
-          const newParams = new URLSearchParams(searchParams);
-          newParams.set("route", "/assistants");
-          setSearchParams(newParams, { replace: true });
+        const newParams = new URLSearchParams(searchParams);
+        newParams.set("route", "/assistants");
+        setSearchParams(newParams, { replace: true });
       }
     }
   }, [searchParams, setSearchParams]);
 
+  // Route mapping
   const routeComponents = {
     "/assistants": <Assistants />,
     "/inbox": <Inbox />,
@@ -82,8 +82,13 @@ const AppRouter = () => {
     "/dashboard": <DashboardPage />,
   };
 
-  if (route.startsWith("/assistants/")) return <AssistantBuilderPage />;
-  if (route.startsWith("/knowledge/")) return <KnowledgeDetailPage />;
+  if (route.startsWith("/assistants/")) {
+    return <AssistantBuilderPage />;
+  }
+
+  if (route.startsWith("/knowledge/")) {
+    return <KnowledgeDetailPage />;
+  }
 
   return routeComponents[route] || <Assistants />;
 };
@@ -94,27 +99,36 @@ export default function MainContent() {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    // 1. Detect if we are inside GHL or have the IDs in the URL
-    const agencyId = searchParams.get("agencyid");
-    const subaccountId = searchParams.get("subaccount");
-    const isGHLUrl = document.referrer.includes("gohighlevel.com") || (agencyId && subaccountId);
+    const subaccount = searchParams.get("subaccount");
+    const agencyid = searchParams.get("agencyid");
+    
+    // Check if the request is coming from app.gohighlevel.com
+    const isGHLReferrer = document.referrer.includes("app.gohighlevel.com");
+    const hasGHLParams = subaccount && agencyid;
 
-    if (isGHLUrl && location.pathname === "/") {
+    // If we are at root "/" but we detect GHL environment or params
+    if (location.pathname === "/" && (hasGHLParams || isGHLReferrer)) {
+      console.log("🚀 GHL context detected. Redirecting to Assistants context...");
+
       const params = new URLSearchParams(searchParams);
-      
-      // Ensure we explicitly have a route targeted
+
+      // Default route to assistants if not provided
       if (!params.get("route")) {
         params.set("route", "/assistants");
       }
 
-      navigate({
-        pathname: "/app",
-        search: params.toString(), // This ensures ?agencyid=...&subaccount=... is kept
-      }, { replace: true });
+      // Ensure 'allow' is set to yes as per your menu logic
+      if (!params.has("allow")) {
+        params.set("allow", "yes");
+      }
+
+      // Redirect to /app which triggers AppRouter with the correct IDs
+      navigate(`/app?${params.toString()}`, { replace: true });
     }
   }, [location.pathname, searchParams, navigate]);
 
-  const pageTitles = useMemo(() => ({
+  const pageTitles = useMemo(
+    () => ({
       "/": "Accounts",
       "/agency": "Agency",
       "/integrations": "Integrations",
@@ -137,14 +151,16 @@ export default function MainContent() {
       "/connection-failed": "Integration Failed",
       "/payment/connection-success": "Payment Success",
       "/payment/connection-failed": "Payment Failed",
-  }), []);
+    }),
+    []
+  );
 
   const getCurrentTitle = () => {
     if (location.pathname === "/app") {
       const route = searchParams.get("route") || "/assistants";
       if (route.startsWith("/assistants/")) return "Assistant Builder";
       if (route.startsWith("/knowledge/")) return "Knowledge";
-      return pageTitles[route] || "Assistants";
+      return pageTitles[route] || "Dashboard";
     }
     return pageTitles[location.pathname] || "Dashboard";
   };
