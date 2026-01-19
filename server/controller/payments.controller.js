@@ -1,5 +1,6 @@
 const axios = require("axios");
 const userModel = require("../model/user.model");
+require("dotenv").config();
 
 // billing flow:
 // 1. take money from user's card to his platform account
