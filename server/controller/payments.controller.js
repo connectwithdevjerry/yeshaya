@@ -44,6 +44,13 @@ const chargeCustomerCard = async (req, res) => {
   const user = await userModel.findById(req.user);
   const connectedAccountId = await user.stripeUserId;
 
+  console.log(
+    "Charging card for user:",
+    req.user,
+    "on account:",
+    connectedAccountId,
+  );
+
   if (!connectedAccountId) {
     // return res
     //   .status(404)
