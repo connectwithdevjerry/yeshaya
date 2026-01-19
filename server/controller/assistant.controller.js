@@ -2529,7 +2529,9 @@ const makeOutboundCall = async (req, res) => {
     if (!targetAssistant)
       return res.send({ status: false, message: "Assistant does not exist!" });
 
-    const outboundDynamicMessage = targetAssistant.outboundDynamicMessage;
+    const outboundDynamicMessage = targetAssistant.outboundDynamicMessage || "";
+
+    console.log({ outboundDynamicMessage, dynamicValues });
 
     const message = fillTemplate(outboundDynamicMessage, dynamicValues);
 

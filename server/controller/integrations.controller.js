@@ -1603,7 +1603,6 @@ module.exports = {
   stripeAuthorize,
   testStripeToken,
   connectOpenAI,
-  // chargeUserCustomers,
   importGhlSubaccount,
   importGhlSubaccounts,
   callGetSubaccounts,
