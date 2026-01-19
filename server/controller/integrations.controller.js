@@ -1053,7 +1053,7 @@ const twilioCallReceiver = async (req, res) => {
 
     console.log({ VAPI_PHONE_NUMBER_ID });
 
-    const inboundDynamicMessage = targetAssistant.inboundDynamicMessage;
+    const inboundDynamicMessage = targetAssistant.inboundDynamicMessage || "";
     let greetingsValues = {};
     let myCustomer = {};
 
