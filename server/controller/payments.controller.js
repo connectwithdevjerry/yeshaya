@@ -332,6 +332,26 @@ const callBillingWebhook = async (req, res) => {
       return res.status(400).send("Invalid payload");
     }
 
+    const user = await userModel.findOne({
+      "ghlSubAccountIds.vapiAssistants.assistantId": call.assistantId,
+    });
+
+    if (!user) {
+      console.warn("User not found for assistant:", call.assistantId);
+      return res.sendStatus(200).json({
+        error:
+          "This assistant is not linked to any user account in our platform.",
+      }); // don't retry
+    }
+
+    if (type === "status-update" && user.walletBalance <= 0) {
+      console.log(`Call ${call.id} is currently ${call.status}`);
+      return res.sendStatus(200).json({
+        error:
+          "Your account balance is too low to start this call. Please top up.",
+      });
+    }
+
     const typeStatus = [
       "call.ended",
       "call.analysis.completed",
@@ -341,14 +361,6 @@ const callBillingWebhook = async (req, res) => {
     if (!typeStatus.includes(type)) {
       console.log(`Call ${call.id} is currently ${call.status}`);
       return res.sendStatus(200);
-    }
-
-    const user = await userModel.findOne({
-      "ghlSubAccountIds.vapiAssistants.assistantId": call.assistantId,
-    });
-    if (!user) {
-      console.warn("User not found for assistant:", call.assistantId);
-      return res.sendStatus(200); // don't retry
     }
 
     // ---- IDMPOTENCY CHECK ----
