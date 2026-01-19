@@ -1027,6 +1027,9 @@ const twilioCallReceiver = async (req, res) => {
   try {
     const { userId, subaccount, assistant } = req.params;
     // Twilio sends caller's number in req.body.From
+
+    console.log("Received incoming call webhook from Twilio:", req.params);
+
     const callerNumber = req.body.From;
     const receiverNumber = req.body.To;
 
