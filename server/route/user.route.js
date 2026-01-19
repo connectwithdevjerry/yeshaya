@@ -10,6 +10,7 @@ const {
   exchangeToken,
   getCompanyDetails,
   createCompanyDetails,
+  updateCompanyDetails,
   // admin_super_signup,
 } = require("../controller/user.controller");
 const {
@@ -22,8 +23,15 @@ const {
   EXCHANGE_TOKEN,
   GET_COMPANY_DETAILS,
   REGISTER_COMPANY,
+  UPDATE_COMPANY_DETAILS,
 } = require("../constants");
 const { verifyAccessToken } = require("../jwt_helpers");
+const multer = require("multer");
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+});
 
 router.post(USER_SIGNUP, signup);
 router.post(USER_SIGNIN, signin);
@@ -33,6 +41,17 @@ router.post(USER_RESET_PASS, handleResetPassword);
 router.delete(USER_LOGOUT, logout);
 router.post(EXCHANGE_TOKEN, exchangeToken);
 router.get(GET_COMPANY_DETAILS, verifyAccessToken, getCompanyDetails);
-router.post(REGISTER_COMPANY, verifyAccessToken, createCompanyDetails);
+router.post(
+  REGISTER_COMPANY,
+  verifyAccessToken,
+  upload.single("logo"),
+  createCompanyDetails,
+);
+router.post(
+  UPDATE_COMPANY_DETAILS,
+  verifyAccessToken,
+  upload.single("logo"),
+  updateCompanyDetails,
+);
 
 module.exports = router;

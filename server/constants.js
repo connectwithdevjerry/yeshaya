@@ -35,6 +35,8 @@ const TWILIO_SMS_RECEIVER = "/smsurl/:userId/:subaccount/:assistant";
 const IMPORT_PHONE_NUM_TO_VAPI = "/import-number-to-vapi";
 const GET_PURCHASED_NUMBER = "/purchased-numbers";
 const GET_COMPANY_DETAILS = "/company-details";
+const UPDATE_COMPANY_DETAILS = "/company-details/update";
+const CONFIRM_PAYMENT = "/confirm-payment";
 const REGISTER_COMPANY = "/register-company";
 const GET_VAPI_NUMBER_IMPORT_STATUS = "/vapi-number-import-status";
 const DELETE_NUM_FROM_VAPI = "/delete-number-from-vapi";
@@ -136,4 +138,6 @@ module.exports = {
   DELETE_KNOWLEDGE_BASE,
   EXECUTE_TOOL,
   SEND_CHAT_MESSAGE,
+  UPDATE_COMPANY_DETAILS,
+  CONFIRM_PAYMENT,
 };

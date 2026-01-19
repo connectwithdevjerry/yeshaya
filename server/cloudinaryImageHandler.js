@@ -7,21 +7,22 @@ cloudinary.config({
   api_secret: process.env.CLOUD_API_SECRET,
 });
 
-const saveImageToDB = async (media, folder="brand-logo", fileType = "auto") => {
-  var result;
-  await cloudinary.uploader
-    .upload(media, {
-      timeout: 60000,
-      resource_type: fileType,
-      folder,
-      overwrite: true,
-    })
-    .then((res) => {
-      console.log({ res });
-      result = { ...res };
-    })
-    .catch((err) => console.log({ err }));
-  return result;
+const saveImageToDB = (buffer, folder = "brand-logo", fileType = "image") => {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader
+      .upload_stream(
+        {
+          folder,
+          resource_type: fileType,
+          overwrite: true,
+        },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve(result);
+        },
+      )
+      .end(buffer);
+  });
 };
 
 module.exports = {

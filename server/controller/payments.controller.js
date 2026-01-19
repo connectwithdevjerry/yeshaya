@@ -1,103 +1,12 @@
 const axios = require("axios");
 const userModel = require("../model/user.model");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 require("dotenv").config();
 
 // billing flow:
 // 1. take money from user's card to his platform account
 // 2. remove what he owes from his platform account to my own account (done)
 // 3. his usage is charged from my own account which I must have connected to vapi and twilio (done)
-
-// run this after every logins, after a
-const processDailyUsageBilling = async (req, res) => {
-  const { userId, assistantIds, phoneNumbers } = req.body;
-  const vapiToken = process.env.VAPI_TOKEN;
-
-  try {
-    let totalUsageCost = 0;
-
-    // --- VAPI USAGE ---
-    const vapiResponses = await Promise.all(
-      assistantIds.map((id) =>
-        axios.get(`https://api.vapi.ai/call`, {
-          params: {
-            assistantId: id,
-            createdAtGe: new Date(
-              Date.now() - 24 * 60 * 60 * 1000
-            ).toISOString(),
-          },
-          headers: { Authorization: `Bearer ${vapiToken}` },
-        })
-      )
-    );
-
-    vapiResponses.forEach((r) =>
-      r.data.forEach((call) => (totalUsageCost += call.cost || 0))
-    );
-
-    // --- TWILIO USAGE ---
-    const twilioResponses = await Promise.all(
-      phoneNumbers.map((num) =>
-        axios.get(
-          `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_SID}/Calls.json`,
-          {
-            params: {
-              To: num,
-              StartTimeGe: new Date(
-                Date.now() - 24 * 60 * 60 * 1000
-              ).toISOString(),
-            },
-            auth: {
-              username: process.env.TWILIO_SID,
-              password: process.env.TWILIO_AUTH_TOKEN,
-            },
-          }
-        )
-      )
-    );
-
-    twilioResponses.forEach((r) =>
-      r.data.calls.forEach(
-        (c) => (totalUsageCost += Math.abs(parseFloat(c.price || 0)))
-      )
-    );
-
-    if (totalUsageCost <= 0) {
-      return res.send({ status: true, message: "No usage to bill" });
-    }
-
-    const usageCents = Math.round(totalUsageCost * 100);
-
-    // --- FETCH USER ---
-    const user = await userModel.findById(userId);
-
-    if (!user) {
-      return res.status(404).send({ status: false, message: "User not found" });
-    }
-
-    if (user.walletBalance < usageCents) {
-      // HARD STOP
-      // Disable assistants / numbers here
-      return res.status(402).send({
-        status: false,
-        message: "Insufficient wallet balance",
-      });
-    }
-
-    // --- DEDUCT FROM WALLET ---
-    user.walletBalance -= usageCents;
-    user.dateUpdated = new Date();
-    await user.save();
-
-    res.send({
-      status: true,
-      billedAmountUSD: totalUsageCost.toFixed(4),
-      deductedCents: usageCents,
-      newWalletBalanceUSD: (user.walletBalance / 100).toFixed(2),
-    });
-  } catch (error) {
-    res.status(500).send({ status: false, message: error.message });
-  }
-};
 
 const getLatestConnectedBalance = async (req, res) => {
   const { connectedAccountId } = req.params; // or req.query
@@ -169,6 +78,14 @@ const chargeCustomerCard = async (req, res) => {
       },
     });
 
+    // user.billingEvents.push({
+    //   callId: null,
+    //   type: "INITIATE_CHARGE",
+    //   amount: Math.round(amount * 100),
+    // });
+
+    // await user.save();
+
     // 4️⃣ Return client_secret to frontend
     res.send({
       status: true,
@@ -183,6 +100,27 @@ const chargeCustomerCard = async (req, res) => {
   }
 };
 
+// confirm payment server-side (usually done on frontend)
+const paymentConfirmation = async (req, res) => {
+  // This can be used if you want to confirm payment server-side
+  // but usually frontend handles it with Stripe.js
+  const userId = req.user;
+  const user = await userModel.findById(userId);
+  const { paymentIntentId } = req.body;
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status === "succeeded") {
+      return res.send({ status: true, message: "Payment successful" });
+    } else {
+      return res.send({ status: false, message: "Payment not completed" });
+    }
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
 const stripeWebhook = async (req, res) => {
   const sig = req.headers["stripe-signature"];
   let event;
@@ -191,7 +129,7 @@ const stripeWebhook = async (req, res) => {
     event = stripe.webhooks.constructEvent(
       req.body,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET
+      process.env.STRIPE_WEBHOOK_SECRET,
     );
   } catch (err) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -206,28 +144,20 @@ const stripeWebhook = async (req, res) => {
     if (userId && type === "USAGE_CHARGE") {
       const amountCents = paymentIntent.amount; // already in cents
 
-      const u = await userModel.findById(userId);
+      const user = await userModel.findById(userId);
 
       // 1. Update wallet balance
-      const user = await userModel.findByIdAndUpdate(
-        userId,
-        {
-          $inc: { walletBalance: u.walletBalance + amountCents },
-          $set: { dateUpdated: new Date() },
-        },
-        { new: true }
-      );
+      user.walletBalance += paymentIntent.amount / 100; // convert to dollars
 
       // 2. Log transaction (strongly recommended)
-      await Payment.create({
-        userId,
-        stripePaymentIntentId: paymentIntent.id,
-        amountCents,
-        type: "CREDIT",
-        source: "STRIPE",
-        status: "SUCCESS",
-        createdAt: new Date(),
+
+      user.billingEvents.push({
+        callId: paymentIntent.id,
+        type: "WALLET_TOPUP",
+        amount: paymentIntent.amount,
       });
+
+      await user.save();
 
       console.log(`Wallet credited: +${amountCents} cents for user ${userId}`);
     }
@@ -239,6 +169,12 @@ const stripeWebhook = async (req, res) => {
     const { userId } = paymentIntent.metadata || {};
 
     console.error("Payment failed for user:", userId);
+
+    user.billingEvents.push({
+      callId: paymentIntent.id,
+      type: "WALLET_TOPUP_FAILED",
+      amount: paymentIntent.amount,
+    });
 
     // Optional:
     // - notify user
@@ -356,7 +292,7 @@ const callBillingWebhook = async (req, res) => {
               Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
               "Content-Type": "application/json",
             },
-          }
+          },
         );
         console.log("Call terminated successfully due to low balance.");
       } catch (terminateErr) {
@@ -364,7 +300,7 @@ const callBillingWebhook = async (req, res) => {
         if (terminateErr.response?.status !== 404) {
           console.error(
             "Terminate Error:",
-            terminateErr.response?.data || terminateErr.message
+            terminateErr.response?.data || terminateErr.message,
           );
         }
       }
@@ -385,7 +321,7 @@ const callBillingWebhook = async (req, res) => {
 
     // ---- IDMPOTENCY CHECK ----
     const alreadyProcessed = user.billingEvents?.some(
-      (e) => e.callId === call.id && e.type === type
+      (e) => e.callId === call.id && e.type === type,
     );
 
     if (alreadyProcessed) {
@@ -433,4 +369,5 @@ module.exports = {
   chargeCustomerCard,
   stripeWebhook,
   autoTopUpLowWalletUsers,
+  paymentConfirmation,
 };
