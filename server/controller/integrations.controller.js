@@ -1027,6 +1027,9 @@ const twilioCallReceiver = async (req, res) => {
   try {
     const { userId, subaccount, assistant } = req.params;
     // Twilio sends caller's number in req.body.From
+
+    console.log("Received incoming call webhook from Twilio:", req.params);
+
     const callerNumber = req.body.From;
     const receiverNumber = req.body.To;
 
@@ -1050,7 +1053,7 @@ const twilioCallReceiver = async (req, res) => {
 
     console.log({ VAPI_PHONE_NUMBER_ID });
 
-    const inboundDynamicMessage = targetAssistant.inboundDynamicMessage;
+    const inboundDynamicMessage = targetAssistant.inboundDynamicMessage || "";
     let greetingsValues = {};
     let myCustomer = {};
 

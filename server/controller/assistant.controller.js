@@ -2544,8 +2544,8 @@ const makeOutboundCall = async (req, res) => {
           number: customerNumber, // Format: +1234567890
         },
         assistantOverrides: {
-          firstMessage: "Hi, my name is Jerry!" || message || undefined,
-          firstMessageMode: "message"
+          firstMessage: message,
+          firstMessageMode: message
             ? "assistant-speaks-first"
             : "assistant-speaks-first-with-model-generated-message",
         },
@@ -2658,12 +2658,6 @@ const sendChatMessage = async (req, res) => {
     });
   }
 };
-
-// instructions for 1. call settings, enable recording, max call time, silence timeout, background noise and volume, silence timeout, rules of engagement, enable voicemail detection and message, incoming call webhook, post call webhook
-
-// record, sleep mode, enable purposeful misspellings, response channels
-
-// 2. greeting message, 3. end call message, 4. voicemail message, 5. error message
 
 // Execute the main function
 module.exports = {
