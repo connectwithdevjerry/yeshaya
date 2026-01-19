@@ -31,6 +31,7 @@ const {
   deleteKnowledgeBase,
   executeToolFromVapi,
   sendChatMessage,
+  checkWalletBalance,
 } = require("../controller/assistant.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
 
@@ -63,7 +64,7 @@ const {
   RMV_ASSISTANT_KNOWLEDGE,
   EXECUTE_TOOL,
   DELETE_KNOWLEDGE_BASE,
-  SEND_CHAT_MESSAGE,
+  SEND_CHAT_MESSAGE,GET_WALLET_BALANCE
 } = require("../constants");
 
 const upload = multer({
@@ -131,5 +132,6 @@ router.get(
   generateOutBoundCallUrl
 );
 router.get(GET_CONNECTED_CALENDARS, verifyAccessToken, getConnectedCalendar);
+router.get(GET_WALLET_BALANCE, verifyAccessToken, checkWalletBalance);
 
 module.exports = router;

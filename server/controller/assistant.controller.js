@@ -2571,6 +2571,12 @@ const makeOutboundCall = async (req, res) => {
   }
 };
 
+const checkWalletBalance = async (req, res) => {
+  const userId = req.user;
+  const user = await userModel.findById(userId);
+  return res.send({ status: true, data: user.walletBalance });
+};
+
 const sendChatMessage = async (req, res) => {
   const { userText, assistantId } = req.body;
   const userId = req.user;
@@ -2617,8 +2623,17 @@ const sendChatMessage = async (req, res) => {
       },
     );
 
-    user.walletBalance -= response.data.cost || 0;
+    const amountToDeduct = response.data.cost || 0;
+    const type = "chat_message";
+
+    user.walletBalance -= amountToDeduct;
     await user.save();
+
+    user.billingEvents.push({
+      callId: response.data.id,
+      type,
+      amount: amountToDeduct,
+    });
 
     console.log("Received response from Vapi:", response.data);
 
@@ -2680,6 +2695,7 @@ module.exports = {
   deleteKnowledgeBase,
   removeKnowledgeBaseFromAssistant,
   sendChatMessage,
+  checkWalletBalance,
 };
 
 // what's left
@@ -2687,6 +2703,6 @@ module.exports = {
 // inbound and outbound call handling (done)
 // apis to be called when a tool is called (done)
 // assistant call logs and reports (how much was charged)
-// payments charging
+// payments charging (done)
 // testing
 // whitelabel

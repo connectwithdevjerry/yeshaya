@@ -64,6 +64,7 @@ const GET_ALL_KNOWLEDGE_BASES = "/get-all-knowledge-bases";
 const RMV_ASSISTANT_KNOWLEDGE = "/remove-knowlege-base-from-assistant";
 const DELETE_KNOWLEDGE_BASE = "/delete-knowlege-base";
 const SEND_CHAT_MESSAGE = "/send-chat-message";
+const GET_WALLET_BALANCE = "/get-wallet-balance";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -121,6 +122,7 @@ module.exports = {
   GET_FULL_REPORT,
   MAKE_OUTBOUND_CALL,
   GET_AVAILABLE_GHL_CALENDARS,
+  GET_WALLET_BALANCE,
   GET_CONNECTED_CALENDARS,
   DELETE_TWILIO_NUMBER,
   CALL_BILLING_WEBHOOK,
