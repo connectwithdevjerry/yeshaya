@@ -336,20 +336,15 @@ const callBillingWebhook = async (req, res) => {
       "ghlSubAccountIds.vapiAssistants.assistantId": call.assistantId,
     });
 
-    if (!user) {
+    const balanceTooLow = user.walletBalance <= 0;
+
+    if (!user || balanceTooLow) {
       console.warn("User not found for assistant:", call.assistantId);
       return res.sendStatus(200).json({
-        error:
-          "This assistant is not linked to any user account in our platform.",
+        error: balanceTooLow
+          ? "Your account balance is too low to start this call. Please top up."
+          : "This assistant is not linked to any user account in our platform.",
       }); // don't retry
-    }
-
-    if (type === "status-update" && user.walletBalance <= 0) {
-      console.log(`Call ${call.id} is currently ${call.status}`);
-      return res.sendStatus(200).json({
-        error:
-          "Your account balance is too low to start this call. Please top up.",
-      });
     }
 
     const typeStatus = [
