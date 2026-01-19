@@ -57,7 +57,7 @@ const chargeCustomerCard = async (req, res) => {
   try {
     const paymentIntent = await stripe.paymentIntents.create(
       {
-        payment_method_types: ["card"],
+        // payment_method_types: ["card"],
         amount: amount * 100, // in cents ($10.00 for 1000 cents)
         currency: "usd",
         // CRITICAL: Use the Stripe-Account header to act on their behalf
