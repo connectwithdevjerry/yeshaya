@@ -2665,11 +2665,10 @@ module.exports = {
 };
 
 // what's left
-// tools
-// inbound and outbound call handling
-// apis to be called when a tool is called
+// tools (done)
+// inbound and outbound call handling (done)
+// apis to be called when a tool is called (done)
 // assistant call logs and reports (how much was charged)
 // payments charging
-// chat and voice labs
 // testing
 // whitelabel
