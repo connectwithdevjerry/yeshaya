@@ -27,10 +27,10 @@ export const login = createAsyncThunk(
       return data;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Network or server error"
+        error.response?.data?.message || "Network or server error",
       );
     }
-  }
+  },
 );
 
 export const register = createAsyncThunk(
@@ -39,7 +39,7 @@ export const register = createAsyncThunk(
     try {
       const response = await axios.post(
         "https://api.yashayah.cloud/auth/signup",
-        formData
+        formData,
       );
 
       console.log("Registration response:", response.data);
@@ -59,7 +59,7 @@ export const register = createAsyncThunk(
 
       return rejectWithValue(errorMessage);
     }
-  }
+  },
 );
 
 export const logout = createAsyncThunk(
@@ -84,7 +84,7 @@ export const logout = createAsyncThunk(
 
       return rejectWithValue(error.response?.data?.message || "Logout failed");
     }
-  }
+  },
 );
 
 export const resetPassword = createAsyncThunk(
@@ -93,7 +93,7 @@ export const resetPassword = createAsyncThunk(
     try {
       const response = await axios.post(
         "https://api.yashayah.cloud/auth/forgot_password",
-        { email }
+        { email },
       );
 
       return (
@@ -109,7 +109,7 @@ export const resetPassword = createAsyncThunk(
 
       return rejectWithValue(errorMessage);
     }
-  }
+  },
 );
 
 export const verifyToken = createAsyncThunk(
@@ -133,7 +133,7 @@ export const verifyToken = createAsyncThunk(
 
       return rejectWithValue(errorMessage);
     }
-  }
+  },
 );
 
 export const refreshAccessToken = createAsyncThunk(
@@ -182,7 +182,7 @@ export const refreshAccessToken = createAsyncThunk(
 
       return rejectWithValue(errorMessage);
     }
-  }
+  },
 );
 
 export const getCompanyDetails = createAsyncThunk(
@@ -190,18 +190,18 @@ export const getCompanyDetails = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await axios.get(
-        "https://yeshaya.onrender.com/auth/company-details",
+        "https://api.yashayah.cloud/auth/company-details",
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           },
-        }
+        },
       );
 
       const data = response.data;
       if (data.status === false) {
         return rejectWithValue(
-          data.message || "Failed to load company details"
+          data.message || "Failed to load company details",
         );
       }
 
@@ -212,7 +212,36 @@ export const getCompanyDetails = createAsyncThunk(
         error.response?.data?.message || error.message || "Network error";
       return rejectWithValue(msg);
     }
-  }
+  },
+);
+
+export const registerCompany = createAsyncThunk(
+  "auth/registerCompany",
+  async (formData, { rejectWithValue }) => {
+    try {
+      const response = await axios.post(
+        "https://api.yashayah.cloud/auth/register-company",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          },
+        },
+      );
+
+      const data = response.data;
+      if (data.status === false) {
+        return rejectWithValue(data.message || "Registration failed");
+      }
+
+      return data.data;
+    } catch (error) {
+      const msg =
+        error.response?.data?.message || error.message || "Network error";
+      return rejectWithValue(msg);
+    }
+  },
 );
 
 const authSlice = createSlice({
@@ -233,10 +262,11 @@ const authSlice = createSlice({
     },
     refreshing: false,
     companyDetails: JSON.parse(
-      localStorage.getItem("companyDetails") || "null"
+      localStorage.getItem("companyDetails") || "null",
     ),
     companyLoading: false,
     companyError: null,
+    company: null,
   },
   reducers: {
     clearError: (state) => {
@@ -264,8 +294,12 @@ const authSlice = createSlice({
       state.refreshToken = null;
       state.isAuthenticated = false;
       state.error = null;
-      state.companyDetails = null;  
+      state.companyDetails = null;
     },
+    resetRegistrationStatus: (state) => {
+      state.registrationSuccess = false;
+      state.error = null;
+    }
   },
   extraReducers: (builder) => {
     builder
@@ -390,7 +424,7 @@ const authSlice = createSlice({
         state.error = action.payload || "Session expired. Please login again.";
       })
 
-       // Add the company details handlers
+      // Add the company details handlers
       .addCase(getCompanyDetails.pending, (state) => {
         state.companyLoading = true;
         state.companyError = null;
@@ -404,6 +438,22 @@ const authSlice = createSlice({
         state.companyLoading = false;
         state.companyError = action.payload || "Failed to load company details";
         state.companyDetails = null;
+      })
+
+      // Register Company Cases
+      .addCase(registerCompany.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(registerCompany.fulfilled, (state, action) => {
+        state.loading = false;
+        state.company = action.payload;
+        state.registrationSuccess = true;
+      })
+      .addCase(registerCompany.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+        state.registrationSuccess = false;
       });
   },
 });

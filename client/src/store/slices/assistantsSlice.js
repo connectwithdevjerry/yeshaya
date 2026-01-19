@@ -630,6 +630,30 @@ export const getAssistantCallLogs = createAsyncThunk(
     }
   },
 );
+
+//fetch wallet balance
+export const fetchWalletBalance = createAsyncThunk(
+  "assistants/fetchWalletBalance",
+  async (_, { rejectWithValue }) => {
+    try {
+      // No query params needed as per your requirement
+      const response = await apiClient.get("/assistants/get-wallet-balance");
+
+      if (!response.data.status) {
+        return rejectWithValue(response.data.message || "Failed to fetch balance");
+      }
+
+      console.log("✅ Wallet balance fetched:", response.data.data);
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error fetching wallet balance"
+      );
+    }
+  }
+);
+
+
 const assistantsSlice = createSlice({
   name: "assistants",
   initialState: {
@@ -641,7 +665,6 @@ const assistantsSlice = createSlice({
     updateError: null,
     savingMessage: false,
     messageError: null,
-    // New states for the additional endpoints
     generatingPrompt: false,
     generatedPrompt: null,
     promptError: null,
@@ -675,6 +698,8 @@ const assistantsSlice = createSlice({
     callLogs: [],
     fetchingLogs: false,
     logsError: null,
+    walletBalance: null,
+    fetchingBalance: false,
   },
   reducers: {
     clearSelectedAssistant: (state) => {
@@ -1061,7 +1086,6 @@ const assistantsSlice = createSlice({
       .addCase(getAssistantCallLogs.fulfilled, (state, action) => {
 
         state.fetchingLogs = false;
-        // Create a new array reference to force update
         state.callLogs = Array.isArray(action.payload)
           ? [...action.payload]
           : [];
@@ -1069,6 +1093,18 @@ const assistantsSlice = createSlice({
       .addCase(getAssistantCallLogs.rejected, (state, action) => {
         state.fetchingLogs = false;
         state.logsError = action.payload;
+      })
+
+      //fetch wallet balance
+      .addCase(fetchWalletBalance.pending, (state) => {
+        state.fetchingBalance = true;
+      })
+      .addCase(fetchWalletBalance.fulfilled, (state, action) => {
+        state.fetchingBalance = false;
+        state.walletBalance = action.payload;
+      })
+      .addCase(fetchWalletBalance.rejected, (state) => {
+        state.fetchingBalance = false;
       });
   },
 });

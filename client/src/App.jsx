@@ -138,31 +138,6 @@ function Layout() {
 }
 
 export default function App() {
-  // const confirmAuthStatus = () => {
-  //   // Implement authentication logic here and return true or false based on authentication status
-  //   const accessToken = localStorage.getItem("accessToken");
-  //   const refreshToken = localStorage.getItem("refreshToken");
-
-  //   if (accessToken && refreshToken) {
-  //     const decoded_accessToken = jwtDecode(accessToken);
-  //     const expirationDate = decoded_accessToken.exp * 1000;
-  //     const currentTime = Date.now();
-
-  //     // console.log({ decoded_accessToken });
-
-  //     // Check if access token is expired
-  //     if (expirationDate >= currentTime) {
-  //       // console.log("Access token active!", expirationDate >= new Date());
-  //       dispatch(setMyProfile(decoded_accessToken));
-  //     } else {
-  //       console.log("Access token expired!", expirationDate < new Date());
-  //     }
-  //   }
-  // };
-
-  // useEffect(() => {
-  //   confirmAuthStatus();
-  // }, []);
 
   return (
     <Router>

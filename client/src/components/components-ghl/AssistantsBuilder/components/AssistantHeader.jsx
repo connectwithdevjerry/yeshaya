@@ -26,6 +26,7 @@ import { useCurrentAccount } from "../../../../hooks/useCurrentAccount";
 import { LogsModal } from "./LogsModal";
 import { ExperimentsDropdown } from "./ExperimentsDropdown";
 import { CollabSessionDropdown } from "./CollabSessionDropdown";
+import toast from "react-hot-toast";
 
 const IconButton = ({ icon: Icon, tooltip, onClick }) => (
   <button
@@ -91,7 +92,7 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
   const account = useCurrentAccount();
 
   const { selectedAssistant, loading } = useSelector(
-    (state) => state.assistants
+    (state) => state.assistants,
   );
 
   const assistantId = propAssistantId;
@@ -120,7 +121,15 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
 
   const handleCopyId = () => {
     if (selectedAssistant?.id) {
-      navigator.clipboard.writeText(selectedAssistant.id);
+      navigator.clipboard
+        .writeText(selectedAssistant.id)
+        .then(() => {
+          toast.success("Assistant ID copied to clipboard!");
+        })
+        .catch((err) => {
+          console.error("Failed to copy:", err);
+          toast.error("Failed to copy ID");
+        });
     }
   };
 

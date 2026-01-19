@@ -173,6 +173,31 @@ export const importSubAccounts = createAsyncThunk(
   },
 );
 
+export const chargeConnectedAccount = createAsyncThunk(
+  "integrations/chargeConnectedAccount",
+  async (amount, { rejectWithValue }) => {
+    try {
+      // Construction of the POST request with 'amount' in the body
+      const response = await apiClient.post(
+        "/integrations/charge-connected-account",
+        { amount }
+      );
+
+      if (response.data?.status === false) {
+        return rejectWithValue(response.data.message || "Charge failed");
+      }
+
+      console.log("💰 Charge successful:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("❌ Charge Error:", error.response?.data);
+      return rejectWithValue(
+        error.response?.data?.message || "Error processing charge"
+      );
+    }
+  }
+);
+
 // 🔹 GoHighLevel Authorization
 export const authorizeGoHighLevel = createAsyncThunk(
   "integrations/authorizeGoHighLevel",
@@ -222,6 +247,9 @@ const integrationSlice = createSlice({
     loading: false,
     error: null,
     warning: null,
+    isCharging: false,
+    chargeError: null,
+    lastChargeResult: null,
   },
   reducers: {
     setIntegrationStatus: (state, action) => {
@@ -402,6 +430,21 @@ const integrationSlice = createSlice({
       .addCase(authorizeGoHighLevel.rejected, (state, action) => {
         state.goHighLevel.loading = false;
         state.goHighLevel.error = action.payload || "Connection failed";
+      })
+
+      // Charge Connected Account Cases
+      .addCase(chargeConnectedAccount.pending, (state) => {
+        state.isCharging = true;
+        state.chargeError = null;
+      })
+      .addCase(chargeConnectedAccount.fulfilled, (state, action) => {
+        state.isCharging = false;
+        state.lastChargeResult = action.payload;
+        state.chargeError = null;
+      })
+      .addCase(chargeConnectedAccount.rejected, (state, action) => {
+        state.isCharging = false;
+        state.chargeError = action.payload;
       });
   },
 });
