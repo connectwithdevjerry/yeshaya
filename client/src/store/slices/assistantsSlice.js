@@ -631,6 +631,8 @@ export const getAssistantCallLogs = createAsyncThunk(
   },
 );
 
+
+
 //fetch wallet balance
 export const fetchWalletBalance = createAsyncThunk(
   "assistants/fetchWalletBalance",
