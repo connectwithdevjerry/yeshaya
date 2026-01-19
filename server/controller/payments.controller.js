@@ -74,9 +74,9 @@ const chargeCustomerCard = async (req, res) => {
           type: "USAGE_CHARGE",
         },
       },
-      // {
-      //   stripeAccount: connectedAccountId,
-      // },
+      {
+        stripeAccount: connectedAccountId,
+      },
     );
 
     // The connected account receives the funds and pays Stripe fees.
@@ -87,7 +87,7 @@ const chargeCustomerCard = async (req, res) => {
       message: "Payment Intent created successfully.",
       paymentIntentId: paymentIntent.id,
       clientSecret: paymentIntent.client_secret,
-      accountId: paymentIntent.id,
+      accountId: connectedAccountId,
     });
   } catch (error) {
     console.error(
