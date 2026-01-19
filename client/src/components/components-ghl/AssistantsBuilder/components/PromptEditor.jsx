@@ -16,7 +16,8 @@ import {
   Sparkles,
   Copy,
   Code, // ✅ Added for JSON button
-  Loader2
+  Loader2,
+  Check // ✅ Added for feedback
 } from "lucide-react";
 import { ChatLabView } from "./ChatLab";
 import { VoiceLabView } from "./VoiceLab";
@@ -51,22 +52,21 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
   const [isDynamicGreetingModalOpen, setIsDynamicGreetingModalOpen] = useState(false);
   const [isSnippetsOpen, setIsSnippetsOpen] = useState(false);
   
-  // ✅ Loading states for buttons
+  // ✅ States for loading and success feedback
   const [isGenerating, setIsGenerating] = useState(false); 
+  const [copySuccess, setCopySuccess] = useState(null); // 'url' or 'json'
   
   const maxChars = 8024;
   const charCount = promptContent.length;
   const navigate = useNavigate();
-  const location = useLocation();
   const [searchParams] = useSearchParams();
 
   const { selectedAssistant } = useSelector((state) => state.assistants);
   const [voiceDisplay, setVoiceDisplay] = useState("Select Voice");
-  const [modelDisplay, setModelDisplay] = useState("GPT-4o");
   const [phoneNumber, setPhoneNumber] = useState("+1222342743");
   const [assistantTag, setAssistantTag] = useState("");
 
-  // ✅ Unified Logic for URL and JSON copying
+  // ✅ Unified Logic for URL and Full JSON copying
   const handleCopyAction = async (type) => {
     if (!selectedAssistant?.id) {
       toast.error("No Assistant ID found");
@@ -83,14 +83,20 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
         const responseData = resultAction.payload;
 
         if (type === "url") {
-          await navigator.clipboard.writeText(responseData.url);
+          // Copy only the nested URL string
+          const urlOnly = responseData?.data?.url || responseData?.url;
+          await navigator.clipboard.writeText(urlOnly);
           toast.success("Outbound URL copied!");
         } else {
-          // Format JSON for better readability when pasted
+          // ✅ Copy the EXACT full JSON structure
           const jsonString = JSON.stringify(responseData, null, 2);
           await navigator.clipboard.writeText(jsonString);
-          toast.success("JSON Response copied!");
+          toast.success("Full JSON structure copied!");
         }
+
+        // Show brief success icon
+        setCopySuccess(type);
+        setTimeout(() => setCopySuccess(null), 2000);
       } else {
         toast.error(resultAction.payload || "API Error");
       }
@@ -176,25 +182,27 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
                 <Tags size={15} /> Fields
               </button>
 
-              {/* ✅ New Action Group: URL & JSON Buttons */}
-              <div className="flex items-center border border-blue-100 rounded-md bg-white overflow-hidden shadow-sm">
+              {/* ✅ ACTION GROUP: Split URL & JSON Button */}
+              <div className="flex items-center border border-blue-200 rounded-md bg-white overflow-hidden shadow-sm">
                 <button
                   onClick={() => handleCopyAction("url")}
                   disabled={isGenerating}
-                  className="hover:bg-blue-50 p-2 flex items-center gap-1 border-r border-blue-100 disabled:opacity-50 transition-colors"
+                  className="hover:bg-blue-50 p-2 flex items-center gap-1.5 border-r border-blue-100 disabled:opacity-50 transition-colors"
                   title="Copy Outbound URL"
                 >
-                  {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
-                  <span className="font-medium">URL</span>
+                  {isGenerating ? <Loader2 size={14} className="animate-spin" /> : 
+                   copySuccess === 'url' ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                  <span className="font-semibold">URL</span>
                 </button>
                 <button
                   onClick={() => handleCopyAction("json")}
                   disabled={isGenerating}
-                  className="hover:bg-blue-50 p-2 flex items-center gap-1 disabled:opacity-50 transition-colors"
-                  title="Copy Raw JSON"
+                  className="hover:bg-blue-50 p-2 flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                  title="Copy Full JSON Response"
                 >
-                  {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Code size={14} />}
-                  <span className="font-medium">JSON</span>
+                  {isGenerating ? <Loader2 size={14} className="animate-spin" /> : 
+                   copySuccess === 'json' ? <Check size={14} className="text-green-500" /> : <Code size={14} />}
+                  <span className="font-semibold">JSON</span>
                 </button>
               </div>
 
