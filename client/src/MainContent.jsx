@@ -32,12 +32,14 @@ import GHLSettings from "./pages/pages-ghl/Settings";
 import { AssistantBuilderPage } from "./components/components-ghl/AssistantsBuilder/AssistantsBuilder";
 import KnowledgeDetailPage from "./components/components-ghl/Knowledge/BlogEdit";
 
-// ✅ Component to render based on route parameter
 const AppRouter = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+
+  const isGHL = searchParams.get("agencyid") || searchParams.get("subaccount");
+  
   const route = searchParams.get("route") || "/assistants";
 
-  // Store account data in sessionStorage
   useEffect(() => {
     const agencyid = searchParams.get("agencyid");
     const subaccount = searchParams.get("subaccount");
@@ -54,9 +56,15 @@ const AppRouter = () => {
         myemail,
       };
       sessionStorage.setItem("currentAccount", JSON.stringify(accountData));
-      console.log("✅ Account stored:", accountData);
+      console.log("✅ GHL Account detected and stored:", accountData);
+
+      if (!searchParams.get("route")) {
+          const newParams = new URLSearchParams(searchParams);
+          newParams.set("route", "/assistants");
+          setSearchParams(newParams, { replace: true });
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, setSearchParams]);
 
   // Route mapping
   const routeComponents = {
@@ -75,7 +83,6 @@ const AppRouter = () => {
     "/dashboard": <DashboardPage />,
   };
 
-  // ✅ Handle dynamic routes like /assistants/:id
   if (route.startsWith("/assistants/")) {
     return <AssistantBuilderPage />;
   }

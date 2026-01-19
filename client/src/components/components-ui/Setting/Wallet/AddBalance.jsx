@@ -25,7 +25,7 @@ const CheckoutForm = ({ onSuccess }) => {
 
     setIsPaying(true);
 
-    const { error } = await stripe.confirmPayment({
+    const result = await stripe.confirmPayment({
       elements,
       confirmParams: {
         return_url: `${window.location.origin}/payment/success`,
@@ -33,10 +33,17 @@ const CheckoutForm = ({ onSuccess }) => {
       redirect: "if_required",
     });
 
-    if (error) {
-      toast.error(error.message);
+    if (result.error) {
+      console.error("❌ Stripe Payment Error:", result.error);
+      toast.error(result.error.message);
       setIsPaying(false);
-    } else {
+    } else if (
+      result.paymentIntent &&
+      result.paymentIntent.status === "succeeded"
+    ) {
+      // THIS IS YOUR SUCCESS LOG
+      console.log("✅ Stripe PaymentIntent Response:", result.paymentIntent);
+
       toast.success("Payment successful!");
       onSuccess();
     }
