@@ -340,13 +340,27 @@ const callBillingWebhook = async (req, res) => {
     const balanceTooLow = user.walletBalance <= 0;
 
     if (!user || balanceTooLow) {
-      await axios.delete(
-        `https://api.vapi.ai/call/${call.id}`,
-        {},
-        {
-          headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}` },
+      try {
+        await axios.post(
+          `https://api.vapi.ai/call/${call.id}/terminate`,
+          {}, // Empty body for POST
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        console.log("Call terminated successfully due to low balance.");
+      } catch (terminateErr) {
+        // If it's a 404, the call already ended naturally
+        if (terminateErr.response?.status !== 404) {
+          console.error(
+            "Terminate Error:",
+            terminateErr.response?.data || terminateErr.message
+          );
         }
-      );
+      }
 
       return res.status(200).json({
         error: balanceTooLow
