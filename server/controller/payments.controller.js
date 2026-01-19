@@ -119,6 +119,8 @@ const stripeWebhook = async (req, res) => {
   const sig = req.headers["stripe-signature"];
   let event;
 
+  console.log("Received Stripe webhook:", req.body);
+
   try {
     event = stripe.webhooks.constructEvent(
       req.body,

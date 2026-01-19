@@ -69,11 +69,11 @@ router.get(GHL_SUB_OAUTH_CALLBACK, ghlSubOauthCallback);
 router.get(STRIPE_AUTHORIZE, verifyAccessToken, stripeAuthorize);
 router.post(CONFIRM_PAYMENT, verifyAccessToken, paymentConfirmation);
 router.get(STRIPE_OAUTH_CALLBACK, stripeOauthCallback);
-router.post(
-  STRIPE_WEBHOOK,
-  express.raw({ type: "application/json" }),
-  stripeWebhook,
-);
+// router.post(
+//   STRIPE_WEBHOOK,
+//   express.raw({ type: "application/json" }),
+//   stripeWebhook,
+// );
 router.get(TEST_OPENAI_KEY, verifyAccessToken, testOpenAIKey);
 router.post(CONNECT_OPENAI, verifyAccessToken, connectOpenAI);
 router.get(TEST_STRIPE_TOKEN, verifyAccessToken, testStripeToken);
