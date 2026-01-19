@@ -297,7 +297,7 @@ const getDynamicFMessage = async (req, res) => {
   try {
     const user = await userModel.findById(userId);
     const targetSubaccount = user.ghlSubAccountIds.find(
-      (sub) => sub.accountId === subaccountId && sub.connected
+      (sub) => sub.accountId === subaccountId && sub.connected,
     );
 
     if (!targetSubaccount)
@@ -307,7 +307,7 @@ const getDynamicFMessage = async (req, res) => {
       });
 
     const targetAssistant = targetSubaccount.vapiAssistants.find(
-      (target) => target.assistantId === assistantId
+      (target) => target.assistantId === assistantId,
     );
 
     if (!targetAssistant)
@@ -343,7 +343,7 @@ const createAssistantAndSave = async (req, res) => {
   const user = await userModel.findById(userId);
 
   const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === subaccountId && sub.connected
+    (sub) => sub.accountId === subaccountId && sub.connected,
   );
 
   if (!targetSubaccount)
@@ -362,7 +362,7 @@ const createAssistantAndSave = async (req, res) => {
           Authorization: `Bearer ${VAPI_API_KEY}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     const data = response.data; // Axios automatically parses JSON and puts the response body in .data
@@ -373,7 +373,7 @@ const createAssistantAndSave = async (req, res) => {
     // save data inside database
 
     const targetSubaccount = user.ghlSubAccountIds.find(
-      (sub) => sub.accountId === subaccountId && sub.connected
+      (sub) => sub.accountId === subaccountId && sub.connected,
     );
 
     targetSubaccount.vapiAssistants.push({ assistantId, description });
@@ -425,7 +425,7 @@ const getAssistant = async (req, res) => {
     // check if the assistant is present, (important because, if this isn't done, someone that doen't own this can do so too once they have the assistant id)
 
     const targetSubaccount = user.ghlSubAccountIds.find(
-      (sub) => sub.accountId === subaccountId && sub.connected
+      (sub) => sub.accountId === subaccountId && sub.connected,
     );
 
     if (!targetSubaccount)
@@ -435,7 +435,7 @@ const getAssistant = async (req, res) => {
       });
 
     const targetAssistant = targetSubaccount.vapiAssistants.find(
-      (target) => target.assistantId === assistantId
+      (target) => target.assistantId === assistantId,
     );
 
     if (!targetAssistant)
@@ -451,7 +451,7 @@ const getAssistant = async (req, res) => {
     const assistant = await vapi.assistants.get(assistantId);
 
     console.log(
-      `Successfully retrieved details for Assistant: ${assistant.name} (ID: ${assistant.id})`
+      `Successfully retrieved details for Assistant: ${assistant.name} (ID: ${assistant.id})`,
     );
 
     // The 'assistant' object contains all configuration details (model, voice, tools, etc.)
@@ -478,7 +478,7 @@ const getAssistants = async (req, res) => {
     const user = await userModel.findById(userId);
 
     const targetSubaccount = user.ghlSubAccountIds.find(
-      (sub) => sub.accountId === subaccountId
+      (sub) => sub.accountId === subaccountId,
       // && sub.connected
     );
 
@@ -509,9 +509,9 @@ const getAssistants = async (req, res) => {
                   Authorization: `Bearer ${VAPI_API_KEY}`,
                   "Content-Type": "application/json",
                 },
-              }
-            )
-        )
+              },
+            ),
+        ),
     );
 
     // Run all requests in parallel
@@ -547,7 +547,7 @@ const updateAssistant = async (req, res) => {
     const user = await userModel.findById(userId);
 
     const targetSubaccount = user.ghlSubAccountIds.find(
-      (sub) => sub.accountId === subaccountId && sub.connected
+      (sub) => sub.accountId === subaccountId && sub.connected,
     );
 
     if (!targetSubaccount)
@@ -557,7 +557,7 @@ const updateAssistant = async (req, res) => {
       });
 
     const targetAssistant = targetSubaccount.vapiAssistants.find(
-      (target) => target.assistantId === assistantId
+      (target) => target.assistantId === assistantId,
     );
 
     if (!targetAssistant)
@@ -574,7 +574,7 @@ const updateAssistant = async (req, res) => {
           Authorization: `Bearer ${VAPI_API_KEY}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     console.log("Assistant updated successfully:");
@@ -584,7 +584,7 @@ const updateAssistant = async (req, res) => {
   } catch (error) {
     console.error(
       "Failed to update assistant:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.send({
       status: false,
@@ -601,7 +601,7 @@ const deleteAssistant = async () => {
   const user = await userModel.findById(userId);
 
   const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === subaccountId && sub.connected
+    (sub) => sub.accountId === subaccountId && sub.connected,
   );
 
   if (!targetSubaccount)
@@ -611,7 +611,7 @@ const deleteAssistant = async () => {
     });
 
   const updatedAssistants = targetSubaccount.vapiAssistants.filter(
-    (target) => target.assistantId !== assistantId
+    (target) => target.assistantId !== assistantId,
   );
 
   try {
@@ -622,7 +622,7 @@ const deleteAssistant = async () => {
           Authorization: `Bearer ${VAPI_API_KEY}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     targetSubaccount.vapiAssistants = [...updatedAssistants];
@@ -634,7 +634,7 @@ const deleteAssistant = async () => {
   } catch (error) {
     console.error(
       `Failed to delete assistant ${assistantId}:`,
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
 
     return res.send({ status: true, message: error.message });
@@ -663,7 +663,7 @@ const deleteNumberFromAssistant = async (req, res) => {
   const user = await userModel.findById(userId);
 
   const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === subaccountId && sub.connected
+    (sub) => sub.accountId === subaccountId && sub.connected,
   );
 
   if (!targetSubaccount)
@@ -673,7 +673,7 @@ const deleteNumberFromAssistant = async (req, res) => {
     });
 
   const targetAssistant = targetSubaccount.vapiAssistants.find(
-    (target) => target.assistantId === assistantId
+    (target) => target.assistantId === assistantId,
   );
 
   if (!targetAssistant)
@@ -717,13 +717,13 @@ const deleteNumberFromAssistant = async (req, res) => {
           username: process.env.TWILIO_ACCOUNT_SID,
           password: process.env.TWILIO_AUTH_TOKEN,
         },
-      }
+      },
     );
 
     // remove it from database too
 
     targetAssistant.numberDetails = targetAssistant.numberDetails.filter(
-      (num) => num.phoneNum !== phoneNum
+      (num) => num.phoneNum !== phoneNum,
     );
 
     user.markModified("ghlSubAccountIds");
@@ -739,7 +739,7 @@ const deleteNumberFromAssistant = async (req, res) => {
     if (error.response) {
       console.error(
         `Failed to delete Vapi Phone Number. Status: ${error.response.status}`,
-        error.response.data
+        error.response.data,
       );
 
       return res.send({
@@ -777,7 +777,7 @@ const getVapiPhoneId = async (phoneNum) => {
     console.log({ phoneNumbers });
 
     const targetNumber = phoneNumbers.find(
-      (num) => num.number === phoneNum.replace(" ", "+")
+      (num) => num.number === phoneNum.replace(" ", "+"),
     );
 
     if (targetNumber) {
@@ -800,7 +800,7 @@ const createTool = async (toolName, userId) => {
           Authorization: `Bearer ${VAPI_API_KEY}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     console.log("Tool Created! ID:", response.data.id);
@@ -808,10 +808,10 @@ const createTool = async (toolName, userId) => {
   } catch (error) {
     console.error(
       "Error creating tool:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw new Error(
-      `Error creating tool: ${error.response?.data || error.message}`
+      `Error creating tool: ${error.response?.data || error.message}`,
     );
   }
 };
@@ -841,7 +841,7 @@ const linkToolToAssistant = async (assistantId, toolId, userId) => {
       },
       {
         headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-      }
+      },
     );
 
     // 2. Update your local MongoDB database
@@ -852,7 +852,7 @@ const linkToolToAssistant = async (assistantId, toolId, userId) => {
 
     for (const sub of user.ghlSubAccountIds) {
       const foundAssistant = sub.vapiAssistants.find(
-        (a) => a.assistantId === assistantId
+        (a) => a.assistantId === assistantId,
       );
 
       if (foundAssistant) {
@@ -882,7 +882,7 @@ const linkToolToAssistant = async (assistantId, toolId, userId) => {
   } catch (error) {
     console.error("Error linking tool:", error.response?.data || error.message);
     throw new Error(
-      `Error linking tool: ${error.response?.data || error.message}`
+      `Error linking tool: ${error.response?.data || error.message}`,
     );
   }
 };
@@ -944,7 +944,7 @@ const executeToolFromVapi = async (req, res) => {
 
     for (const sub of user.ghlSubAccountIds) {
       const foundAssistant = sub.vapiAssistants.find(
-        (a) => a.assistantId === assistantId
+        (a) => a.assistantId === assistantId,
       );
       if (foundAssistant) {
         targetSubAccount = sub;
@@ -979,7 +979,7 @@ const executeToolFromVapi = async (req, res) => {
             Authorization: `Bearer ${accessToken}`,
             Version: "2021-07-28",
           },
-        }
+        },
       );
       // Return available slots to Vapi
       return res.json({
@@ -1005,7 +1005,7 @@ const executeToolFromVapi = async (req, res) => {
             Authorization: `Bearer ${accessToken}`,
             Version: "2021-07-28",
           },
-        }
+        },
       );
 
       // Step B: Create Event
@@ -1023,7 +1023,7 @@ const executeToolFromVapi = async (req, res) => {
             Authorization: `Bearer ${accessToken}`,
             Version: "2021-07-28",
           },
-        }
+        },
       );
 
       return res.json({
@@ -1059,7 +1059,7 @@ const executeToolFromVapi = async (req, res) => {
             Version: "2021-07-28",
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       return res.status(200).json({
@@ -1129,7 +1129,7 @@ const executeToolFromVapi = async (req, res) => {
             Authorization: `Bearer ${accessToken}`,
             Version: "2021-07-28",
           },
-        }
+        },
       );
 
       const events = response.data.events || [];
@@ -1142,7 +1142,7 @@ const executeToolFromVapi = async (req, res) => {
             `ID: ${event.id}\n` +
             `Time: ${new Date(event.startTime).toLocaleString()}\n` +
             `Status: ${event.status}\n` +
-            `Contact: ${event.contact?.firstName || "Unknown"}`
+            `Contact: ${event.contact?.firstName || "Unknown"}`,
         )
         .join("\n---\n");
 
@@ -1184,7 +1184,7 @@ const executeToolFromVapi = async (req, res) => {
             Authorization: `Bearer ${process.env.FIRECRAWL_API_KEY}`,
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       // Firecrawl returns the result in data.markdown
@@ -1220,7 +1220,7 @@ const getSubGhlTokens = async (userId, accountId) => {
   const SUB_CLIENT_SECRET = process.env.GHL_SUB_CLIENT_SECRET;
 
   const targetSubaccount = ghlSubAccountIds.find(
-    (sub) => sub.accountId === accountId && sub.connected
+    (sub) => sub.accountId === accountId && sub.connected,
   );
 
   const refreshToken = targetSubaccount.ghlSubRefreshToken;
@@ -1247,12 +1247,12 @@ const getSubGhlTokens = async (userId, accountId) => {
         },
         // httpsAgent, // attach secure agent
         timeout: 10000, // optional safety timeout
-      }
+      },
     );
 
     targetSubaccount.ghlSubRefreshToken = response.data.refresh_token;
     targetSubaccount.ghlSubRefreshTokenExpiry = new Date(
-      Date.now() + response.data.expires_in * 1000
+      Date.now() + response.data.expires_in * 1000,
     );
     user.markModified("ghlSubAccountIds");
     await user.save();
@@ -1261,7 +1261,7 @@ const getSubGhlTokens = async (userId, accountId) => {
   } catch (error) {
     console.error(
       "Error refreshing GHL Access Token:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw Error(error.message);
   }
@@ -1285,7 +1285,7 @@ const addCalendarId = async (req, res) => {
           { "sub.accountId": accountId },
           { "ast.assistantId": assistantId },
         ],
-      }
+      },
     );
 
     if (result.matchedCount === 0) {
@@ -1312,7 +1312,7 @@ const getAvailableCalendars = async (req, res) => {
   const user = await userModel.findById(userId);
 
   const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === accountId && sub.connected
+    (sub) => sub.accountId === accountId && sub.connected,
   );
 
   if (!targetSubaccount)
@@ -1336,7 +1336,7 @@ const getAvailableCalendars = async (req, res) => {
           Version: "2021-04-15",
           Accept: "application/json",
         },
-      }
+      },
     );
 
     const calendars = response.data.calendars || [];
@@ -1354,7 +1354,7 @@ const getConnectedCalendar = async (req, res) => {
   const user = await userModel.findById(userId);
 
   const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === accountId && sub.connected
+    (sub) => sub.accountId === accountId && sub.connected,
   );
 
   if (!targetSubaccount)
@@ -1364,7 +1364,7 @@ const getConnectedCalendar = async (req, res) => {
     });
 
   const targetAssistant = targetSubaccount.vapiAssistants.find(
-    (target) => target.assistantId === assistantId
+    (target) => target.assistantId === assistantId,
   );
 
   if (!targetAssistant)
@@ -1422,7 +1422,7 @@ const deleteAssistantTool = async (req, res) => {
           { "sub.accountId": accountId },
           { "ast.assistantId": assistantId },
         ],
-      }
+      },
     );
 
     if (result.matchedCount === 0) {
@@ -1458,14 +1458,14 @@ const getAssistantTools = async (req, res) => {
     const user = await userModel.findById(userId);
 
     const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
-      sub.vapiAssistants.some((ast) => ast.assistantId === assistantId)
+      sub.vapiAssistants.some((ast) => ast.assistantId === assistantId),
     );
 
     if (!targetSubaccount)
       return res.send({ status: false, message: "Subaccount not found!" });
 
     const targetAssistant = targetSubaccount.vapiAssistants.find(
-      (target) => target.assistantId === assistantId
+      (target) => target.assistantId === assistantId,
     );
 
     if (!targetAssistant)
@@ -1478,18 +1478,18 @@ const getAssistantTools = async (req, res) => {
             headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
           })
           .then((res) => res.data)
-          .catch(() => null) // Handle deleted tools gracefully
+          .catch(() => null), // Handle deleted tools gracefully
     );
 
     const allTools = await Promise.all(toolPromises);
 
     // 3. Filter for Knowledge Base (Query) tools
     const connectedTools = allTools.filter(
-      (tool) => tool && tool.type !== "query"
+      (tool) => tool && tool.type !== "query",
     );
 
     console.log(
-      `Found ${connectedTools.length} knowledge base tools attached.`
+      `Found ${connectedTools.length} knowledge base tools attached.`,
     );
 
     return res.send({
@@ -1514,8 +1514,8 @@ const addDynamicFMessageToDB = async (req, res) => {
 
     const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
       sub.vapiAssistants.some(
-        (ast) => ast.assistantId === assistantId && sub.connected
-      )
+        (ast) => ast.assistantId === assistantId && sub.connected,
+      ),
     );
 
     if (!targetSubaccount)
@@ -1525,7 +1525,7 @@ const addDynamicFMessageToDB = async (req, res) => {
       });
 
     const targetAssistant = targetSubaccount.vapiAssistants.find(
-      (target) => target.assistantId === assistantId
+      (target) => target.assistantId === assistantId,
     );
 
     if (!targetAssistant)
@@ -1536,7 +1536,7 @@ const addDynamicFMessageToDB = async (req, res) => {
 
     console.log(
       targetAssistant.inboundDynamicMessage,
-      targetAssistant.outboundDynamicMessage
+      targetAssistant.outboundDynamicMessage,
     );
 
     // save message into database
@@ -1558,7 +1558,7 @@ const addDynamicFMessageToDB = async (req, res) => {
   } catch (error) {
     console.error(
       "Failed to update dynamic greetings:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.send({
       status: false,
@@ -1585,7 +1585,7 @@ const getToolDetails = async (req, res) => {
   } catch (error) {
     console.error(
       "Error fetching tool details:",
-      error.response ? error.response.data : error.message
+      error.response ? error.response.data : error.message,
     );
     return res.send({
       status: false,
@@ -1611,7 +1611,7 @@ const getFileDetails = async (req, res) => {
   } catch (error) {
     console.error(
       "Error fetching file details:",
-      error.response ? error.response.data : error.message
+      error.response ? error.response.data : error.message,
     );
     return res.send({
       status: false,
@@ -1647,7 +1647,7 @@ const linkKnowledgeBaseToAssistant = async (req, res) => {
       },
       {
         headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-      }
+      },
     );
 
     let foundAssistant;
@@ -1655,7 +1655,7 @@ const linkKnowledgeBaseToAssistant = async (req, res) => {
     const user = await userModel.findById(userId);
     for (const sub of user.ghlSubAccountIds) {
       foundAssistant = sub.vapiAssistants.find(
-        (a) => a.assistantId === assistantId
+        (a) => a.assistantId === assistantId,
       );
       if (foundAssistant) {
         console.log({ foundAssistant });
@@ -1683,7 +1683,7 @@ const linkKnowledgeBaseToAssistant = async (req, res) => {
   } catch (error) {
     console.error(
       "Error linking knowledge base:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.send({
       status: false,
@@ -1706,20 +1706,20 @@ const getAllKnowledgeBases = async (req, res) => {
             headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
           })
           .then((res) => res.data)
-          .catch(() => null) // Handle deleted tools gracefully
+          .catch(() => null), // Handle deleted tools gracefully
     );
 
     const allTools = await Promise.all(toolPromises);
 
     const knowledgeBaseTools = allTools.filter(
-      (tool) => tool && tool.type === "query"
+      (tool) => tool && tool.type === "query",
     );
 
     return res.send({ status: true, data: knowledgeBaseTools || [] });
   } catch (error) {
     console.error(
       "Error fetching knowledge bases:",
-      error.response ? error.response.data : error.message
+      error.response ? error.response.data : error.message,
     );
     return res.send({
       status: false,
@@ -1753,8 +1753,8 @@ const deleteAllFilesFromTool = async (toolId) => {
           })
           .then(() => console.log(`Deleted file: ${fileId}`))
           .catch((err) =>
-            console.error(`Failed to delete file ${fileId}:`, err.message)
-          )
+            console.error(`Failed to delete file ${fileId}:`, err.message),
+          ),
       );
 
       // Wait for all file deletions to finish
@@ -1769,7 +1769,7 @@ const deleteAllFilesFromTool = async (toolId) => {
   } catch (error) {
     console.error(
       "Error in cleanup process:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw Error("Error in cleanup process:" + error.message);
   }
@@ -1782,7 +1782,7 @@ const removeToolFromAllAssistants = async (TARGET_TOOL_ID) => {
       "https://api.vapi.ai/assistant",
       {
         headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-      }
+      },
     );
 
     console.log(`Checking ${assistants.length} assistants...`);
@@ -1793,7 +1793,7 @@ const removeToolFromAllAssistants = async (TARGET_TOOL_ID) => {
       // 2. Check if this assistant uses the tool
       if (toolIds.includes(TARGET_TOOL_ID)) {
         console.log(
-          `Removing tool from assistant: ${assistant.name} (${assistant.id})`
+          `Removing tool from assistant: ${assistant.name} (${assistant.id})`,
         );
 
         // Filter out the target tool ID
@@ -1812,7 +1812,7 @@ const removeToolFromAllAssistants = async (TARGET_TOOL_ID) => {
           },
           {
             headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-          }
+          },
         );
 
         console.log(`Successfully updated ${assistant.name}`);
@@ -1824,7 +1824,7 @@ const removeToolFromAllAssistants = async (TARGET_TOOL_ID) => {
   } catch (error) {
     console.error(
       "Error during batch removal:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw Error(error.message);
   }
@@ -1862,7 +1862,7 @@ const deleteKnowledgeBase = async (req, res) => {
           "ghlSubAccountIds.$[].vapiAssistants.$[].knowledgeBaseToolIds":
             toolId,
         },
-      }
+      },
     );
 
     console.log(`Knowledge base tool ${toolId} deleted successfully.`);
@@ -1874,7 +1874,7 @@ const deleteKnowledgeBase = async (req, res) => {
   } catch (error) {
     console.error(
       "Error deleting knowledge base:",
-      error.response ? error.response.data : error.message
+      error.response ? error.response.data : error.message,
     );
     return res.send({
       status: false,
@@ -1897,8 +1897,8 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
     const user = await userModel.findById(userId);
     const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
       sub.vapiAssistants.some(
-        (ast) => ast.assistantId === assistantId && sub.connected
-      )
+        (ast) => ast.assistantId === assistantId && sub.connected,
+      ),
     );
 
     if (!targetSubaccount) {
@@ -1906,7 +1906,7 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
     }
 
     const targetAssistant = targetSubaccount.vapiAssistants.find(
-      (target) => target.assistantId === assistantId
+      (target) => target.assistantId === assistantId,
     );
 
     if (!targetAssistant) {
@@ -1914,7 +1914,7 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
     }
 
     const remainingTools = massistant.model.toolIds.filter(
-      (id) => id !== toolId
+      (id) => id !== toolId,
     );
 
     const response = await axios.patch(
@@ -1928,7 +1928,7 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
       },
       {
         headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-      }
+      },
     );
 
     targetAssistant.knowledgeBaseToolIds = [...remainingTools];
@@ -1942,7 +1942,7 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
   } catch (error) {
     console.error(
       "Error removing knowledge base from assistant:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.send({
       status: false,
@@ -2009,12 +2009,12 @@ const addKnowledgeBase = async (req, res) => {
             Authorization: `Bearer ${process.env.FIRECRAWL_API_KEY}`,
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       if (!firecrawlRes.data.success) {
         throw new Error(
-          `Firecrawl Error: ${firecrawlRes.data.error || "Unknown error"}`
+          `Firecrawl Error: ${firecrawlRes.data.error || "Unknown error"}`,
         );
       }
 
@@ -2128,7 +2128,7 @@ const addKnowledgeBase = async (req, res) => {
       },
       {
         headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-      }
+      },
     );
 
     const toolId = toolResponse.data.id;
@@ -2157,7 +2157,7 @@ const addKnowledgeBase = async (req, res) => {
   } catch (error) {
     console.error(
       "Failed to add knowledge base:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.send({
       status: false,
@@ -2175,14 +2175,14 @@ const getAssistantKnowledgeBases = async (req, res) => {
     const user = await userModel.findById(userId);
 
     const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
-      sub.vapiAssistants.some((ast) => ast.assistantId === assistantId)
+      sub.vapiAssistants.some((ast) => ast.assistantId === assistantId),
     );
 
     if (!targetSubaccount)
       return res.send({ status: false, message: "Subaccount not found!" });
 
     const targetAssistant = targetSubaccount.vapiAssistants.find(
-      (target) => target.assistantId === assistantId
+      (target) => target.assistantId === assistantId,
     );
 
     if (!targetAssistant)
@@ -2195,18 +2195,18 @@ const getAssistantKnowledgeBases = async (req, res) => {
             headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
           })
           .then((res) => res.data)
-          .catch(() => null) // Handle deleted tools gracefully
+          .catch(() => null), // Handle deleted tools gracefully
     );
 
     const allTools = await Promise.all(toolPromises);
 
     // 3. Filter for Knowledge Base (Query) tools
     const knowledgeBaseTools = allTools.filter(
-      (tool) => tool && tool.type === "query"
+      (tool) => tool && tool.type === "query",
     );
 
     console.log(
-      `Found ${knowledgeBaseTools.length} knowledge base tools attached.`
+      `Found ${knowledgeBaseTools.length} knowledge base tools attached.`,
     );
 
     return res.send({
@@ -2229,7 +2229,7 @@ const getAssistantCallLogs = async (req, res) => {
   const user = await userModel.findById(userId);
 
   const validAssistantIds = user.ghlSubAccountIds.flatMap((subAccount) =>
-    subAccount.vapiAssistants.map((assistant) => assistant.assistantId)
+    subAccount.vapiAssistants.map((assistant) => assistant.assistantId),
   );
 
   const assistantIds = validAssistantIds;
@@ -2252,7 +2252,7 @@ const getAssistantCallLogs = async (req, res) => {
           limit: 100, // Adjust limit as needed (Max 1000)
         },
         headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-      })
+      }),
     );
 
     // 2. Execute all requests in parallel
@@ -2263,7 +2263,7 @@ const getAssistantCallLogs = async (req, res) => {
 
     // 4. Sort by creation date (newest first)
     const sortedCalls = allCalls.sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
     );
 
     console.log(`Successfully retrieved ${sortedCalls.length} total calls.`);
@@ -2276,7 +2276,7 @@ const getAssistantCallLogs = async (req, res) => {
   } catch (error) {
     console.error(
       "Error fetching Vapi calls:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.send({
       status: false,
@@ -2294,7 +2294,7 @@ const getAssistantFullReport = async (req, res) => {
 
   const user = await userModel.findById(userId);
   const assistantIds = user.ghlSubAccountIds.flatMap((subAccount) =>
-    subAccount.vapiAssistants.map((assistant) => assistant.assistantId)
+    subAccount.vapiAssistants.map((assistant) => assistant.assistantId),
   );
 
   const phoneNumbers = user.ghlSubAccountIds.flatMap((subAccount) =>
@@ -2302,8 +2302,8 @@ const getAssistantFullReport = async (req, res) => {
       assistant.numberDetails.map((detail) => ({
         phoneNum: detail.phoneNum,
         phoneSid: detail.phoneSid,
-      }))
-    )
+      })),
+    ),
   );
 
   console.log({ assistantIds, phoneNumbers });
@@ -2331,7 +2331,7 @@ const getAssistantFullReport = async (req, res) => {
         //   "Request worked, but no calls matched the Phone Number and Status."
         // );
         throw Error(
-          "Request worked, but no calls matched the Phone Number and Status."
+          "Request worked, but no calls matched the Phone Number and Status.",
         );
         // return res.send({ status: true, data: calls });
       }
@@ -2419,7 +2419,7 @@ const getAssistantFullReport = async (req, res) => {
             username: TWILIO_ACCOUNT_SID,
             password: TWILIO_AUTH_TOKEN,
           },
-        }
+        },
       );
 
       // B. Fetch Monthly Lease (MRC)
@@ -2435,14 +2435,14 @@ const getAssistantFullReport = async (req, res) => {
             username: TWILIO_ACCOUNT_SID,
             password: TWILIO_AUTH_TOKEN,
           },
-        }
+        },
       );
 
       console.log({ numbersRes, callsRes });
 
       const usageCost = (callsRes.data.calls || []).reduce(
         (acc, c) => acc + Math.abs(parseFloat(c.price || 0)),
-        0
+        0,
       );
 
       // Twilio doesn't always return the lease price in the list view,
@@ -2502,18 +2502,18 @@ const makeOutboundCall = async (req, res) => {
 
     const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
       sub.vapiAssistants.some(
-        (ast) => ast.assistantId === assistantId && sub.connected
-      )
+        (ast) => ast.assistantId === assistantId && sub.connected,
+      ),
     );
 
     if (!targetSubaccount)
       return res.send({ status: false, message: "Subaccount not found!" });
 
     const targetAssistant = targetSubaccount.vapiAssistants.find(
-      (target) => target.assistantId === assistantId
+      (target) => target.assistantId === assistantId,
     );
     const targetPhoneNumber = targetAssistant.numberDetails.find(
-      (number) => number.phoneNum === fromNumber
+      (number) => number.phoneNum === fromNumber,
     );
 
     console.log({ mtargetPhoneNumber: targetAssistant.numberDetails });
@@ -2550,18 +2550,18 @@ const makeOutboundCall = async (req, res) => {
       },
       {
         headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-      }
+      },
     );
 
     console.log(
-      `Outbound call initiated from ${fromNumber} to ${customerNumber} via Assistant ${assistantId}.`
+      `Outbound call initiated from ${fromNumber} to ${customerNumber} via Assistant ${assistantId}.`,
     );
 
     return res.send({ status: true, data: response.data });
   } catch (error) {
     console.error(
       "Failed to initiate outbound call:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.send({
       status: false,
@@ -2573,6 +2573,19 @@ const makeOutboundCall = async (req, res) => {
 
 const sendChatMessage = async (req, res) => {
   const { userText, assistantId } = req.body;
+  const userId = req.user;
+
+  const user = await userModel.findOne(userId);
+
+  content = "Wallet balance is too low. Please top up to continue.";
+
+  if (user.walletBalance <= 0) {
+    req.session.chatHistory[assistantId].push({
+      role: "assistant",
+      content,
+    });
+    return res.send({ status: false, reply: content });
+  }
 
   if (!req.session.chatHistory) {
     req.session.chatHistory = {};
@@ -2601,8 +2614,13 @@ const sendChatMessage = async (req, res) => {
           Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
+
+    user.walletBalance -= response.data.cost || 0;
+    await user.save();
+
+    console.log("Received response from Vapi:", response.data);
 
     req.session.chatHistory[assistantId].push({
       role: "user",
@@ -2614,7 +2632,7 @@ const sendChatMessage = async (req, res) => {
   } catch (error) {
     console.error(
       "Error sending chat message:",
-      error.response ? error.response.data : error.message
+      error.response ? error.response.data : error.message,
     );
     return res.send({
       status: false,
@@ -2665,11 +2683,10 @@ module.exports = {
 };
 
 // what's left
-// tools
-// inbound and outbound call handling
-// apis to be called when a tool is called
+// tools (done)
+// inbound and outbound call handling (done)
+// apis to be called when a tool is called (done)
 // assistant call logs and reports (how much was charged)
 // payments charging
-// chat and voice labs
 // testing
 // whitelabel

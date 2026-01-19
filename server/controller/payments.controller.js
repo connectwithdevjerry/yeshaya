@@ -1,4 +1,6 @@
+const axios = require("axios");
 const userModel = require("../model/user.model");
+require("dotenv").config();
 
 // billing flow:
 // 1. take money from user's card to his platform account
@@ -332,17 +334,53 @@ const callBillingWebhook = async (req, res) => {
       return res.status(400).send("Invalid payload");
     }
 
-    if (type !== "end-of-call-report") {
-      console.log(`Call ${call.id} is currently ${call.status}`);
-      return res.sendStatus(200);
-    }
-
     const user = await userModel.findOne({
       "ghlSubAccountIds.vapiAssistants.assistantId": call.assistantId,
     });
-    if (!user) {
-      console.warn("User not found for assistant:", call.assistantId);
-      return res.sendStatus(200); // don't retry
+
+    const balanceTooLow = user.walletBalance <= 0;
+
+    if (!user || balanceTooLow) {
+      res.status(200).json({
+        error: balanceTooLow
+          ? "Your account balance is too low to start this call. Please top up."
+          : "This assistant is not linked to any user account in our platform.",
+      });
+
+      try {
+        await axios.post(
+          `https://api.vapi.ai/call/${call.id}/terminate`,
+          {}, // Empty body for POST
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        console.log("Call terminated successfully due to low balance.");
+      } catch (terminateErr) {
+        // If it's a 404, the call already ended naturally
+        if (terminateErr.response?.status !== 404) {
+          console.error(
+            "Terminate Error:",
+            terminateErr.response?.data || terminateErr.message
+          );
+        }
+      }
+
+      return; // don't retry
+    }
+
+    const typeStatus = [
+      "call.ended",
+      "call.analysis.completed",
+      "end-of-call-report",
+    ];
+
+    if (!typeStatus.includes(type)) {
+      console.log(`Call ${call.id} is currently ${call.status}`);
+      return res.sendStatus(200);
     }
 
     // ---- IDMPOTENCY CHECK ----
@@ -355,6 +393,10 @@ const callBillingWebhook = async (req, res) => {
     }
 
     let amountToDeduct = 0;
+
+    if (type === "end-of-call-report") {
+      amountToDeduct = req.body.message?.cost || 0;
+    }
 
     // ---- CALL ENDED (BASE COST) ----
     if (type === "call.ended") {

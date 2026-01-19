@@ -12,7 +12,7 @@ const userSchema = mongoose.Schema({
   stripeAccessToken: { type: String, required: false }, // does not expire
   openAIApiKey: { type: String, required: false },
   ghlAgencyId: { type: String, required: false },
-  walletBalance: { type: Number, default: 0 },
+  walletBalance: { type: Number, default: 10 },
   autoCardCharging: { type: Boolean, default: false },
   allKnowledgeBaseToolIds: [String],
   ghlSubAccountIds: [
@@ -47,7 +47,7 @@ const userSchema = mongoose.Schema({
   billingEvents: [
     {
       callId: String,
-      type: { type: String, enum: ["call.ended", "call.analysis.completed"] },
+      type: { type: String },
       amount: Number,
       processedAt: { type: Date, default: Date.now },
     },

@@ -1,0 +1,94 @@
+ {
+  message: {
+    timestamp: 1768816074371,
+    type: 'end-of-call-report',
+    analysis: {
+      summary: 'The user initiated a call asking about a "distance between you guys in UK," which the AI struggled to understand and requested clarification for. The user then made another unclear statement about "nominating the Bush in" before ending the call without resolving any query.',
+      successEvaluation: 'false'
+    },
+    artifact: {
+      messages: "",
+      messagesOpenAIFormatted: "",
+      transcript: 'AI: Hello. How can I assist you today?\n' +
+        'User: Hey, Sammy. Sammy, can you the distance between you guys in UK?\n' +
+        'AI: It looks like your message got cut off. Could you please clarify your question? Are you asking about the distance between 2 places in the UK? Or something else? And what do you mean by AC? Let me know so I can help you accurately.\n' +
+        'User: Anyway, we are prompt to nominate the Bush in. Okay.\n',
+      recordingUrl: 'https://storage.vapi.ai/019bd5a6-824d-7995-9d10-a471f6e4adc1-1768816070557-ad817298-f0ca-4dc9-a136-8518e912e068-mono.wav',
+      stereoRecordingUrl: 'https://storage.vapi.ai/019bd5a6-824d-7995-9d10-a471f6e4adc1-1768816070557-e9e7d640-f40e-4740-86c6-3bd25a6ba30b-stereo.wav',
+      logUrl: 'https://calllogs.vapi.ai/0c690d77-5762-4a1c-b592-6d572c4326d8/019bd5a6-824d-7995-9d10-a471f6e4adc1-def247b8-fc2c-4b8f-868c-a4f6b560b675-1768816072531.jsonl.gz',
+      recording: "",
+      nodes: [],
+      variables: "",
+      variableValues: "",
+      performanceMetrics: "",
+      scorecards: {},
+      transfers: []
+    },
+    startedAt: '2026-01-19T09:47:01.600Z',
+    endedAt: '2026-01-19T09:47:47.763Z',
+    endedReason: 'customer-ended-call',
+    cost: 0.0617,
+    costBreakdown: {
+      stt: 0.0084,
+      llm: 0.0022,
+      tts: 0.0116,
+      vapi: 0.0385,
+      chat: 0,
+      transport: 0.0008,
+      total: 0.0617,
+      llmPromptTokens: 382,
+      llmCompletionTokens: 178,
+      llmCachedPromptTokens: 0,
+      ttsCharacters: 776,
+      voicemailDetectionCost: 0,
+      knowledgeBaseCost: 0,
+      analysisCostBreakdown: ""
+    },
+    costs: [
+      "", "",
+      "", "",
+      "", "",
+      "", ""
+    ],
+    durationMs: 46163,
+    durationSeconds: 46.163,
+    durationMinutes: 0.7694,
+    summary: 'The user initiated a call asking about a "distance between you guys in UK," which the AI struggled to understand and requested clarification for. The user then made another unclear statement about "nominating the Bush in" before ending the call without resolving any query.',
+    transcript: 'AI: Hello. How can I assist you today?\n' +
+      'User: Hey, Sammy. Sammy, can you the distance between you guys in UK?\n' +
+      'AI: It looks like your message got cut off. Could you please clarify your question? Are you asking about the distance between 2 places in the UK? Or something else? And what do you mean by AC? Let me know so I can help you accurately.\n' +
+      'User: Anyway, we are prompt to nominate the Bush in. Okay.\n',
+    messages: [ "", "", "", "", "" ],
+    recordingUrl: 'https://storage.vapi.ai/019bd5a6-824d-7995-9d10-a471f6e4adc1-1768816070557-ad817298-f0ca-4dc9-a136-8518e912e068-mono.wav',
+    stereoRecordingUrl: 'https://storage.vapi.ai/019bd5a6-824d-7995-9d10-a471f6e4adc1-1768816070557-e9e7d640-f40e-4740-86c6-3bd25a6ba30b-stereo.wav',
+    call: {
+      id: '019bd5a6-824d-7995-9d10-a471f6e4adc1',
+      orgId: '0c690d77-5762-4a1c-b592-6d572c4326d8',
+      createdAt: '2026-01-19T09:46:57.997Z',
+      updatedAt: '2026-01-19T09:46:57.997Z',
+      type: 'webCall',
+      cost: 0,
+      monitor: "",
+      transport: "",
+      webCallUrl: 'https://vapi.daily.co/GnMjI3jqGaYBRxM8JYEk',
+      status: 'queued',
+      assistantId: 'b4f8e630-3dc9-400f-869f-104c06f4d254'
+    },
+    assistant: {
+      id: 'b4f8e630-3dc9-400f-869f-104c06f4d254',
+      orgId: '0c690d77-5762-4a1c-b592-6d572c4326d8',
+      name: 'Call Testing2',
+      voice: "",
+      createdAt: '2026-01-17T17:06:11.003Z',
+      updatedAt: '2026-01-19T00:57:57.753Z',
+      model: "",
+      firstMessage: 'Hello! How can I assist you today?',
+      language: 'en',
+      endCallFunctionEnabled: true,
+      transcriber: "",
+      endCallPhrases: "",
+      metadata: "",
+      server: ""
+    }
+  }
+}
