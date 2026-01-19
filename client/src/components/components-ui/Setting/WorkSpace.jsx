@@ -1,11 +1,15 @@
-// src/components/WorkspaceSettings.jsx
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Card from "../ui/Card";
-import { Settings } from "lucide-react";
+import { Settings, Loader2, Upload } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { getCompanyDetails } from "../../../store/slices/authSlice";
+import { 
+  getCompanyDetails, 
+  registerCompany, 
+  updateCompanyDetails 
+} from "../../../store/slices/authSlice";
+import toast from "react-hot-toast";
 
-const FormField = ({ id, label, type = "text", defaultValue = "", placeholder = "", icon: Icon, description }) => (
+const FormField = ({ id, label, type = "text", value, onChange, placeholder = "", icon: Icon, description }) => (
   <div className="mb-4">
     <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
       {label}
@@ -18,9 +22,11 @@ const FormField = ({ id, label, type = "text", defaultValue = "", placeholder = 
     <input
       type={type}
       id={id}
-      className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+      name={id}
+      value={value}
+      onChange={onChange}
+      className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
       placeholder={placeholder}
-      defaultValue={defaultValue}
     />
   </div>
 );
@@ -28,75 +34,187 @@ const FormField = ({ id, label, type = "text", defaultValue = "", placeholder = 
 const WorkspaceSettings = () => {
   const dispatch = useDispatch();
   const { companyDetails, companyLoading } = useSelector((state) => state.auth);
+  
+  // Controlled form state
+  const [formData, setFormData] = useState({
+    name: "",
+    address: "",
+    phoneNum: "",
+    website: "",
+    industry: "",
+    documentationURL: "",
+    hex: "#000000",
+  });
+  const [logoFile, setLogoFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
 
   useEffect(() => {
-    // Fetch company details if not loaded
-    if (!companyDetails && !companyLoading) {
-      dispatch(getCompanyDetails());
-    }
-  }, [companyDetails, companyLoading, dispatch]);
+    dispatch(getCompanyDetails());
+  }, [dispatch]);
 
-  const company = companyDetails || {};
+  // Sync Redux state to local form state when data arrives
+  useEffect(() => {
+    if (companyDetails) {
+      setFormData({
+        name: companyDetails.name || "",
+        address: companyDetails.address || "",
+        phoneNum: companyDetails.phoneNum || "",
+        website: companyDetails.website || "",
+        industry: companyDetails.industry || "",
+        documentationURL: companyDetails.documentationURL || "",
+        hex: companyDetails.hex || "#000000",
+      });
+      setPreviewUrl(companyDetails.logo || "");
+    }
+  }, [companyDetails]);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setLogoFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSave = async () => {
+    const submissionData = new FormData();
+    Object.keys(formData).forEach((key) => {
+      submissionData.append(key, formData[key]);
+    });
+    if (logoFile) {
+      submissionData.append("logo", logoFile);
+    }
+
+    try {
+      if (companyDetails) {
+        // If company exists, use Update API
+        await dispatch(updateCompanyDetails(submissionData)).unwrap();
+        toast.success("Workspace updated successfully");
+      } else {
+        // If no company, use Register API
+        await dispatch(registerCompany(submissionData)).unwrap();
+        toast.success("Company registered successfully");
+      }
+    } catch (error) {
+      toast.error(error || "Action failed");
+    }
+  };
+
+  if (companyLoading && !companyDetails) {
+    return (
+      <div className="flex justify-center p-12">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
+    );
+  }
 
   return (
     <Card>
       <div className="flex justify-between items-center mb-4 border-b pb-4">
         <h2 className="text-lg font-semibold text-gray-800">My Workspace</h2>
-        <span className="text-sm text-gray-500">ID: {company.agencyId ?? "—"}</span>
+        <span className="text-sm text-gray-500 font-mono">
+          ID: {companyDetails?.agencyId ?? "NEW_WORKSPACE"}
+        </span>
       </div>
 
+      {/* Logo Upload Section */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-2">Company Logo</label>
-        <div className="flex items-center">
-          {company.logo ? (
+        <div className="flex items-center gap-4">
+          <div className="relative group">
             <img
-              src={company.logo}
-              alt="Company Logo"
-              className="w-16 h-16 rounded-full object-cover border border-gray-200"
+              src={previewUrl || "https://via.placeholder.com/60"}
+              alt="Preview"
+              className="w-20 h-20 rounded-lg object-cover border-2 border-gray-100 shadow-sm"
             />
-          ) : (
-            <img
-              src="https://via.placeholder.com/60"
-              alt="Company Logo"
-              className="w-16 h-16 rounded-full object-cover border border-gray-200"
-            />
-          )}
+            <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 rounded-lg cursor-pointer transition-opacity">
+              <Upload size={18} />
+              <input type="file" className="hidden" onChange={handleFileChange} accept="image/*" />
+            </label>
+          </div>
+          <div className="text-xs text-gray-500">
+            <p className="font-medium text-gray-700">Logo Square</p>
+            <p>PNG, JPG up to 2MB</p>
+          </div>
         </div>
       </div>
 
-      <FormField id="companyName" label="Company Name" defaultValue={company.name ?? ""} />
-      <FormField id="companyStreetAddress" label="Company Street Address" defaultValue={company.address ?? ""} />
-      {/* If you want to split address into city/state/postal code you can parse company.address accordingly */}
-      <FormField id="companyCity" label="Company City" defaultValue={company.city ?? ""} />
-      <FormField id="companyState" label="Company State" defaultValue={company.state ?? ""} />
-      <FormField id="companyPostalCode" label="Company Postal Code" defaultValue={company.postalCode ?? ""} />
-      <FormField id="companyNumber" label="Company Number" type="tel" defaultValue={company.phoneNum ?? ""} />
-      <FormField id="companyWebsite" label="Company Website" type="url" defaultValue={company.website ?? ""} />
-      <FormField
-        id="companyPrivacyPolicy"
-        label="Company Privacy Policy"
-        type="url"
-        description="Link to your company's privacy policy."
-        defaultValue={company.privacyPolicy ?? ""}
-      />
-      <FormField
-        id="companyTermsConditions"
-        label="Company Terms & Conditions"
-        type="url"
-        description="Link to your company's terms and conditions."
-        defaultValue={company.terms ?? ""}
-      />
-      <FormField
-        id="companyRefundPolicy"
-        label="Company Refund Policy"
-        type="url"
-        description="Link to your company's refund policy."
-        defaultValue={company.refundPolicy ?? ""}
-      />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+        <FormField 
+          id="name" 
+          label="Company Name" 
+          value={formData.name} 
+          onChange={handleInputChange} 
+        />
+        <FormField 
+          id="industry" 
+          label="Industry" 
+          value={formData.industry} 
+          onChange={handleInputChange} 
+          placeholder="e.g. Automation and AI"
+        />
+        <FormField 
+          id="address" 
+          label="Company Address" 
+          value={formData.address} 
+          onChange={handleInputChange} 
+        />
+        <FormField 
+          id="phoneNum" 
+          label="Company Number" 
+          type="tel" 
+          value={formData.phoneNum} 
+          onChange={handleInputChange} 
+        />
+        <FormField 
+          id="website" 
+          label="Company Website" 
+          type="url" 
+          value={formData.website} 
+          onChange={handleInputChange} 
+        />
+        <FormField 
+          id="documentationURL" 
+          label="Documentation URL" 
+          type="url" 
+          value={formData.documentationURL} 
+          onChange={handleInputChange} 
+        />
+        
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Brand Color (Hex)</label>
+          <div className="flex gap-2">
+            <input 
+              type="color" 
+              name="hex" 
+              value={formData.hex} 
+              onChange={handleInputChange} 
+              className="h-9 w-12 border rounded-md cursor-pointer"
+            />
+            <input 
+              type="text" 
+              name="hex" 
+              value={formData.hex} 
+              onChange={handleInputChange} 
+              className="flex-1 p-2 border border-gray-300 rounded-md text-sm uppercase"
+            />
+          </div>
+        </div>
+      </div>
 
       <div className="flex justify-end mt-6 pt-4 border-t">
-        <button className="px-6 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors">
-          Save Changes
+        <button 
+          onClick={handleSave}
+          disabled={companyLoading}
+          className="flex items-center gap-2 px-6 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors disabled:opacity-50"
+        >
+          {companyLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+          {companyDetails ? "Save Changes" : "Register Company"}
         </button>
       </div>
     </Card>

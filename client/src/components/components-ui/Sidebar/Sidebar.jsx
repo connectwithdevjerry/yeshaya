@@ -1,14 +1,25 @@
 // src/components/components-ui/Sidebar/Sidebar.jsx
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { UserProfile } from './UserProfile';
 import { NavigationItem } from './NavigationItem';
 import { BottomInfo } from './BottomInfo';
+import { fetchWalletBalance } from '../../../store/slices/assistantsSlice';
 
 export function Sidebar({ userInfo, navigationItems }) {
+  const dispatch = useDispatch();
+  
+  // 1. Pull the walletBalance from Redux state
+  const { walletBalance, fetchingBalance } = useSelector((state) => state.assistants);
+
+  // 2. Fetch the balance when the Sidebar mounts
+  useEffect(() => {
+    dispatch(fetchWalletBalance());
+  }, [dispatch]);
+
   const safeUserInfo = userInfo || {
     name: "Agency",
     users: "0",
-    balance: "$0.00",
     numbers: 0,
     currentUser: {
       initial: "A",
@@ -17,6 +28,14 @@ export function Sidebar({ userInfo, navigationItems }) {
   };
 
   const safeNavigationItems = navigationItems || [];
+
+  // 3. Format the balance for display
+  // Logic: Use the Redux balance if available, otherwise fall back to userInfo or $0.00
+  const displayBalance = fetchingBalance && !walletBalance 
+    ? "Loading..." 
+    : walletBalance !== null 
+      ? `$${Number(walletBalance).toFixed(2)}` 
+      : (userInfo?.balance || "$0.00");
 
   return (
     <div className="w-56 h-screen left-0 top-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
@@ -37,8 +56,9 @@ export function Sidebar({ userInfo, navigationItems }) {
         ))}
       </nav>
 
+      {/* 4. Pass the dynamic balance to BottomInfo */}
       <BottomInfo
-        balance={safeUserInfo.balance || "$0.00"}
+        balance={displayBalance}
         numbers={safeUserInfo.numbers || 0}
         currentUser={safeUserInfo.currentUser}
       />

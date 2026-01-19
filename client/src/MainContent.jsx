@@ -168,11 +168,11 @@ export default function MainContent() {
           />
           <Route path="/connection-failed" element={<GHLConnectionFailed />} />
           <Route
-            path="/payment/connection-success/:message"
+            path="/payment/connection-success?status=success"
             element={<StripeConnectionSuccess />}
           />
           <Route
-            path="/payment/connection-failed/:message"
+            path="/payment/connection-failed?status=fail"
             element={<StripeConnectionFailed />}
           />
         </Routes>

@@ -54,15 +54,15 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Loading state
-  if (loading || (!isAuthenticated && hasVerified.current)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-        <p className="text-gray-600">Verifying authentication...</p>
-      </div>
-    );
-  }
+  // // Loading state
+  // if (loading || (!isAuthenticated && hasVerified.current)) {
+  //   return (
+  //     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
+  //       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+  //       <p className="text-gray-600">Verifying authentication...</p>
+  //     </div>
+  //   );
+  // }
 
   // Not authenticated after verification - redirect to login
   if (!isAuthenticated && hasVerified.current) {
