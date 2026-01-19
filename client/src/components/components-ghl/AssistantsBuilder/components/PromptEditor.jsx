@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useSelector, useDispatch } from "react-redux"; // ✅ Added useDispatch
+import { useSelector, useDispatch } from "react-redux";
 import {
   HelpCircle,
   ChevronsRight,
@@ -14,8 +14,9 @@ import {
   Volume2,
   AlertCircle,
   Sparkles,
-  Copy, 
-  Loader2 
+  Copy,
+  Code, // ✅ Added for JSON button
+  Loader2
 } from "lucide-react";
 import { ChatLabView } from "./ChatLab";
 import { VoiceLabView } from "./VoiceLab";
@@ -26,7 +27,7 @@ import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { VoiceMenuDrawer } from "./VoiceMenu";
 import { VoiceSettingsDropdown } from "./VoiceMenuModals/VoiceSettingsDropdown";
 import { PromptSnippetsDropdown } from "./PromptSnippetsModal";
-import { toast } from "react-hot-toast"; // ✅ Added toast
+import { toast } from "react-hot-toast";
 import { generateOutboundCallUrl } from "../../../../store/slices/assistantsSlice";
 
 const TabButton = ({ text, isActive, onClick }) => (
@@ -43,13 +44,15 @@ const TabButton = ({ text, isActive, onClick }) => (
 );
 
 export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
-  const dispatch = useDispatch(); // ✅ Initialize dispatch
+  const dispatch = useDispatch();
   const [activeTab, setActiveTab] = useState("Builder");
   const [isToolkitOpen, setIsToolkitOpen] = useState(true);
   const [isGeneratePromptModalOpen, setIsGeneratePromptModalOpen] = useState(false);
   const [isDynamicGreetingModalOpen, setIsDynamicGreetingModalOpen] = useState(false);
   const [isSnippetsOpen, setIsSnippetsOpen] = useState(false);
-  const [isGeneratingUrl, setIsGeneratingUrl] = useState(false); // ✅ Track API loading state
+  
+  // ✅ Loading states for buttons
+  const [isGenerating, setIsGenerating] = useState(false); 
   
   const maxChars = 8024;
   const charCount = promptContent.length;
@@ -57,68 +60,58 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
 
-  // ✅ Get assistant data from Redux
   const { selectedAssistant } = useSelector((state) => state.assistants);
   const [voiceDisplay, setVoiceDisplay] = useState("Select Voice");
   const [modelDisplay, setModelDisplay] = useState("GPT-4o");
   const [phoneNumber, setPhoneNumber] = useState("+1222342743");
   const [assistantTag, setAssistantTag] = useState("");
 
-  // ✅ Handle Copy Outbound URL Logic
-  const handleCopyOutboundUrl = async () => {
+  // ✅ Unified Logic for URL and JSON copying
+  const handleCopyAction = async (type) => {
     if (!selectedAssistant?.id) {
       toast.error("No Assistant ID found");
       return;
     }
 
-    setIsGeneratingUrl(true);
+    setIsGenerating(true);
     try {
       const resultAction = await dispatch(
         generateOutboundCallUrl({ assistantId: selectedAssistant.id })
       );
 
       if (generateOutboundCallUrl.fulfilled.match(resultAction)) {
-        // Access data.url from your API response structure
-        const urlToCopy = resultAction.payload.url; 
-        
-        await navigator.clipboard.writeText(urlToCopy);
-        toast.success("Outbound URL copied to clipboard!");
+        const responseData = resultAction.payload;
+
+        if (type === "url") {
+          await navigator.clipboard.writeText(responseData.url);
+          toast.success("Outbound URL copied!");
+        } else {
+          // Format JSON for better readability when pasted
+          const jsonString = JSON.stringify(responseData, null, 2);
+          await navigator.clipboard.writeText(jsonString);
+          toast.success("JSON Response copied!");
+        }
       } else {
-        toast.error(resultAction.payload || "Failed to generate URL");
+        toast.error(resultAction.payload || "API Error");
       }
     } catch (err) {
-      toast.error("Error accessing clipboard");
+      toast.error("Clipboard access failed");
     } finally {
-      setIsGeneratingUrl(false);
+      setIsGenerating(false);
     }
   };
 
   const handleAddSnippet = (snippetText) => {
     setPromptContent((prev) => prev + snippetText);
-    console.log("✅ Snippet added to prompt");
   };
 
   const formatVoiceDisplay = (voice) => {
     if (!voice) return "Select Voice";
     if (voice.provider === "azure" && voice.voiceId) {
       const parts = voice.voiceId.split("-");
-      const name = parts[parts.length - 1].replace("Neural", "");
-      return name;
+      return parts[parts.length - 1].replace("Neural", "");
     }
     return voice.voiceId || "Select Voice";
-  };
-
-  const formatModelDisplay = (model) => {
-    if (!model) return "GPT-4o";
-    const modelName = model.model || "gpt-4o";
-    const modelMap = {
-      "gpt-4o": "GPT-4o",
-      "gpt-4": "GPT-4",
-      "gpt-3.5-turbo": "GPT-3.5 Turbo",
-      "claude-3-opus": "Claude 3 Opus",
-      "claude-3-sonnet": "Claude 3 Sonnet",
-    };
-    return modelMap[modelName] || modelName;
   };
 
   useEffect(() => {
@@ -127,25 +120,19 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
       const endCallPhrases = selectedAssistant.endCallPhrases || [];
       let formattedContent = firstMessage;
       if (endCallPhrases.length > 0) {
-        formattedContent += `\n\n--- End Call Phrases ---\n${endCallPhrases
-          .map((phrase) => `• ${phrase}`)
-          .join("\n")}`;
+        formattedContent += `\n\n--- End Call Phrases ---\n${endCallPhrases.map(p => `• ${p}`).join("\n")}`;
       }
       setPromptContent(formattedContent);
-
       if (selectedAssistant.voice) setVoiceDisplay(formatVoiceDisplay(selectedAssistant.voice));
-      if (selectedAssistant.model) setModelDisplay(formatModelDisplay(selectedAssistant.model));
       if (selectedAssistant.id) setAssistantTag(selectedAssistant.id);
       if (selectedAssistant.phoneNumber) setPhoneNumber(selectedAssistant.phoneNumber);
     }
   }, [selectedAssistant]);
 
   const getContextualPath = (targetRoute) => {
-    const agencyid = searchParams.get("agencyid");
-    const subaccount = searchParams.get("subaccount");
     const params = new URLSearchParams({
-      agencyid: agencyid || "",
-      subaccount: subaccount || "",
+      agencyid: searchParams.get("agencyid") || "",
+      subaccount: searchParams.get("subaccount") || "",
       route: targetRoute,
     });
     return `/app?${params.toString()}`;
@@ -175,9 +162,7 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
           <div className="flex flex-wrap justify-between items-center bg-white px-6 py-1 border-b shadow-sm gap-3">
             <h2 className="text-md font-semibold text-gray-800 flex items-center space-x-2">
               <span>Global Prompt</span>
-              <span className="text-[10px] font-normal text-gray-500">
-                {charCount} / {maxChars} characters
-              </span>
+              <span className="text-[10px] font-normal text-gray-500">{charCount} / {maxChars}</span>
               <AlertCircle className="w-4 h-4 text-gray-400 cursor-pointer" title="Help" />
             </h2>
 
@@ -188,29 +173,34 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
               </button>
               
               <button className="hover:bg-blue-50 p-2 flex items-center gap-1">
-                <Tags size={15} /> Fields & Values
+                <Tags size={15} /> Fields
               </button>
 
-              {/* ✅ Updated Copy Outbound URL Button */}
-              <button
-                onClick={handleCopyOutboundUrl}
-                disabled={isGeneratingUrl}
-                className="hover:bg-blue-50 p-2 flex items-center gap-1 disabled:opacity-50 transition-opacity"
-              >
-                {isGeneratingUrl ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : (
-                  <Copy size={15} />
-                )}
-                <span>{isGeneratingUrl ? "Generating..." : "Copy Outbound URL"}</span>
-              </button>
+              {/* ✅ New Action Group: URL & JSON Buttons */}
+              <div className="flex items-center border border-blue-100 rounded-md bg-white overflow-hidden shadow-sm">
+                <button
+                  onClick={() => handleCopyAction("url")}
+                  disabled={isGenerating}
+                  className="hover:bg-blue-50 p-2 flex items-center gap-1 border-r border-blue-100 disabled:opacity-50 transition-colors"
+                  title="Copy Outbound URL"
+                >
+                  {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
+                  <span className="font-medium">URL</span>
+                </button>
+                <button
+                  onClick={() => handleCopyAction("json")}
+                  disabled={isGenerating}
+                  className="hover:bg-blue-50 p-2 flex items-center gap-1 disabled:opacity-50 transition-colors"
+                  title="Copy Raw JSON"
+                >
+                  {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Code size={14} />}
+                  <span className="font-medium">JSON</span>
+                </button>
+              </div>
 
               <div className="relative">
-                <button
-                  className="hover:bg-blue-50 p-2 flex items-center gap-1"
-                  onClick={() => setIsSnippetsOpen(!isSnippetsOpen)}
-                >
-                  <Pencil size={15} /> Add Snippet
+                <button className="hover:bg-blue-50 p-2 flex items-center gap-1" onClick={() => setIsSnippetsOpen(!isSnippetsOpen)}>
+                  <Pencil size={15} /> Snippet
                 </button>
                 <PromptSnippetsDropdown
                   isOpen={isSnippetsOpen}
@@ -221,12 +211,9 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
             </div>
 
             <div className="mt-2 sm:mt-0">
-              <button
-                className="flex text-sm items-center p-2 rounded-md space-x-1 hover:bg-blue-50 text-blue-600"
-                onClick={openGeneratePromptModal}
-              >
+              <button className="flex text-sm items-center p-2 rounded-md space-x-1 hover:bg-blue-50 text-blue-600" onClick={openGeneratePromptModal}>
                 <Sparkles className="w-4 h-4" />
-                <span>Generate Prompt</span>
+                <span>Generate</span>
               </button>
             </div>
           </div>
@@ -263,41 +250,33 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
                 {assistantTag ? `${assistantTag.slice(0, 8)}...${assistantTag.slice(-8)}` : "No ID"}
               </span>
             </div>
-            <div className="flex items-center space-x-2 border-l-2 hover:text-gray-600 pl-2">
-              <button className="text-gray-400 p-1 rounded-full hover:bg-gray-100" title="Settings">
-                <Settings className="w-4 h-4" />
-              </button>
+            <div className="flex items-center space-x-2 border-l-2 pl-2">
+              <button className="text-gray-400 p-1 rounded-full hover:bg-gray-100"><Settings size={16}/></button>
             </div>
           </div>
 
           <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
             <div onClick={() => navigate(getContextualPath("/call"))} className="flex items-center space-x-2">
-              <Phone className="w-4 h-4 text-gray-400" />
-              <span className="text-sm font-mono text-gray-700 truncate max-w-[120px]">{phoneNumber}</span>
+              <Phone size={16} className="text-gray-400" />
+              <span className="text-sm font-mono text-gray-700">{phoneNumber}</span>
             </div>
             <div className="flex items-center space-x-2 border-l-2 pl-2">
-              <button className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100" title="Settings">
-                <Settings className="w-4 h-4" />
-              </button>
+              <button className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"><Settings size={16}/></button>
             </div>
           </div>
 
           <div className="relative">
             <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
               <div className="flex items-center space-x-2" onClick={openVoiceMenu}>
-                <Volume2 className="w-4 h-4 text-gray-400" />
-                <span className="text-sm font-mono text-gray-700 truncate max-w-[150px]">{voiceDisplay}</span>
+                <Volume2 size={16} className="text-gray-400" />
+                <span className="text-sm font-mono text-gray-700">{voiceDisplay}</span>
               </div>
               <div className="flex items-center space-x-2 border-l-2 pl-2">
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsVoiceSettingsOpen(!isVoiceSettingsOpen);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); setIsVoiceSettingsOpen(!isVoiceSettingsOpen); }}
                   className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
-                  title="Settings"
                 >
-                  <Settings className="w-4 h-4" />
+                  <Settings size={16} />
                 </button>
               </div>
             </div>
@@ -312,9 +291,8 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
         <button
           onClick={toggleToolkit}
           className="absolute top-1/2 right-0 transform -translate-y-1/2 translate-x-1/2 z-10 p-2 bg-white border border-gray-300 rounded-full shadow-md text-gray-500 hover:text-blue-600 transition"
-          title="Show Toolkit"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft size={20} />
         </button>
       )}
 
