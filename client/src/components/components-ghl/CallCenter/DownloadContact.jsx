@@ -70,7 +70,16 @@ const DownloadContact = () => {
       timestamp: new Date(call.startedAt).toLocaleString(),
       rawTimestamp: new Date(call.startedAt),
       type: call.type === "webCall" ? "Web Call" : "Phone Call",
-      duration: `${((new Date(call.endedAt) - new Date(call.startedAt)) / 60000).toFixed(2)} mins`,
+      duration: (() => {
+        const start = new Date(call.startedAt);
+        const end = new Date(call.endedAt);
+        if (isNaN(start) || isNaN(end) || end < start) {
+          return "0.00 mins";
+        }
+
+        const diffInMinutes = (end - start) / 60000;
+        return `${diffInMinutes.toFixed(2)} mins`;
+      })(),
       status: call.status.charAt(0).toUpperCase() + call.status.slice(1),
       endReason:
         call.endedReason

@@ -244,6 +244,35 @@ export const registerCompany = createAsyncThunk(
   },
 );
 
+export const updateCompanyDetails = createAsyncThunk(
+  "auth/updateCompanyDetails",
+  async (formData, { rejectWithValue }) => {
+    try {
+      const response = await axios.post(
+        "https://api.yashayah.cloud/auth/company-details/update",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          },
+        },
+      );
+
+      const data = response.data;
+      if (data.status === false) {
+        return rejectWithValue(data.message || "Update failed");
+      }
+
+      return data.data;
+    } catch (error) {
+      const msg =
+        error.response?.data?.message || error.message || "Network error";
+      return rejectWithValue(msg);
+    }
+  },
+);
+
 const authSlice = createSlice({
   name: "auth",
   initialState: {
@@ -299,7 +328,7 @@ const authSlice = createSlice({
     resetRegistrationStatus: (state) => {
       state.registrationSuccess = false;
       state.error = null;
-    }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -454,6 +483,20 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
         state.registrationSuccess = false;
+      })
+
+      // Update Company Details Cases
+      .addCase(updateCompanyDetails.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateCompanyDetails.fulfilled, (state, action) => {
+        state.loading = false;
+        state.company = action.payload;
+      })
+      .addCase(updateCompanyDetails.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
   },
 });
