@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo } from "react";
 import { Routes, Route, useLocation, useSearchParams } from "react-router-dom";
 import { Header } from "./components/components-ui/Header";
+import { useNavigate } from "react-router-dom";
 
 // ---- Pages from Agency section ----
 import Agency from "./pages/pages-ui/Agency";
@@ -32,13 +33,14 @@ import GHLSettings from "./pages/pages-ghl/Settings";
 import { AssistantBuilderPage } from "./components/components-ghl/AssistantsBuilder/AssistantsBuilder";
 import KnowledgeDetailPage from "./components/components-ghl/Knowledge/BlogEdit";
 
-// ✅ Component to render based on route parameter
 const AppRouter = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Default to assistants if no route is specified
   const route = searchParams.get("route") || "/assistants";
 
-  // Store account data in sessionStorage
   useEffect(() => {
+    // Extract both possible naming conventions (GHL uses lowercase usually)
     const agencyid = searchParams.get("agencyid");
     const subaccount = searchParams.get("subaccount");
     const allow = searchParams.get("allow");
@@ -54,11 +56,16 @@ const AppRouter = () => {
         myemail,
       };
       sessionStorage.setItem("currentAccount", JSON.stringify(accountData));
-      console.log("✅ Account stored:", accountData);
+      
+      // If we have IDs but no route, redirect to assistants while KEEPING the IDs
+      if (!searchParams.get("route")) {
+          const newParams = new URLSearchParams(searchParams);
+          newParams.set("route", "/assistants");
+          setSearchParams(newParams, { replace: true });
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, setSearchParams]);
 
-  // Route mapping
   const routeComponents = {
     "/assistants": <Assistants />,
     "/inbox": <Inbox />,
@@ -75,25 +82,39 @@ const AppRouter = () => {
     "/dashboard": <DashboardPage />,
   };
 
-  // ✅ Handle dynamic routes like /assistants/:id
-  if (route.startsWith("/assistants/")) {
-    return <AssistantBuilderPage />;
-  }
-
-  if (route.startsWith("/knowledge/")) {
-    return <KnowledgeDetailPage />;
-  }
+  if (route.startsWith("/assistants/")) return <AssistantBuilderPage />;
+  if (route.startsWith("/knowledge/")) return <KnowledgeDetailPage />;
 
   return routeComponents[route] || <Assistants />;
 };
 
 export default function MainContent() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // Get page title based on route parameter
-  const pageTitles = useMemo(
-    () => ({
+  useEffect(() => {
+    // 1. Detect if we are inside GHL or have the IDs in the URL
+    const agencyId = searchParams.get("agencyid");
+    const subaccountId = searchParams.get("subaccount");
+    const isGHLUrl = document.referrer.includes("gohighlevel.com") || (agencyId && subaccountId);
+
+    if (isGHLUrl && location.pathname === "/") {
+      const params = new URLSearchParams(searchParams);
+      
+      // Ensure we explicitly have a route targeted
+      if (!params.get("route")) {
+        params.set("route", "/assistants");
+      }
+
+      navigate({
+        pathname: "/app",
+        search: params.toString(), // This ensures ?agencyid=...&subaccount=... is kept
+      }, { replace: true });
+    }
+  }, [location.pathname, searchParams, navigate]);
+
+  const pageTitles = useMemo(() => ({
       "/": "Accounts",
       "/agency": "Agency",
       "/integrations": "Integrations",
@@ -116,27 +137,15 @@ export default function MainContent() {
       "/connection-failed": "Integration Failed",
       "/payment/connection-success": "Payment Success",
       "/payment/connection-failed": "Payment Failed",
-    }),
-    []
-  );
+  }), []);
 
   const getCurrentTitle = () => {
-    // For /app routes, get title from route parameter
     if (location.pathname === "/app") {
       const route = searchParams.get("route") || "/assistants";
-
-      // ✅ Handle dynamic assistant routes
-      if (route.startsWith("/assistants/")) {
-        return "Assistant Builder";
-      }
-
-      if (route.startsWith("/knowledge/")) {
-        return "Knowledge";
-      }
-
-      return pageTitles[route] || "Dashboard";
+      if (route.startsWith("/assistants/")) return "Assistant Builder";
+      if (route.startsWith("/knowledge/")) return "Knowledge";
+      return pageTitles[route] || "Assistants";
     }
-    // For regular routes, use pathname
     return pageTitles[location.pathname] || "Dashboard";
   };
 
@@ -144,37 +153,20 @@ export default function MainContent() {
 
   return (
     <div className="flex flex-col flex-1">
-      {/* Header */}
       <Header title={currentTitle} />
-
-      {/* Main Content */}
       <main className="flex-1 overflow-y-auto">
         <Routes>
-          {/* --- Agency Routes (No account context) --- */}
           <Route path="/" element={<SubAccounts />} />
           <Route path="/agency" element={<Agency />} />
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/rebilling" element={<Rebilling />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-
-          {/* --- /app Route (WITH account context) --- */}
           <Route path="/app" element={<AppRouter />} />
-
-          {/* --- Integration Status Routes --- */}
-          <Route
-            path="/connection-success/:message"
-            element={<GHLConnectionSuccess />}
-          />
+          <Route path="/connection-success/:message" element={<GHLConnectionSuccess />} />
           <Route path="/connection-failed" element={<GHLConnectionFailed />} />
-          <Route
-            path="/payment/connection-success?status=success"
-            element={<StripeConnectionSuccess />}
-          />
-          <Route
-            path="/payment/connection-failed?status=fail"
-            element={<StripeConnectionFailed />}
-          />
+          <Route path="/payment/connection-success" element={<StripeConnectionSuccess />} />
+          <Route path="/payment/connection-failed" element={<StripeConnectionFailed />} />
         </Routes>
       </main>
     </div>
