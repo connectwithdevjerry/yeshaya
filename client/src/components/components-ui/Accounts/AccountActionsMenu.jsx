@@ -13,6 +13,8 @@ import {
   Zap,
 } from "lucide-react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import { authorizeGoHighLevel } from "../../../store/slices/integrationSlice";
 
 const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false }) => {
   if (isSeparator) return <li className="my-1 border-t border-gray-200" />;
@@ -44,6 +46,7 @@ const AccountActionsMenu = ({
 }) => {
   const menuRef = useRef(null);
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const location = useLocation();
   const [searchParams] = useSearchParams();
 
@@ -88,7 +91,7 @@ const AccountActionsMenu = ({
             "/widgets",
             "/helps",
             "/ghl_settings",
-            '/blog'
+            "/blog",
           ].includes(location.pathname)
         ) {
           targetRoute = location.pathname;
@@ -119,6 +122,17 @@ const AccountActionsMenu = ({
       }
     }
 
+    if (action === "AuthorizeGHL") {
+      dispatch(
+        authorizeGoHighLevel({
+          accountId: account.id, // This is your subaccountId
+          accountType: "Company",
+          installationType: "directInstallation",
+        }),
+      );
+      onClose();
+    }
+
     onClose();
   };
 
@@ -134,6 +148,11 @@ const AccountActionsMenu = ({
           icon={ExternalLink}
           text="Open account"
           onClick={() => handleAction("Open")}
+        />
+        <MenuItem
+          icon={Link}
+          text="Authorize GHL"
+          onClick={() => handleAction("AuthorizeGHL")}
         />
         <MenuItem icon={Pencil} text="Edit account" onClick={onClose} />
         <MenuItem icon={Scale} text="Manage limits" onClick={onClose} />

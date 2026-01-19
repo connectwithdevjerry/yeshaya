@@ -6,7 +6,7 @@ export const toolkitItems = [
     { title: "Call Settings", icon: Settings, type: "panel" },
     { title: "Tools & APIs", icon: ToolCase, type: "modal" }, 
     { title: "Map Custom Fields", icon: MapPin, type: "panel" },
-    { title: "Knowledge Base", icon: Book, type: "panel" },
+    { title: "Knowledge Base Settings", icon: Book, type: "panel" },
     { title: "Calendars", icon: Calendar, type: "modal" },
     { title: "Find & Replace", icon: Search, type: "panel" },
     { title: "Team Notes", icon: Users, type: "panel" },

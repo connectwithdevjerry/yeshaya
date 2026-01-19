@@ -4,6 +4,12 @@ import { X, Info } from "lucide-react";
 const TextInputView = ({ onClose, onBack, onNext }) => {
   const [inputText, setInputText] = useState("");
 
+  const handleNext = () => {
+    if (inputText.trim()) {
+      onNext(inputText.trim());
+    }
+  };
+
   return (
     <>
       {/* Header */}
@@ -49,7 +55,7 @@ const TextInputView = ({ onClose, onBack, onNext }) => {
           Back
         </button>
         <button
-          onClick={onNext}
+          onClick={handleNext}
           disabled={!inputText.trim()}
           className={`px-8 py-2 rounded-lg font-semibold text-white transition-all shadow-sm ${
             inputText.trim() 
@@ -57,7 +63,7 @@ const TextInputView = ({ onClose, onBack, onNext }) => {
               : 'bg-purple-300 cursor-not-allowed'
           }`}
         >
-          Upload
+          Next
         </button>
       </div>
     </>

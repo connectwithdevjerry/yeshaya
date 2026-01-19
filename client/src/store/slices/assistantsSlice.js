@@ -8,7 +8,7 @@ export const fetchAssistants = createAsyncThunk(
   async (subaccountId, { rejectWithValue }) => {
     try {
       const response = await apiClient.get(
-        `/assistants/get-all?subaccountId=${subaccountId}`
+        `/assistants/get-all?subaccountId=${subaccountId}`,
       );
 
       if (!response.data.status) {
@@ -19,10 +19,10 @@ export const fetchAssistants = createAsyncThunk(
       return cleanedData;
     } catch (err) {
       return rejectWithValue(
-        err.response?.data?.message || "Error fetching assistants"
+        err.response?.data?.message || "Error fetching assistants",
       );
     }
-  }
+  },
 );
 
 // ✅ Get single assistant
@@ -31,15 +31,15 @@ export const getAssistantById = createAsyncThunk(
   async ({ subaccountId, assistantId }, { rejectWithValue }) => {
     try {
       const response = await apiClient.get(
-        `/assistants/get?subaccountId=${subaccountId}&assistantId=${assistantId}`
+        `/assistants/get?subaccountId=${subaccountId}&assistantId=${assistantId}`,
       );
       return response.data.data;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch assistant"
+        error.response?.data?.message || "Failed to fetch assistant",
       );
     }
-  }
+  },
 );
 
 // ✅ Create assistant
@@ -53,17 +53,17 @@ export const createAssistant = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);
     }
-  }
+  },
 );
 
-// ✅ Update assistant 
+// ✅ Update assistant
 export const updateAssistant = createAsyncThunk(
   "assistants/update",
   async ({ subaccountId, assistantId, updateData }, { rejectWithValue }) => {
     try {
       if (!subaccountId || !assistantId) {
         return rejectWithValue(
-          "Missing required fields: subaccountId or assistantId"
+          "Missing required fields: subaccountId or assistantId",
         );
       }
       const payload = {
@@ -90,7 +90,7 @@ export const updateAssistant = createAsyncThunk(
         return rejectWithValue(
           error.response.data?.message ||
             error.response.data?.error ||
-            "Failed to update assistant"
+            "Failed to update assistant",
         );
       } else if (error.request) {
         return rejectWithValue("No response from server");
@@ -98,7 +98,7 @@ export const updateAssistant = createAsyncThunk(
         return rejectWithValue(error.message || "Failed to update assistant");
       }
     }
-  }
+  },
 );
 
 // ✅ Delete assistant
@@ -107,7 +107,7 @@ export const deleteAssistant = createAsyncThunk(
   async ({ subaccountId, assistantId }, { rejectWithValue }) => {
     try {
       const response = await apiClient.delete(
-        `/assistants/delete?subaccountId=${subaccountId}&assistantId=${assistantId}`
+        `/assistants/delete?subaccountId=${subaccountId}&assistantId=${assistantId}`,
       );
 
       if (!response.data.status) {
@@ -117,10 +117,10 @@ export const deleteAssistant = createAsyncThunk(
       return assistantId;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to delete assistant"
+        error.response?.data?.message || "Failed to delete assistant",
       );
     }
-  }
+  },
 );
 
 // ✅ Add Dynamic Message
@@ -137,7 +137,7 @@ export const addDynamicMessage = createAsyncThunk(
 
       if (!response.data.status) {
         return rejectWithValue(
-          response.data.message || "Failed to save message"
+          response.data.message || "Failed to save message",
         );
       }
 
@@ -146,10 +146,10 @@ export const addDynamicMessage = createAsyncThunk(
       return { assistantId, message, type };
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Error saving dynamic message"
+        error.response?.data?.message || "Error saving dynamic message",
       );
     }
-  }
+  },
 );
 
 // 🆕 1. Generate Prompt
@@ -164,7 +164,7 @@ export const generatePrompt = createAsyncThunk(
 
       if (!response.data.status) {
         return rejectWithValue(
-          response.data.message || "Failed to generate prompt"
+          response.data.message || "Failed to generate prompt",
         );
       }
 
@@ -172,10 +172,10 @@ export const generatePrompt = createAsyncThunk(
       return response.data.data;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Error generating prompt"
+        error.response?.data?.message || "Error generating prompt",
       );
     }
-  }
+  },
 );
 
 // 🆕 2. Get Dynamic Message
@@ -183,14 +183,17 @@ export const getDynamicMessage = createAsyncThunk(
   "assistants/getDynamicMessage",
   async ({ subaccountId, assistantId }, { rejectWithValue }) => {
     try {
-      console.log("🔄 Fetching dynamic message:", { subaccountId, assistantId });
+      console.log("🔄 Fetching dynamic message:", {
+        subaccountId,
+        assistantId,
+      });
       const response = await apiClient.get(
-        `/assistants/get-dynamic-message?subaccountId=${subaccountId}&assistantId=${assistantId}`
+        `/assistants/get-dynamic-message?subaccountId=${subaccountId}&assistantId=${assistantId}`,
       );
 
       if (!response.data.status) {
         return rejectWithValue(
-          response.data.message || "Failed to fetch dynamic message"
+          response.data.message || "Failed to fetch dynamic message",
         );
       }
 
@@ -198,43 +201,50 @@ export const getDynamicMessage = createAsyncThunk(
       return response.data.data;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Error fetching dynamic message"
+        error.response?.data?.message || "Error fetching dynamic message",
       );
     }
-  }
+  },
 );
 
 // 🆕 3. Add Knowledge Base
 export const addKnowledgeBase = createAsyncThunk(
   "assistants/addKnowledgeBase",
-  async ({ assistantId, knowledgeBaseUrl, title, type }, { rejectWithValue }) => {
+  async ({ knowledgeBaseUrl, title, type }, { rejectWithValue }) => {
     try {
-      console.log("🔄 Adding knowledge base:", { assistantId, title, type });
-      const payload = {
-        assistantId,
-        knowledgeBaseUrl,
-        title,
-        type,
-      };
+      const formData = new FormData();
 
-      const response = await apiClient.post("/assistants/add-knowledge-bases", payload);
+      formData.append("title", title);
+      formData.append("type", type);
 
-      if (!response.data.status) {
-        return rejectWithValue(
-          response.data.message || "Failed to add knowledge base"
-        );
+      if (type === "file") {
+        formData.append("knowledgeBaseUrl", knowledgeBaseUrl);
+      } else {
+        formData.append("knowledgeBaseUrl", knowledgeBaseUrl);
       }
 
-      console.log("✅ Knowledge base added:", response.data.data);
+      const response = await apiClient.post(
+        "/assistants/add-knowledge-bases",
+        formData,
+        {
+          headers: {
+            "Content-Type": undefined,
+          },
+        },
+      );
+
+      if (!response.data.status) {
+        return rejectWithValue(response.data.message);
+      }
+
       return response.data.data;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Error adding knowledge base"
+        error.response?.data?.message || "Error adding knowledge base",
       );
     }
-  }
+  },
 );
-
 // 🆕 4. Delete Knowledge Base
 export const deleteKnowledgeBase = createAsyncThunk(
   "assistants/deleteKnowledgeBase",
@@ -242,12 +252,12 @@ export const deleteKnowledgeBase = createAsyncThunk(
     try {
       console.log("🔄 Deleting knowledge base:", toolId);
       const response = await apiClient.delete(
-        `/assistants/delete-knowlege-base?toolId=${toolId}`
+        `/assistants/delete-knowlege-base?toolId=${toolId}`,
       );
 
       if (!response.data.status) {
         return rejectWithValue(
-          response.data.message || "Failed to delete knowledge base"
+          response.data.message || "Failed to delete knowledge base",
         );
       }
 
@@ -255,10 +265,10 @@ export const deleteKnowledgeBase = createAsyncThunk(
       return toolId;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Error deleting knowledge base"
+        error.response?.data?.message || "Error deleting knowledge base",
       );
     }
-  }
+  },
 );
 
 // 🆕 5. Get File Details
@@ -268,12 +278,12 @@ export const getFileDetails = createAsyncThunk(
     try {
       console.log("🔄 Fetching file details:", fileId);
       const response = await apiClient.get(
-        `/assistants/get-file-details?fileId=${fileId}`
+        `/assistants/get-file-details?fileId=${fileId}`,
       );
 
       if (!response.data.status) {
         return rejectWithValue(
-          response.data.message || "Failed to fetch file details"
+          response.data.message || "Failed to fetch file details",
         );
       }
 
@@ -281,12 +291,345 @@ export const getFileDetails = createAsyncThunk(
       return response.data.data;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Error fetching file details"
+        error.response?.data?.message || "Error fetching file details",
       );
     }
-  }
+  },
 );
 
+//
+export const fetchKnowledgeBases = createAsyncThunk(
+  "assistants/fetchKnowledgeBases",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(
+        "/assistants/get-all-knowledge-bases",
+      );
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to fetch knowledge bases",
+        );
+      }
+
+      const rawData = response.data.data || [];
+
+      return rawData.map((item) => {
+        // Safe check for nested knowledgeBases array
+        const kb =
+          Array.isArray(item.knowledgeBases) && item.knowledgeBases.length > 0
+            ? item.knowledgeBases[0]
+            : {};
+
+        return {
+          id: item.id || "unknown",
+          // Fallback to "Untitled" if description is missing
+          name: kb.description || item.name || "Untitled Knowledge Base",
+          updated: item.updatedAt
+            ? new Date(item.updatedAt).toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "N/A",
+          created: item.createdAt
+            ? new Date(item.createdAt).toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "N/A",
+          sourcesCount: Array.isArray(kb.fileIds) ? kb.fileIds.length : 0,
+          isVoiceEnabled: false,
+        };
+      });
+    } catch (err) {
+      return rejectWithValue(
+        err.response?.data?.message || "Error fetching knowledge bases",
+      );
+    }
+  },
+);
+
+// ✅ 7. Link Knowledge Base to Assistant
+export const linkKnowledgeBaseToAssistant = createAsyncThunk(
+  "assistants/linkKnowledgeBase",
+  async ({ assistantId, toolId }, { rejectWithValue }) => {
+    try {
+      // Using POST as is standard for linking resources
+      const response = await apiClient.post(
+        "/assistants/link-knowledge-bases-to-assistant",
+        {
+          assistantId,
+          toolId,
+        },
+      );
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to link knowledge base",
+        );
+      }
+
+      return response.data; // Return the success data
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error linking knowledge base",
+      );
+    }
+  },
+);
+
+// ✅ 8. Get Knowledge Bases for a Specific Assistant
+export const fetchAssistantKnowledgeBases = createAsyncThunk(
+  "assistants/fetchAssistantKnowledgeBases",
+  async (assistantId, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(
+        `/assistants/get-assistant-knowledge-bases?assistantId=${assistantId}`,
+      );
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to fetch assistant knowledge bases",
+        );
+      }
+
+      // We return the data array
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message ||
+          "Error fetching linked knowledge bases",
+      );
+    }
+  },
+);
+
+// ✅ 9. Remove/Unlink Knowledge Base from Assistant
+export const removeKnowledgeBaseFromAssistant = createAsyncThunk(
+  "assistants/removeKnowledgeBase",
+  async ({ assistantId, toolId }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.delete(
+        `/assistants/remove-knowlege-base-from-assistant?assistantId=${assistantId}&toolId=${toolId}`,
+      );
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to remove knowledge base",
+        );
+      }
+
+      // Return the toolId so we can filter it out of the state optimistically
+      return toolId;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error removing knowledge base",
+      );
+    }
+  },
+);
+
+// ✅ 10. Add Calendar to Assistant
+export const addCalendarToAssistant = createAsyncThunk(
+  "assistants/addCalendar",
+  async ({ accountId, assistantId, calendarId }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post("/assistants/add-calendar", {
+        accountId,
+        assistantId,
+        calendarId,
+      });
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to add calendar",
+        );
+      }
+
+      return response.data.data; // Returning the newly linked calendar info
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error adding calendar",
+      );
+    }
+  },
+);
+
+// ✅ 11. Fetch Available GHL Calendars
+export const fetchGHLCalendars = createAsyncThunk(
+  "assistants/fetchGHLCalendars",
+  async (subaccountId, { rejectWithValue }) => {
+    // 1. Log the incoming argument immediately
+    console.log("🔍 fetchGHLCalendars called with subaccountId:", subaccountId);
+
+    if (!subaccountId) {
+      console.error("❌ fetchGHLCalendars failed: subaccountId is missing!");
+      return rejectWithValue("Subaccount ID is required to fetch calendars");
+    }
+
+    try {
+      const response = await apiClient.get(
+        `/assistants/get-available-ghl-calendars?subaccountId=${subaccountId}`,
+      );
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to fetch calendars",
+        );
+      }
+
+      console.log(
+        "✅ Calendars fetched successfully for:",
+        subaccountId,
+        response.data.data,
+      );
+      return response.data.data || [];
+    } catch (error) {
+      console.error(
+        "❌ API Error fetching calendars:",
+        error.response?.data || error.message,
+      );
+      return rejectWithValue(
+        error.response?.data?.message || "Error fetching calendars",
+      );
+    }
+  },
+);
+
+// ✅ 12. Fetch Connected Calendar for Assistant
+export const fetchConnectedCalendar = createAsyncThunk(
+  "assistants/fetchConnectedCalendar",
+  async ({ accountId, assistantId }, { rejectWithValue }) => {
+    try {
+      console.log(
+        "🔍 Fetching connected calendar for Assistant:",
+        assistantId,
+        accountId,
+      );
+
+      const response = await apiClient.get(
+        `/assistants/get-connected-calendar?accountId=${accountId}&assistantId=${assistantId}`,
+      );
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to fetch connected calendar",
+        );
+      }
+
+      console.log("✅ Connected calendar fetched:", response.data.data);
+
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error fetching connected calendar",
+      );
+    }
+  },
+);
+
+// ✅ 13. Add Tool to Assistant
+export const addToolToAssistant = createAsyncThunk(
+  "assistants/addTool",
+  async ({ assistantId, toolName }, { rejectWithValue }) => {
+    try {
+      // Postman screenshot shows x-www-form-urlencoded
+      const params = new URLSearchParams();
+      params.append("assistantId", assistantId);
+      params.append("toolName", toolName);
+
+      const response = await apiClient.post("/assistants/add-tool", params, {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      });
+
+      if (!response.data.status) {
+        return rejectWithValue(response.data.message || "Failed to add tool");
+      }
+      console.log("✅ Tool added successfully:", response.data.data);
+
+      return { toolName, data: response.data.data };
+    } catch (error) {
+      console.error("❌ Error adding tool:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Error adding tool",
+      );
+    }
+  },
+);
+
+// ✅ 14. Send Chat Message
+export const sendChatMessage = createAsyncThunk(
+  "assistants/sendChatMessage",
+  async ({ assistantId, userText }, { rejectWithValue }) => {
+    try {
+      const params = new URLSearchParams();
+      params.append("assistantId", assistantId);
+      params.append("userText", userText);
+
+      const response = await apiClient.post(
+        "/assistants/send-chat-message",
+        params,
+        {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        },
+      );
+
+      // Your API structure uses .status and .reply
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to send message",
+        );
+      }
+
+      // Return the whole body so the component can access .reply
+      console.log("✅ Chat message success:", response.data);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error sending chat message",
+      );
+    }
+  },
+);
+
+// ✅ 15. Get Assistant Call Logs (No ID required)
+export const getAssistantCallLogs = createAsyncThunk(
+  "assistants/getAssistantCallLogs",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(
+        "/assistants/get-assistant-call-logs",
+      );
+
+      // The data you provided is a direct array.
+      // If your apiClient (like Axios) puts the body in .data:
+      const rawData = response.data;
+
+      // Check if rawData is the array, or if it's nested in a 'data' property
+      const callLogsData = Array.isArray(rawData)
+        ? rawData
+        : rawData.data || [];
+
+      console.log("✅ Call logs fetched:", callLogsData);
+
+      return callLogsData;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error fetching call logs",
+      );
+    }
+  },
+);
 const assistantsSlice = createSlice({
   name: "assistants",
   initialState: {
@@ -311,6 +654,27 @@ const assistantsSlice = createSlice({
     fileDetails: null,
     fetchingFileDetails: false,
     fileDetailsError: null,
+    fetchingKnowledgeBases: false,
+    knowledgeBasesData: [],
+    currentAssistantKBs: [],
+    fetchingAssistantKBs: false,
+    linkingKnowledgeBase: false,
+    linkError: null,
+    availableCalendars: [],
+    fetchingCalendars: false,
+    calendarError: null,
+    linkingCalendar: false,
+    connectedCalendar: null,
+    fetchingConnectedCalendar: false,
+    addingTool: false,
+    toolError: null,
+    assistantTools: [],
+    sendingChat: false,
+    chatError: null,
+    chatHistory: [],
+    callLogs: [],
+    fetchingLogs: false,
+    logsError: null,
   },
   reducers: {
     clearSelectedAssistant: (state) => {
@@ -331,11 +695,14 @@ const assistantsSlice = createSlice({
       state.fileDetails = null;
       state.fileDetailsError = null;
     },
+    clearKnowledgeBaseError: (state) => {
+      state.knowledgeBaseError = null;
+    },
     optimisticUpdate: (state, action) => {
       const { assistantId, updateData } = action.payload;
 
       const index = state.data.findIndex(
-        (a) => a.id === assistantId || a.assistantId === assistantId
+        (a) => a.id === assistantId || a.assistantId === assistantId,
       );
       if (index !== -1) {
         state.data[index] = { ...state.data[index], ...updateData };
@@ -402,7 +769,7 @@ const assistantsSlice = createSlice({
 
         const index = state.data.findIndex(
           (a) =>
-            a.id === action.payload.id || a.assistantId === action.payload.id
+            a.id === action.payload.id || a.assistantId === action.payload.id,
         );
         if (index !== -1) {
           state.data[index] = { ...state.data[index], ...action.payload };
@@ -430,7 +797,7 @@ const assistantsSlice = createSlice({
       .addCase(deleteAssistant.fulfilled, (state, action) => {
         state.loading = false;
         state.data = state.data.filter(
-          (a) => a.id !== action.payload && a.assistantId !== action.payload
+          (a) => a.id !== action.payload && a.assistantId !== action.payload,
         );
         if (
           state.selectedAssistant?.id === action.payload ||
@@ -457,12 +824,12 @@ const assistantsSlice = createSlice({
         if (type === "inbound") {
           console.log(
             "✅ Inbound dynamic greeting saved successfully:",
-            message
+            message,
           );
         } else if (type === "outbound") {
           console.log(
             "✅ Outbound dynamic greeting saved successfully:",
-            message
+            message,
           );
         }
 
@@ -515,15 +882,8 @@ const assistantsSlice = createSlice({
         state.addingKnowledgeBase = true;
         state.knowledgeBaseError = null;
       })
-      .addCase(addKnowledgeBase.fulfilled, (state, action) => {
+      .addCase(addKnowledgeBase.fulfilled, (state) => {
         state.addingKnowledgeBase = false;
-        // You might want to update the selectedAssistant with the new knowledge base
-        if (state.selectedAssistant) {
-          if (!state.selectedAssistant.knowledgeBases) {
-            state.selectedAssistant.knowledgeBases = [];
-          }
-          state.selectedAssistant.knowledgeBases.push(action.payload);
-        }
       })
       .addCase(addKnowledgeBase.rejected, (state, action) => {
         state.addingKnowledgeBase = false;
@@ -536,14 +896,9 @@ const assistantsSlice = createSlice({
         state.knowledgeBaseError = null;
       })
       .addCase(deleteKnowledgeBase.fulfilled, (state, action) => {
-        state.deletingKnowledgeBase = false;
-        // Remove the knowledge base from selectedAssistant
-        if (state.selectedAssistant?.knowledgeBases) {
-          state.selectedAssistant.knowledgeBases = 
-            state.selectedAssistant.knowledgeBases.filter(
-              (kb) => kb.toolId !== action.payload
-            );
-        }
+        state.knowledgeBasesData = state.knowledgeBasesData.filter(
+          (kb) => kb.id !== action.payload,
+        );
       })
       .addCase(deleteKnowledgeBase.rejected, (state, action) => {
         state.deletingKnowledgeBase = false;
@@ -562,17 +917,170 @@ const assistantsSlice = createSlice({
       .addCase(getFileDetails.rejected, (state, action) => {
         state.fetchingFileDetails = false;
         state.fileDetailsError = action.payload;
+      })
+
+      // 🔹 Fetch all knowledge bases
+      .addCase(fetchKnowledgeBases.pending, (state) => {
+        state.fetchingKnowledgeBases = true;
+        state.knowledgeBaseError = null;
+      })
+      .addCase(fetchKnowledgeBases.fulfilled, (state, action) => {
+        state.fetchingKnowledgeBases = false;
+        state.knowledgeBasesData = action.payload;
+      })
+      .addCase(fetchKnowledgeBases.rejected, (state, action) => {
+        state.fetchingKnowledgeBases = false;
+        state.knowledgeBaseError = action.payload;
+      })
+
+      // Connect Knowledge Base to Assistant
+      .addCase(linkKnowledgeBaseToAssistant.pending, (state) => {
+        state.linkingKnowledgeBase = true;
+        state.linkError = null;
+      })
+      .addCase(linkKnowledgeBaseToAssistant.fulfilled, (state) => {
+        state.linkingKnowledgeBase = false;
+        state.linkError = null;
+        // You might want to update a specific assistant's state here if needed
+      })
+      .addCase(linkKnowledgeBaseToAssistant.rejected, (state, action) => {
+        state.linkingKnowledgeBase = false;
+        state.linkError = action.payload;
+      })
+
+      //fetching assistants knowledge bases
+      .addCase(fetchAssistantKnowledgeBases.pending, (state) => {
+        state.fetchingAssistantKBs = true;
+      })
+      .addCase(fetchAssistantKnowledgeBases.fulfilled, (state, action) => {
+        state.fetchingAssistantKBs = false;
+        state.currentAssistantKBs = action.payload;
+      })
+      .addCase(fetchAssistantKnowledgeBases.rejected, (state) => {
+        state.fetchingAssistantKBs = false;
+      })
+
+      //remove knowledge base from assistant
+      .addCase(removeKnowledgeBaseFromAssistant.pending, (state) => {
+        state.linkingKnowledgeBase = true;
+      })
+      .addCase(removeKnowledgeBaseFromAssistant.fulfilled, (state, action) => {
+        state.linkingKnowledgeBase = false;
+        state.currentAssistantKBs = state.currentAssistantKBs.filter(
+          (kb) => kb.id !== action.payload,
+        );
+      })
+      .addCase(removeKnowledgeBaseFromAssistant.rejected, (state, action) => {
+        state.linkingKnowledgeBase = false;
+        state.linkError = action.payload;
+      })
+
+      //add calendar to assistant
+      .addCase(addCalendarToAssistant.pending, (state) => {
+        state.linkingCalendar = true;
+        state.calendarError = null;
+      })
+      .addCase(addCalendarToAssistant.fulfilled, (state, action) => {
+        state.linkingCalendar = false;
+        if (state.selectedAssistant) {
+          state.selectedAssistant.calendar = action.payload;
+        }
+      })
+      .addCase(addCalendarToAssistant.rejected, (state, action) => {
+        state.linkingCalendar = false;
+        state.calendarError = action.payload;
+      })
+
+      //get ghl calendars
+      .addCase(fetchGHLCalendars.pending, (state) => {
+        state.fetchingCalendars = true;
+        state.calendarError = null;
+      })
+      .addCase(fetchGHLCalendars.fulfilled, (state, action) => {
+        state.fetchingCalendars = false;
+        state.availableCalendars = action.payload;
+      })
+      .addCase(fetchGHLCalendars.rejected, (state, action) => {
+        state.fetchingCalendars = false;
+        state.calendarError = action.payload;
+      })
+
+      // 🔹 Fetch Connected Calendar
+      .addCase(fetchConnectedCalendar.pending, (state) => {
+        state.fetchingConnectedCalendar = true;
+        state.calendarError = null;
+      })
+      .addCase(fetchConnectedCalendar.fulfilled, (state, action) => {
+        state.fetchingConnectedCalendar = false;
+        state.connectedCalendar = action.payload; // This stores the { calendarId, assistantId, ... } object
+      })
+      .addCase(fetchConnectedCalendar.rejected, (state, action) => {
+        state.fetchingConnectedCalendar = false;
+        state.calendarError = action.payload;
+      })
+
+      // 🔹 Add Tool to Assistant
+      .addCase(addToolToAssistant.pending, (state) => {
+        state.addingTool = true;
+        state.toolError = null;
+      })
+      .addCase(addToolToAssistant.fulfilled, (state, action) => {
+        state.addingTool = false;
+        // Check if tool already exists before pushing
+        const exists = state.assistantTools.includes(action.payload.toolName);
+        if (!exists) {
+          state.assistantTools.push(action.payload.toolName);
+        }
+      })
+      .addCase(addToolToAssistant.rejected, (state, action) => {
+        state.addingTool = false;
+        state.toolError = action.payload;
+      })
+
+      // 🔹 Send Chat Message
+      .addCase(sendChatMessage.pending, (state) => {
+        state.sendingChat = true;
+        state.chatError = null;
+      })
+      .addCase(sendChatMessage.fulfilled, (state, action) => {
+        state.sendingChat = false;
+        // If your API returns the full conversation or just the new reply:
+        // state.chatHistory.push(action.payload);
+      })
+      .addCase(sendChatMessage.rejected, (state, action) => {
+        state.sendingChat = false;
+        state.chatError = action.payload;
+      })
+
+      // 🔹 Get Assistant Call Logs
+      .addCase(getAssistantCallLogs.pending, (state) => {
+        console.log("⏳ Reducer: getAssistantCallLogs.pending");
+        state.fetchingLogs = true;
+        state.logsError = null;
+      })
+      .addCase(getAssistantCallLogs.fulfilled, (state, action) => {
+
+        state.fetchingLogs = false;
+        // Create a new array reference to force update
+        state.callLogs = Array.isArray(action.payload)
+          ? [...action.payload]
+          : [];
+      })
+      .addCase(getAssistantCallLogs.rejected, (state, action) => {
+        state.fetchingLogs = false;
+        state.logsError = action.payload;
       });
   },
 });
 
-export const { 
-  clearSelectedAssistant, 
-  clearUpdateError, 
+export const {
+  clearSelectedAssistant,
+  clearUpdateError,
   optimisticUpdate,
   clearGeneratedPrompt,
   clearDynamicMessage,
   clearFileDetails,
+  clearKnowledgeBaseError,
 } = assistantsSlice.actions;
 
 export default assistantsSlice.reducer;

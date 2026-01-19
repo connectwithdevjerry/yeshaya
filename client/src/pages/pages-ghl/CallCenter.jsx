@@ -171,7 +171,7 @@ const CallDashboard = () => {
         </button>
       </div>
 
-      <HeaderFilters />
+      
       {activeModal === "dataCenter" && (
         <div className="p-6 animate-fadeIn">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">

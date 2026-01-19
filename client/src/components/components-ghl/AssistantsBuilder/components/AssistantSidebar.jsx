@@ -6,6 +6,7 @@ import { ChatSettingsPanel } from "./Sidebar/ChatSettingsPanel";
 import { CallSettingsPanel } from "./Sidebar/CallSettingsPanel";
 import { ToolsAndAPIsModal } from "./Sidebar/ToolsAndAPIsModal";
 import { CalendarModal } from "./Sidebar/CalendarModal";
+import { KnowledgeBaseSettings } from "./Sidebar/KnowledgeBaseSettings";
 
 const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal, openCalendarModal }) => {
   const Icon = item.icon;
@@ -23,11 +24,12 @@ const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal, openCalendarM
   const renderPanel = () => {
     if (item.title === "Chat Settings") return <ChatSettingsPanel />;
     if (item.title === "Call Settings") return <CallSettingsPanel />;
+    if (item.title === "Knowledge Base Settings") return <KnowledgeBaseSettings />;
     return null;
   };
 
   return (
-    <div className="border-b border-gray-100">
+    <div className="border-b border-gray-100 no-scrollbar">
       {/* Item Header */}
       <div
         className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 transition-colors duration-150"

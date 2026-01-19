@@ -178,7 +178,7 @@ const Numbers = () => {
     "CAPABILITIES",
     "STATUS",
     "LINKED ASSISTANT",
-    "VAPI STATUS",
+    "STATUS",
     "ACTIONS",
   ];
 
