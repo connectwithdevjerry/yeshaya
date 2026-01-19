@@ -341,6 +341,12 @@ const callBillingWebhook = async (req, res) => {
     const balanceTooLow = user.walletBalance <= 0;
 
     if (!user || balanceTooLow) {
+      res.status(200).json({
+        error: balanceTooLow
+          ? "Your account balance is too low to start this call. Please top up."
+          : "This assistant is not linked to any user account in our platform.",
+      });
+
       try {
         await axios.post(
           `https://api.vapi.ai/call/${call.id}/terminate`,
@@ -363,11 +369,7 @@ const callBillingWebhook = async (req, res) => {
         }
       }
 
-      return res.status(200).json({
-        error: balanceTooLow
-          ? "Your account balance is too low to start this call. Please top up."
-          : "This assistant is not linked to any user account in our platform.",
-      }); // don't retry
+      return; // don't retry
     }
 
     const typeStatus = [
