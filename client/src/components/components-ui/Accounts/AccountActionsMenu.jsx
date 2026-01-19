@@ -161,7 +161,6 @@ const AccountActionsMenu = ({
         <MenuItem icon={UserPlus} text="Invite member" onClick={onClose} />
         <MenuItem icon={Users} text="Manage access" onClick={onClose} />
         <MenuItem icon={Lock} text="Lock account" onClick={onClose} />
-        <MenuItem icon={Link} text="Connect GHL" onClick={onClose} />
         <MenuItem isSeparator />
         <MenuItem icon={Zap} text="Turn on rebilling" onClick={onClose} />
       </ul>
