@@ -340,7 +340,7 @@ const callBillingWebhook = async (req, res) => {
 
     if (!user || balanceTooLow) {
       console.warn("User not found for assistant:", call.assistantId);
-      return res.sendStatus(200).json({
+      return res.status(200).json({
         error: balanceTooLow
           ? "Your account balance is too low to start this call. Please top up."
           : "This assistant is not linked to any user account in our platform.",
