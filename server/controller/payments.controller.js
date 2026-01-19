@@ -61,6 +61,11 @@ const chargeCustomerCard = async (req, res) => {
         amount: amount * 100, // in cents ($10.00 for 1000 cents)
         currency: "usd",
         // CRITICAL: Use the Stripe-Account header to act on their behalf
+        automatic_payment_methods: { enabled: true },
+        metadata: {
+          userId: req.user,
+          type: "USAGE_CHARGE",
+        },
       },
       {
         stripeAccount: connectedAccountId,
