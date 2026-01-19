@@ -340,8 +340,8 @@ const callBillingWebhook = async (req, res) => {
     const balanceTooLow = user.walletBalance <= 0;
 
     if (!user || balanceTooLow) {
-      await axios.post(
-        `https://api.vapi.ai/call/${call.id}/end`,
+      await axios.delete(
+        `https://api.vapi.ai/call/${call.id}`,
         {},
         {
           headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}` },
