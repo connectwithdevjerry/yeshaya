@@ -332,7 +332,13 @@ const callBillingWebhook = async (req, res) => {
       return res.status(400).send("Invalid payload");
     }
 
-    if (type !== "end-of-call-report") {
+    const typeStatus = [
+      "call.ended",
+      "call.analysis.completed",
+      "end-of-call-report",
+    ];
+
+    if (!typeStatus.includes(type)) {
       console.log(`Call ${call.id} is currently ${call.status}`);
       return res.sendStatus(200);
     }
@@ -355,6 +361,10 @@ const callBillingWebhook = async (req, res) => {
     }
 
     let amountToDeduct = 0;
+
+    if (type === "end-of-call-report") {
+      amountToDeduct = req.body.message?.cost || 0;
+    }
 
     // ---- CALL ENDED (BASE COST) ----
     if (type === "call.ended") {

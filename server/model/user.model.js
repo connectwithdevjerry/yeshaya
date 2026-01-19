@@ -47,7 +47,7 @@ const userSchema = mongoose.Schema({
   billingEvents: [
     {
       callId: String,
-      type: { type: String, enum: ["call.ended", "call.analysis.completed"] },
+      type: { type: String },
       amount: Number,
       processedAt: { type: Date, default: Date.now },
     },
