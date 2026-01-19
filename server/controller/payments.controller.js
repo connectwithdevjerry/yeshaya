@@ -38,62 +38,51 @@ const getLatestConnectedBalance = async (req, res) => {
 };
 
 const chargeCustomerCard = async (req, res) => {
-  const userId = req.user;
+  // 1. Lookup the connected account's ID for the customer being paid
+  // In a real app, this ID comes from your database based on who the customer is paying.
   const { amount } = req.body;
+  const user = await userModel.findById(req.user);
+  const connectedAccountId = await user.stripeUserId;
+
+  if (!connectedAccountId) {
+    // return res
+    //   .status(404)
+    //   .json({ error: "Connected account ID not found for this user." });
+    return res.send({
+      status: false,
+      message: "Connected account ID not found for this user.",
+    });
+  }
 
   try {
-    // 1️ Fetch user
-    const user = await userModel.findById(userId);
-
-    if (!user) {
-      return res.status(400).send({
-        status: false,
-        message: "User not found",
-      });
-    }
-
-    // 2️ Create Stripe Customer if not exists
-    if (!user.stripeCustomerId) {
-      const stripeCustomer = await stripe.customers.create({
-        email: user.email,
-        name: `${user.firstName || ""} ${user.lastName || ""}`,
-        phone: user.phoneNumber || undefined,
-        metadata: { userId: user._id.toString() },
-      });
-
-      user.stripeCustomerId = stripeCustomer.id;
-      await user.save();
-    }
-
-    // 3️ Create PaymentIntent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // cents
-      currency: "usd",
-      customer: user.stripeCustomerId,
-      // ON-SESSION charge; user must provide card via frontend
-      setup_future_usage: "off_session", // optional: save for future charges
-      metadata: {
-        userId: userId.toString(),
-        type: "USAGE_CHARGE",
+    const paymentIntent = await stripe.paymentIntents.create(
+      {
+        payment_method_types: ["card"],
+        amount: amount * 100, // in cents ($10.00 for 1000 cents)
+        currency: "usd",
+        // CRITICAL: Use the Stripe-Account header to act on their behalf
       },
-    });
+      {
+        stripeAccount: connectedAccountId,
+      },
+    );
 
-    // user.billingEvents.push({
-    //   callId: null,
-    //   type: "INITIATE_CHARGE",
-    //   amount: Math.round(amount * 100),
-    // });
+    // The connected account receives the funds and pays Stripe fees.
+    // The PaymentIntent created belongs to the connected account, not your platform.
 
-    // await user.save();
-
-    // 4️⃣ Return client_secret to frontend
-    res.send({
+    return res.send({
       status: true,
+      message: "Payment Intent created successfully.",
+      paymentIntentId: paymentIntent.id,
       clientSecret: paymentIntent.client_secret,
-      message: "Stripe Customer ready, collect card on frontend",
+      accountId: connectedAccountId,
     });
   } catch (error) {
-    res.status(500).send({
+    console.error(
+      "Error creating Payment Intent on behalf of connected account:",
+      error,
+    );
+    return res.send({
       status: false,
       message: error.message,
     });
