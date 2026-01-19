@@ -2544,8 +2544,8 @@ const makeOutboundCall = async (req, res) => {
           number: customerNumber, // Format: +1234567890
         },
         assistantOverrides: {
-          firstMessage: message || undefined,
-          firstMessageMode: message
+          firstMessage: "Hi, my name is Jerry!" || message || undefined,
+          firstMessageMode: "message"
             ? "assistant-speaks-first"
             : "assistant-speaks-first-with-model-generated-message",
         },
