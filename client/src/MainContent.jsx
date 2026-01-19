@@ -40,6 +40,7 @@ const AppRouter = () => {
   const route = searchParams.get("route") || "/assistants";
 
   useEffect(() => {
+    // Extract both possible naming conventions (GHL uses lowercase usually)
     const agencyid = searchParams.get("agencyid");
     const subaccount = searchParams.get("subaccount");
     const allow = searchParams.get("allow");
@@ -55,9 +56,8 @@ const AppRouter = () => {
         myemail,
       };
       sessionStorage.setItem("currentAccount", JSON.stringify(accountData));
-      console.log("✅ GHL Account detected and stored:", accountData);
-
-      // If the URL has account info but is missing the route parameter, add it.
+      
+      // If we have IDs but no route, redirect to assistants while KEEPING the IDs
       if (!searchParams.get("route")) {
           const newParams = new URLSearchParams(searchParams);
           newParams.set("route", "/assistants");
@@ -90,28 +90,26 @@ const AppRouter = () => {
 
 export default function MainContent() {
   const location = useLocation();
-  const navigate = useNavigate(); // Hook for navigation
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // --- NEW: GHL Global Redirect Logic ---
   useEffect(() => {
-    // Detect if we are inside GHL or have GHL query parameters
-    const isGHLContext = searchParams.get("agencyid") || searchParams.get("subaccount");
-    const isReferrerGHL = document.referrer.includes("gohighlevel.com");
+    // 1. Detect if we are inside GHL or have the IDs in the URL
+    const agencyId = searchParams.get("agencyid");
+    const subaccountId = searchParams.get("subaccount");
+    const isGHLUrl = document.referrer.includes("gohighlevel.com") || (agencyId && subaccountId);
 
-    // If we detect GHL but the user is at the base "/" path, 
-    // force them into the "/app" context at the Assistants page.
-    if ((isGHLContext || isReferrerGHL) && location.pathname === "/") {
-      console.log("🚀 GHL context detected at root. Redirecting to Assistants...");
-      
+    if (isGHLUrl && location.pathname === "/") {
       const params = new URLSearchParams(searchParams);
+      
+      // Ensure we explicitly have a route targeted
       if (!params.get("route")) {
         params.set("route", "/assistants");
       }
 
       navigate({
         pathname: "/app",
-        search: params.toString(),
+        search: params.toString(), // This ensures ?agencyid=...&subaccount=... is kept
       }, { replace: true });
     }
   }, [location.pathname, searchParams, navigate]);
