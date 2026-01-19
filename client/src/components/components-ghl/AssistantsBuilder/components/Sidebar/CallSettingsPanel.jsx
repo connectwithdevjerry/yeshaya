@@ -1,9 +1,12 @@
-// src/components/assistant/Sidebar/CallSettingsPanel.jsx
-import React from 'react';
-import { Info, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { useSearchParams } from 'react-router-dom';
+import { Info, ChevronDown, Check, AlertCircle, Send } from 'lucide-react';
+import { updateAssistant } from '../../../../../store/slices/assistantsSlice';
+import { getSubaccountIdFromUrl, getAssistantIdFromUrl } from '../../../../../utils/urlUtils';
 
 // Reusable component for a single setting input field
-const SettingInput = ({ label, value, unit, description, isDropdown = false }) => (
+const SettingInput = ({ label, name, value, onChange, unit, description, isDropdown = false, type = "text" }) => (
     <div className="space-y-1">
         <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-gray-700">{label}</label>
@@ -11,137 +14,238 @@ const SettingInput = ({ label, value, unit, description, isDropdown = false }) =
         </div>
         <div className="relative">
             <input
-                type="text"
+                type={type}
+                name={name}
                 value={value}
-                readOnly
-                className={`w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-800 ${isDropdown ? 'appearance-none pr-8' : ''}`}
+                onChange={onChange}
+                className={`w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-800 text-sm ${isDropdown ? 'appearance-none pr-8' : ''}`}
             />
-            {unit && <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">{unit}</span>}
+            {unit && <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-xs">{unit}</span>}
             {isDropdown && <ChevronDown className="w-4 h-4 text-gray-500 absolute right-2 top-1/2 transform -translate-y-1/2" />}
         </div>
     </div>
 );
 
-// Reusable component for a toggle switch setting (now includes buttons shown in the image)
-const ToggleSetting = ({ label, description, buttonText, isEnabled = false, buttonColorClass = 'bg-green-100 text-green-800' }) => (
+// Reusable component for a toggle switch setting
+const ToggleSetting = ({ label, name, description, buttonText, isEnabled, onToggle, buttonColorClass }) => (
     <div className="space-y-2">
         <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-gray-700">{label}</span>
             <Info className="w-4 h-4 text-gray-400 cursor-pointer" title={description} />
         </div>
 
-        {/* Button */}
-        <button className={`w-full py-2 text-xs font-semibold rounded-md ${buttonColorClass} transition-colors duration-150`}>
-            {buttonText}
+        <button className={`w-full py-2 text-[10px] font-bold rounded-md ${isEnabled ? buttonColorClass : 'bg-gray-100 text-gray-500'} transition-colors duration-150`}>
+            {isEnabled ? buttonText : "DISABLED"}
         </button>
 
-        {/* Toggle Switch */}
         <div className="flex justify-end pt-1">
             <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked={isEnabled} className="sr-only peer" />
+                <input 
+                    type="checkbox" 
+                    name={name}
+                    checked={isEnabled} 
+                    onChange={onToggle}
+                    className="sr-only peer" 
+                />
                 <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
         </div>
     </div>
 );
 
-
 export const CallSettingsPanel = () => {
+    const dispatch = useDispatch();
+    const { selectedAssistant } = useSelector((state) => state.assistants);
+    const [searchParams] = useSearchParams();
+    
+    const subaccountId = getSubaccountIdFromUrl(searchParams);
+    const assistantId = getAssistantIdFromUrl(searchParams);
+
+    const [settings, setSettings] = useState({
+        recordingOptOut: false,
+        maxCallTime: 30,
+        silenceTimeout: 15000,
+        backgroundNoise: 'Coffee Shop',
+        noiseLevel: 70,
+        rulesOfEngagement: 'AI initiates: AI begins the conversation with a dynamic message',
+        voicemailDetection: true,
+        serverUrl: ''
+    });
+
+    const [saveStatus, setSaveStatus] = useState(''); // 'saving', 'success', 'error'
+    const saveTimeoutRef = useRef(null);
+    const debounceTimerRef = useRef(null);
+    const initialLoadRef = useRef(true);
+
+    // Load initial data
+    useEffect(() => {
+        if (selectedAssistant) {
+            setSettings({
+                recordingOptOut: selectedAssistant.metadata?.recordingOptOut || false,
+                maxCallTime: selectedAssistant.metadata?.maxCallTimeMinutes || 30,
+                silenceTimeout: selectedAssistant.metadata?.silenceTimeoutSeconds || 15000,
+                backgroundNoise: selectedAssistant.metadata?.backgroundNoise || 'Coffee Shop',
+                noiseLevel: selectedAssistant.metadata?.noiseLevel || 70,
+                rulesOfEngagement: selectedAssistant.metadata?.rulesOfEngagement || 'AI initiates',
+                voicemailDetection: selectedAssistant.metadata?.voicemailDetection ?? true,
+                serverUrl: selectedAssistant.server?.url || ''
+            });
+            initialLoadRef.current = false;
+        }
+    }, [selectedAssistant]);
+
+    const autoSave = useCallback(async (updatedSettings) => {
+        if (!subaccountId || !assistantId || initialLoadRef.current) return;
+
+        setSaveStatus('saving');
+
+        try {
+            const updateData = {
+                metadata: {
+                    ...selectedAssistant?.metadata,
+                    recordingOptOut: updatedSettings.recordingOptOut,
+                    maxCallTimeMinutes: updatedSettings.maxCallTime,
+                    silenceTimeoutSeconds: updatedSettings.silenceTimeout,
+                    backgroundNoise: updatedSettings.backgroundNoise,
+                    noiseLevel: updatedSettings.noiseLevel,
+                    rulesOfEngagement: updatedSettings.rulesOfEngagement,
+                    voicemailDetection: updatedSettings.voicemailDetection,
+                },
+                server: {
+                    ...selectedAssistant?.server,
+                    url: updatedSettings.serverUrl
+                }
+            };
+
+            await dispatch(updateAssistant({ subaccountId, assistantId, updateData })).unwrap();
+            setSaveStatus('success');
+            
+            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = setTimeout(() => setSaveStatus(''), 2000);
+        } catch (error) {
+            setSaveStatus('error');
+        }
+    }, [dispatch, subaccountId, assistantId, selectedAssistant]);
+
+    const handleInputChange = (e) => {
+        const { name, value, type } = e.target;
+        const parsedValue = type === 'number' || type === 'range' ? parseFloat(value) : value;
+        
+        const updatedSettings = { ...settings, [name]: parsedValue };
+        setSettings(updatedSettings);
+
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = setTimeout(() => autoSave(updatedSettings), 1000);
+    };
+
+    const handleToggleChange = (e) => {
+        const { name, checked } = e.target;
+        const updatedSettings = { ...settings, [name]: checked };
+        setSettings(updatedSettings);
+        autoSave(updatedSettings);
+    };
+
     return (
         <div className="p-4 space-y-5">
-            <div className="border-b border-gray-200 pb-4">
-                <h5 className="text-sm font-semibold text-gray-800 mb-2">Call Settings</h5>
-                <p className="text-xs text-gray-500">
-                    Configure settings for your assistant when calling such as who should initiate the comm, where to send your data, and more.
-                </p>
+            <div className="border-b border-gray-200 pb-4 flex justify-between items-center">
+                <div>
+                    <h5 className="text-sm font-semibold text-gray-800">Call Settings</h5>
+                    <p className="text-[11px] text-gray-500">Configure behavioral settings for voice calls.</p>
+                </div>
+                {saveStatus && (
+                    <div className="flex items-center gap-1">
+                        {saveStatus === 'saving' && <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>}
+                        {saveStatus === 'success' && <Check className="w-3 h-3 text-green-600" />}
+                        {saveStatus === 'error' && <AlertCircle className="w-3 h-3 text-red-600" />}
+                    </div>
+                )}
             </div>
             
-            {/* Opt-Out of Recording & Transcript */}
             <ToggleSetting
                 label="Opt-Out Of Recording & Transcript"
+                name="recordingOptOut"
                 buttonText="RECORDING ENABLED"
                 buttonColorClass='bg-green-100 text-green-800'
-                description="This will overwrite call recording and transcripts and that data will be lost - Use this if you require HIPAA or conversation regulation"
-                isEnabled={false}
+                isEnabled={!settings.recordingOptOut} // Inverted logic for "Opt-out"
+                onToggle={(e) => handleToggleChange({ target: { name: 'recordingOptOut', checked: e.target.checked }})}
+                description="Use this if you require HIPAA regulation. Data will not be stored."
             />
             
             <SettingInput
                 label="Max Call Time (minutes)"
-                value="30"
-                unit="minutes"
+                name="maxCallTime"
+                value={settings.maxCallTime}
+                onChange={handleInputChange}
+                type="number"
+                unit="min"
                 description="Maximum length of a call."
             />
             
             <SettingInput
-                label="Silence Timeout (minutes)"
-                value="15,000"
-                unit="minutes"
-                description="How long the assistant waits for a response before ending the call."
+                label="Silence Timeout (seconds)"
+                name="silenceTimeout"
+                value={settings.silenceTimeout}
+                onChange={handleInputChange}
+                type="number"
+                unit="ms"
+                description="Wait time before ending call due to silence."
             />
 
-            {/* Background Noise & Volume (Dropdown style) */}
-            <SettingInput
-                label="Background Noise & Volume"
-                value="Coffee Shop"
-                description="Select a background noise profile."
-                isDropdown={true}
-            />
-            {/* Simple slider underneath, matching the image */}
-            <input type="range" min="0" max="100" defaultValue="70" className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+            <div className="space-y-2">
+                <SettingInput
+                    label="Background Noise"
+                    name="backgroundNoise"
+                    value={settings.backgroundNoise}
+                    onChange={handleInputChange}
+                    isDropdown={true}
+                    description="Select a background noise profile."
+                />
+                <input 
+                    type="range" 
+                    name="noiseLevel"
+                    min="0" max="100" 
+                    value={settings.noiseLevel} 
+                    onChange={handleInputChange}
+                    className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" 
+                />
+            </div>
             
-            {/* Rules of Engagement (Dropdown style) */}
             <SettingInput
                 label="Rules of Engagement"
-                value="AI initiates: AI begins the conversation with a dynamic message"
-                description="Control who starts the call."
+                name="rulesOfEngagement"
+                value={settings.rulesOfEngagement}
+                onChange={handleInputChange}
                 isDropdown={true}
+                description="Control who starts the call."
             />
 
-            {/* Enable Voicemail Detection & Message */}
             <ToggleSetting
-                label="Enable Voicemail Detection & Message"
+                label="Enable Voicemail Detection"
+                name="voicemailDetection"
                 buttonText="VOICEMAIL DETECTION ON"
                 buttonColorClass='bg-green-100 text-green-800'
+                isEnabled={settings.voicemailDetection}
+                onToggle={handleToggleChange}
                 description="Allows the assistant to detect voicemail and leave a message."
-                isEnabled={true}
             />
             
-            {/* Incoming Call Webhook (Webhook URL Input) */}
             <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700">Incoming Call Webhook</label>
-                    <Info className="w-4 h-4 text-gray-400 cursor-pointer" title="URL to send data on incoming calls." />
+                    <label className="text-sm font-medium text-gray-700">Server Webhook URL</label>
+                    <Info className="w-4 h-4 text-gray-400 cursor-pointer" title="URL for call events." />
                 </div>
                 <div className="relative">
                     <input
                         type="text"
-                        placeholder=""
-                        className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-800 pr-8"
+                        name="serverUrl"
+                        value={settings.serverUrl}
+                        onChange={handleInputChange}
+                        placeholder="https://api.yourdomain.com/webhook"
+                        className="w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm pr-8"
                     />
-                    <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                    </span>
+                    <Send className="w-3 h-3 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
                 </div>
             </div>
-
-            {/* Post-Call Webhook (Webhook URL Input) */}
-            <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700">Post-Call Webhook</label>
-                    <Info className="w-4 h-4 text-gray-400 cursor-pointer" title="URL to send data after the call ends." />
-                </div>
-                <div className="relative">
-                    <input
-                        type="text"
-                        placeholder=""
-                        className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-800 pr-8"
-                    />
-                    <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                    </span>
-                </div>
-            </div>
-
         </div>
     );
 };
