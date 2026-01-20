@@ -158,7 +158,7 @@ const stripeWebhook = async (req, res) => {
       user.billingEvents.push({
         callId: paymentIntent.id,
         type: "WALLET_TOPUP",
-        amount: paymentIntent.amount,
+        amount: paymentIntent.amount / 100,
       });
 
       await user.save();
@@ -177,7 +177,7 @@ const stripeWebhook = async (req, res) => {
     user.billingEvents.push({
       callId: paymentIntent.id,
       type: "WALLET_TOPUP_FAILED",
-      amount: paymentIntent.amount,
+      amount: paymentIntent.amount / 100,
     });
 
     // Optional:
@@ -367,6 +367,16 @@ const callBillingWebhook = async (req, res) => {
   }
 };
 
+const getTransactionHistory = async (req, res) => {
+  try {
+    const userId = req.user;
+    const user = await userModel.findById(userId);
+    return res.send({ status: true, data: user.billingEvents || [] });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
 module.exports = {
   callBillingWebhook,
   getLatestConnectedBalance,
@@ -374,4 +384,5 @@ module.exports = {
   stripeWebhook,
   autoTopUpLowWalletUsers,
   paymentConfirmation,
+  getTransactionHistory,
 };

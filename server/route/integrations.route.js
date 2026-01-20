@@ -46,7 +46,7 @@ const {
   IMPORT_PHONE_NUM_TO_VAPI,
   GET_PURCHASED_NUMBER,
   GET_VAPI_NUMBER_IMPORT_STATUS,
-  STRIPE_WEBHOOK,
+  GET_TRANSACTION_HISTORY,
   DELETE_TWILIO_NUMBER,
   CALL_BILLING_WEBHOOK,
   GHL_SUB_AUTHORIZE,
@@ -58,6 +58,7 @@ const {
   callBillingWebhook,
   paymentConfirmation,
   chargeCustomerCard,
+  getTransactionHistory,
 } = require("../controller/payments.controller");
 
 router.post(TWILIO_CALL_RECEIVER, twilioCallReceiver);
@@ -69,11 +70,7 @@ router.get(GHL_SUB_OAUTH_CALLBACK, ghlSubOauthCallback);
 router.get(STRIPE_AUTHORIZE, verifyAccessToken, stripeAuthorize);
 router.post(CONFIRM_PAYMENT, verifyAccessToken, paymentConfirmation);
 router.get(STRIPE_OAUTH_CALLBACK, stripeOauthCallback);
-// router.post(
-//   STRIPE_WEBHOOK,
-//   express.raw({ type: "application/json" }),
-//   stripeWebhook,
-// );
+router.get(GET_TRANSACTION_HISTORY, verifyAccessToken, getTransactionHistory);
 router.get(TEST_OPENAI_KEY, verifyAccessToken, testOpenAIKey);
 router.post(CONNECT_OPENAI, verifyAccessToken, connectOpenAI);
 router.get(TEST_STRIPE_TOKEN, verifyAccessToken, testStripeToken);

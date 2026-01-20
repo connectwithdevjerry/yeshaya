@@ -67,6 +67,7 @@ const RMV_ASSISTANT_KNOWLEDGE = "/remove-knowlege-base-from-assistant";
 const DELETE_KNOWLEDGE_BASE = "/delete-knowlege-base";
 const SEND_CHAT_MESSAGE = "/send-chat-message";
 const GET_WALLET_BALANCE = "/get-wallet-balance";
+const GET_TRANSACTION_HISTORY = "/get-transaction-history";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -140,4 +141,5 @@ module.exports = {
   SEND_CHAT_MESSAGE,
   UPDATE_COMPANY_DETAILS,
   CONFIRM_PAYMENT,
+  GET_TRANSACTION_HISTORY,
 };
