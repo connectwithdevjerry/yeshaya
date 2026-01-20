@@ -286,8 +286,6 @@ export const getFileDetails = createAsyncThunk(
           response.data.message || "Failed to fetch file details",
         );
       }
-
-      console.log("✅ File details fetched:", response.data.data);
       return response.data.data;
     } catch (error) {
       return rejectWithValue(
@@ -313,6 +311,8 @@ export const fetchKnowledgeBases = createAsyncThunk(
       }
 
       const rawData = response.data.data || [];
+
+      console.log("✅ Knowledge bases fetched:", rawData);
 
       return rawData.map((item) => {
         // Safe check for nested knowledgeBases array
@@ -345,6 +345,7 @@ export const fetchKnowledgeBases = createAsyncThunk(
             : "N/A",
           sourcesCount: Array.isArray(kb.fileIds) ? kb.fileIds.length : 0,
           isVoiceEnabled: false,
+          fileIds: Array.isArray(kb.fileIds) ? kb.fileIds : [],
         };
       });
     } catch (err) {
@@ -610,12 +611,8 @@ export const getAssistantCallLogs = createAsyncThunk(
       const response = await apiClient.get(
         "/assistants/get-assistant-call-logs",
       );
-
-      // The data you provided is a direct array.
-      // If your apiClient (like Axios) puts the body in .data:
       const rawData = response.data;
 
-      // Check if rawData is the array, or if it's nested in a 'data' property
       const callLogsData = Array.isArray(rawData)
         ? rawData
         : rawData.data || [];
@@ -631,28 +628,33 @@ export const getAssistantCallLogs = createAsyncThunk(
   },
 );
 
+// ✅ 16. Generate Outbound Call URL
 export const generateOutboundCallUrl = createAsyncThunk(
   "assistants/generateOutboundUrl",
   async ({ assistantId }, { rejectWithValue }) => {
     try {
       // Constructing: /assistants/generate-outbound-call-url?assistantId=f2efd35...
       const response = await apiClient.get(
-        `/assistants/generate-outbound-call-url?assistantId=${assistantId}`
+        `/assistants/generate-outbound-call-url?assistantId=${assistantId}`,
       );
 
       if (!response.data.status) {
-        return rejectWithValue(response.data.message || "Failed to generate outbound URL");
+        return rejectWithValue(
+          response.data.message || "Failed to generate outbound URL",
+        );
       }
 
       // Based on your example response: { status: true, data: { url: "..." } }
-      return response.data.data; 
+      return response.data.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || "Error generating outbound URL");
+      return rejectWithValue(
+        error.response?.data?.message || "Error generating outbound URL",
+      );
     }
-  }
+  },
 );
 
-//fetch wallet balance
+// ✅ 17. Fetch Wallet Balance
 export const fetchWalletBalance = createAsyncThunk(
   "assistants/fetchWalletBalance",
   async (_, { rejectWithValue }) => {
@@ -661,19 +663,20 @@ export const fetchWalletBalance = createAsyncThunk(
       const response = await apiClient.get("/assistants/get-wallet-balance");
 
       if (!response.data.status) {
-        return rejectWithValue(response.data.message || "Failed to fetch balance");
+        return rejectWithValue(
+          response.data.message || "Failed to fetch balance",
+        );
       }
 
       console.log("✅ Wallet balance fetched:", response.data.data);
       return response.data.data;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Error fetching wallet balance"
+        error.response?.data?.message || "Error fetching wallet balance",
       );
     }
-  }
+  },
 );
-
 
 
 
@@ -1107,7 +1110,6 @@ const assistantsSlice = createSlice({
         state.logsError = null;
       })
       .addCase(getAssistantCallLogs.fulfilled, (state, action) => {
-
         state.fetchingLogs = false;
         state.callLogs = Array.isArray(action.payload)
           ? [...action.payload]
@@ -1131,18 +1133,18 @@ const assistantsSlice = createSlice({
       })
 
       .addCase(generateOutboundCallUrl.pending, (state) => {
-      state.loadingOutbound = true;
-      state.outboundError = null;
-    })
-    .addCase(generateOutboundCallUrl.fulfilled, (state, action) => {
-      state.loadingOutbound = false;
-      // Store the specific generated URL in your state
-      state.generatedOutboundUrl = action.payload; 
-    })
-    .addCase(generateOutboundCallUrl.rejected, (state, action) => {
-      state.loadingOutbound = false;
-      state.outboundError = action.payload;
-    });
+        state.loadingOutbound = true;
+        state.outboundError = null;
+      })
+      .addCase(generateOutboundCallUrl.fulfilled, (state, action) => {
+        state.loadingOutbound = false;
+        // Store the specific generated URL in your state
+        state.generatedOutboundUrl = action.payload;
+      })
+      .addCase(generateOutboundCallUrl.rejected, (state, action) => {
+        state.loadingOutbound = false;
+        state.outboundError = action.payload;
+      })
   },
 });
 
