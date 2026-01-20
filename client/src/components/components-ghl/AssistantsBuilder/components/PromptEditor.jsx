@@ -87,23 +87,35 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
         if (type === "url") {
           // Copy only the nested URL string
           const urlOnly = responseData?.data?.url || responseData?.url;
+          if (!urlOnly) throw new Error("URL not found in response");
+
           await navigator.clipboard.writeText(urlOnly);
           toast.success("Outbound URL copied!");
         } else {
-          // ✅ Copy the EXACT full JSON structure
-          const jsonString = JSON.stringify(responseData, null, 2);
-          await navigator.clipboard.writeText(jsonString);
-          toast.success("Full JSON structure copied!");
+
+          const jsonTemplate = {
+            fromNumber: selectedAssistant?.phoneNumber || "+18302895783",
+            customerNumber: "+2349137628206",
+            dynamicValues: {
+              firstName: "Jeremiah",
+            },
+          };
+
+          await navigator.clipboard.writeText(
+            JSON.stringify(jsonTemplate, null, 4),
+          );
+          toast.success("JSON Payload Template copied!");
         }
 
-        // Show brief success icon
+        // Show brief success icon feedback
         setCopySuccess(type);
         setTimeout(() => setCopySuccess(null), 2000);
       } else {
         toast.error(resultAction.payload || "API Error");
       }
     } catch (err) {
-      toast.error("Clipboard access failed");
+      console.error(err);
+      toast.error("Action failed");
     } finally {
       setIsGenerating(false);
     }
@@ -129,8 +141,8 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
 
       let formattedContent = systemPrompt;
 
-      if (endCallPhrases.length > 0) {
-        formattedContent += `\n\n--- End Call Phrases ---\n${endCallPhrases.map((p) => `• ${p}`).join("\n")}`;
+      if (systemPrompt) {
+        formattedContent;
       }
 
       setPromptContent(formattedContent);

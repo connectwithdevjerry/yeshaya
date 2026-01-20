@@ -29,11 +29,11 @@ export const tabsData = [
 ];
 
 export const navigationGHLItems = [
-  {
-    name: "Inbox",
-    icon: "inbox",
-    link: "/inbox",
-  },
+  // {
+  //   name: "Inbox",
+  //   icon: "inbox",
+  //   link: "/inbox",
+  // },
   {
     name: "Call Center",
     icon: "call-center",
@@ -54,11 +54,11 @@ export const navigationGHLItems = [
     icon: "assistants",
     link: "/assistants",
   },
-  {
-    name: "Active Tags",
-    icon: "active-tags",
-    link: "/activetags",
-  },
+  // {
+  //   name: "Active Tags",
+  //   icon: "active-tags",
+  //   link: "/activetags",
+  // },
   {
     name: "Numbers",
     icon: "numbers",
@@ -67,11 +67,11 @@ export const navigationGHLItems = [
       { name: 'Pools', link: '/pools' }
     ]
   },
-  {
-    name: "Widgets",
-    icon: "widgets",
-    link: "/widgets",
-  },
+  // {
+  //   name: "Widgets",
+  //   icon: "widgets",
+  //   link: "/widgets",
+  // },
   {
     name: "Settings",
     icon: "settings",

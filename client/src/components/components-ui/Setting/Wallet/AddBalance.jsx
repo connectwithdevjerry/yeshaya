@@ -98,7 +98,6 @@ const TopUpBalanceModal = ({ isOpen, onClose, currentBalance }) => {
         chargeConnectedAccount(refillAmount),
       ).unwrap();
 
-      // DEBUG LOG 1: What came from the server?
       console.log("DEBUG: Backend Response Data:", {
         clientSecret: response.clientSecret,
         accountId: response.accountId,
