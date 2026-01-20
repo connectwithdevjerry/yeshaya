@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo } from "react";
 import { Routes, Route, useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import { Header } from "./components/components-ui/Header";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchImportedSubAccounts } from "./store/slices/integrationSlice";
 
 // ---- Pages from Agency section ----
 import Agency from "./pages/pages-ui/Agency";
@@ -56,7 +58,6 @@ const AppRouter = () => {
       sessionStorage.setItem("currentAccount", JSON.stringify(accountData));
       console.log("✅ Account stored:", accountData);
 
-      // Sync URL if route param is missing to ensure UI highlighting works
       if (!searchParams.get("route")) {
         const newParams = new URLSearchParams(searchParams);
         newParams.set("route", "/assistants");
@@ -96,36 +97,117 @@ const AppRouter = () => {
 export default function MainContent() {
   const location = useLocation();
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
 
+  // Get subAccounts and agencyId from Redux store
+  const { subAccounts, agencyId } = useSelector(
+    (state) => state.integrations || {}
+  );
+
+  // First useEffect: Handle basic GHL context redirect
   useEffect(() => {
     const subaccount = searchParams.get("subaccount");
     const agencyid = searchParams.get("agencyid");
     
-    // Check if the request is coming from app.gohighlevel.com
     const isGHLReferrer = document.referrer.includes("app.gohighlevel.com");
     const hasGHLParams = subaccount && agencyid;
 
-    // If we are at root "/" but we detect GHL environment or params
-    if (location.pathname === "/" && (hasGHLParams || isGHLReferrer)) {
+    // Only redirect if we have params or GHL referrer, but NOT if it's a custom menu link
+    const isCustomMenuLink = document.referrer.includes('/custom-menu-link/');
+    
+    if (location.pathname === "/" && (hasGHLParams || isGHLReferrer) && !isCustomMenuLink) {
       console.log("🚀 GHL context detected. Redirecting to Assistants context...");
 
       const params = new URLSearchParams(searchParams);
 
-      // Default route to assistants if not provided
       if (!params.get("route")) {
         params.set("route", "/assistants");
       }
 
-      // Ensure 'allow' is set to yes as per your menu logic
       if (!params.has("allow")) {
         params.set("allow", "yes");
       }
 
-      // Redirect to /app which triggers AppRouter with the correct IDs
       navigate(`/app?${params.toString()}`, { replace: true });
     }
   }, [location.pathname, searchParams, navigate]);
+
+  // Second useEffect: Auto-navigation from GHL Custom Menu Link
+  useEffect(() => {
+    const handleGHLCustomMenuLink = async () => {
+      if (location.pathname !== '/') return;
+      
+      const referrer = document.referrer;
+      const isGHLCustomMenuLink = referrer.includes('app.gohighlevel.com') && referrer.includes('/custom-menu-link/');
+      
+      if (!isGHLCustomMenuLink) {
+        console.log('ℹ️ Not from GHL custom menu link');
+        return;
+      }
+      
+      console.log('🔗 Detected GHL custom menu link referrer:', referrer);
+      
+      // Format: https://app.gohighlevel.com/v2/location/{LOCATION_ID}/custom-menu-link/{LINK_ID}
+      const locationMatch = referrer.match(/\/location\/([^\/]+)\//);
+      if (!locationMatch) {
+        console.log('❌ Could not extract location ID from referrer');
+        return;
+      }
+      
+      const locationId = locationMatch[1];
+      console.log('🔍 Extracted GHL location ID:', locationId);
+      
+      // Fetch subaccounts if not already loaded
+      if (!subAccounts || subAccounts.length === 0) {
+        console.log('📥 Fetching subaccounts...');
+        await dispatch(fetchImportedSubAccounts());
+      }
+      
+      setTimeout(() => {
+        // Re-read from selector after dispatch
+        const store = dispatch((_, getState) => getState());
+        const currentSubAccounts = store.integrations?.subAccounts || subAccounts;
+        
+        if (!currentSubAccounts || currentSubAccounts.length === 0) {
+          console.log('❌ No subaccounts available');
+          return;
+        }
+        
+        // Find matching subaccount by location ID
+        const matchingAccount = currentSubAccounts.find(
+          acc => acc.id === locationId
+        );
+        
+        if (!matchingAccount) {
+          console.log('❌ No matching subaccount found for location:', locationId);
+          console.log('📋 Available subaccounts:', currentSubAccounts.map(a => a.id));
+          return;
+        }
+        
+        console.log('✅ Found matching account:', matchingAccount.name);
+        
+        // Build navigation URL with all required params
+        const params = new URLSearchParams({
+          agencyid: agencyId || matchingAccount.companyId || 'UNKNOWN_COMPANY',
+          subaccount: matchingAccount.id,
+          allow: 'yes',
+          myname: encodeURIComponent(matchingAccount.name || 'NoName'),
+          myemail: encodeURIComponent(matchingAccount.email || 'noemail@example.com'),
+          route: '/assistants'
+        });
+        
+        const targetUrl = `/app?${params.toString()}`;
+        console.log('🚀 Auto-navigating to:', targetUrl);
+        
+        // Navigate to assistants page
+        navigate(targetUrl, { replace: true });
+        
+      }, 500);
+    };
+    
+    handleGHLCustomMenuLink();
+  }, [location.pathname, subAccounts, agencyId, dispatch, navigate]);
 
   const pageTitles = useMemo(
     () => ({
