@@ -49,7 +49,7 @@ const chargeCustomerCard = async (req, res) => {
     "Charging card for user:",
     req.user,
     "on account:",
-    connectedAccountId,
+    stripeAccountId,
   );
 
   if (!connectedAccountId) {
