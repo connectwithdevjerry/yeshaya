@@ -5,23 +5,60 @@ import { Info, ChevronDown, Check, AlertCircle, Send } from 'lucide-react';
 import { updateAssistant } from '../../../../../store/slices/assistantsSlice';
 import { getSubaccountIdFromUrl, getAssistantIdFromUrl } from '../../../../../utils/urlUtils';
 
-// Reusable component for a single setting input field
-const SettingInput = ({ label, name, value, onChange, unit, description, isDropdown = false, type = "text" }) => (
+const BACKGROUND_NOISE_OPTIONS = [
+    { value: 'off', label: 'None (Clear Voice)' },
+    { value: 'office', label: 'Busy Office' },
+    { value: 'coffee_shop', label: 'Coffee Shop' },
+    { value: 'street', label: 'City Street' },
+    { value: 'rain', label: 'Soft Rain' },
+    { value: 'white_noise', label: 'White Noise' }
+];
+
+const RULES_OF_ENGAGEMENT_OPTIONS = [
+    { value: 'assistant_first', label: 'AI Initiates (Dynamic Greeting)' },
+    { value: 'human_first', label: 'Human Initiates (Wait for User)' },
+    { value: 'instant', label: 'Instant Connect (No Greeting)' }
+];
+
+const SettingInput = ({ label, name, value, onChange, unit, description, isDropdown = false, type = "text", options = [] }) => (
     <div className="space-y-1">
         <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-gray-700">{label}</label>
             <Info className="w-4 h-4 text-gray-400 cursor-pointer" title={description} />
         </div>
         <div className="relative">
-            <input
-                type={type}
-                name={name}
-                value={value}
-                onChange={onChange}
-                className={`w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-800 text-sm ${isDropdown ? 'appearance-none pr-8' : ''}`}
-            />
-            {unit && <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-xs">{unit}</span>}
-            {isDropdown && <ChevronDown className="w-4 h-4 text-gray-500 absolute right-2 top-1/2 transform -translate-y-1/2" />}
+            {isDropdown ? (
+                <select
+                    name={name}
+                    value={value}
+                    onChange={onChange}
+                    className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-800 text-sm appearance-none pr-8 bg-white"
+                >
+                    {options.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                        </option>
+                    ))}
+                </select>
+            ) : (
+                <input
+                    type={type}
+                    name={name}
+                    value={value}
+                    onChange={onChange}
+                    className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-800 text-sm"
+                />
+            )}
+            
+            {unit && !isDropdown && (
+                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-xs">
+                    {unit}
+                </span>
+            )}
+            
+            {isDropdown && (
+                <ChevronDown className="w-4 h-4 text-gray-500 absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none" />
+            )}
         </div>
     </div>
 );
@@ -65,28 +102,27 @@ export const CallSettingsPanel = () => {
         recordingOptOut: false,
         maxCallTime: 30,
         silenceTimeout: 15000,
-        backgroundNoise: 'Coffee Shop',
+        backgroundNoise: 'coffee_shop',
         noiseLevel: 70,
-        rulesOfEngagement: 'AI initiates: AI begins the conversation with a dynamic message',
+        rulesOfEngagement: 'assistant_first',
         voicemailDetection: true,
         serverUrl: ''
     });
 
-    const [saveStatus, setSaveStatus] = useState(''); // 'saving', 'success', 'error'
+    const [saveStatus, setSaveStatus] = useState(''); 
     const saveTimeoutRef = useRef(null);
     const debounceTimerRef = useRef(null);
     const initialLoadRef = useRef(true);
 
-    // Load initial data
     useEffect(() => {
         if (selectedAssistant) {
             setSettings({
                 recordingOptOut: selectedAssistant.metadata?.recordingOptOut || false,
                 maxCallTime: selectedAssistant.metadata?.maxCallTimeMinutes || 30,
                 silenceTimeout: selectedAssistant.metadata?.silenceTimeoutSeconds || 15000,
-                backgroundNoise: selectedAssistant.metadata?.backgroundNoise || 'Coffee Shop',
+                backgroundNoise: selectedAssistant.metadata?.backgroundNoise || 'coffee_shop',
                 noiseLevel: selectedAssistant.metadata?.noiseLevel || 70,
-                rulesOfEngagement: selectedAssistant.metadata?.rulesOfEngagement || 'AI initiates',
+                rulesOfEngagement: selectedAssistant.metadata?.rulesOfEngagement || 'assistant_first',
                 voicemailDetection: selectedAssistant.metadata?.voicemailDetection ?? true,
                 serverUrl: selectedAssistant.server?.url || ''
             });
@@ -166,7 +202,7 @@ export const CallSettingsPanel = () => {
                 name="recordingOptOut"
                 buttonText="RECORDING ENABLED"
                 buttonColorClass='bg-green-100 text-green-800'
-                isEnabled={!settings.recordingOptOut} // Inverted logic for "Opt-out"
+                isEnabled={!settings.recordingOptOut}
                 onToggle={(e) => handleToggleChange({ target: { name: 'recordingOptOut', checked: e.target.checked }})}
                 description="Use this if you require HIPAA regulation. Data will not be stored."
             />
@@ -198,16 +234,21 @@ export const CallSettingsPanel = () => {
                     value={settings.backgroundNoise}
                     onChange={handleInputChange}
                     isDropdown={true}
-                    description="Select a background noise profile."
+                    options={BACKGROUND_NOISE_OPTIONS}
+                    description="Select a background noise profile to enhance realism."
                 />
-                <input 
-                    type="range" 
-                    name="noiseLevel"
-                    min="0" max="100" 
-                    value={settings.noiseLevel} 
-                    onChange={handleInputChange}
-                    className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" 
-                />
+                <div className="flex items-center gap-2">
+                   <span className="text-[10px] text-gray-400 font-bold uppercase">Volume</span>
+                    <input 
+                        type="range" 
+                        name="noiseLevel"
+                        min="0" max="100" 
+                        value={settings.noiseLevel} 
+                        onChange={handleInputChange}
+                        className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" 
+                    />
+                    <span className="text-xs font-mono text-gray-500 w-8">{settings.noiseLevel}%</span>
+                </div>
             </div>
             
             <SettingInput
@@ -216,7 +257,8 @@ export const CallSettingsPanel = () => {
                 value={settings.rulesOfEngagement}
                 onChange={handleInputChange}
                 isDropdown={true}
-                description="Control who starts the call."
+                options={RULES_OF_ENGAGEMENT_OPTIONS}
+                description="Control who starts the call and how the AI greets the user."
             />
 
             <ToggleSetting

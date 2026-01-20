@@ -26,9 +26,9 @@ const KnowledgePage = () => {
     dispatch(fetchKnowledgeBases());
   }, [dispatch]);
 
-  const navigate = useNavigate();
-  const location = useLocation();
-  const account = useCurrentAccount();
+  // const navigate = useNavigate();
+  // const location = useLocation();
+  // const account = useCurrentAccount();
 
   // Open modal handler
   const openDeleteModal = (e, base) => {
@@ -60,18 +60,18 @@ const KnowledgePage = () => {
 
   const headers = ["NAME", "UPDATED", "CREATED", "SOURCES"];
 
-  const handleKnowledgeClick = (base) => {
-    if (location.pathname === "/app" && account) {
-      const params = new URLSearchParams({
-        agencyid: account.agencyid,
-        subaccount: account.subaccount,
-        route: `/knowledge/${base.id}`,
-      });
-      navigate(`/app?${params.toString()}`);
-    } else {
-      navigate(`/knowledge/${base.id}`);
-    }
-  };
+  // const handleKnowledgeClick = (base) => {
+  //   if (location.pathname === "/app" && account) {
+  //     const params = new URLSearchParams({
+  //       agencyid: account.agencyid,
+  //       subaccount: account.subaccount,
+  //       route: `/knowledge/${base.id}`,
+  //     });
+  //     navigate(`/app?${params.toString()}`);
+  //   } else {
+  //     navigate(`/knowledge/${base.id}`);
+  //   }
+  // };
 
   return (
     <div className="flex-grow bg-gray-50 p-8">
@@ -151,8 +151,8 @@ const KnowledgePage = () => {
                 filteredBases.map((base) => (
                   <tr
                     key={base.id}
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => handleKnowledgeClick(base)}
+                    className=""
+                    // onClick={() => handleKnowledgeClick(base)}
                   >
                     <td className="pl-3 py-2">
                       <MessageCircle className="text-gray-400" />
