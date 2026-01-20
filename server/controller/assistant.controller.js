@@ -181,7 +181,7 @@ If you do not know something for certain, it is fine to say you don't know. Avoi
 
 const VAPI_ASSISTANT_CONFIG = ({
   name,
-  systemPrompt,
+  prompt,
   voiceId = "en-US-EmmaNeural",
   v_provider = "azure",
   t_provider = "deepgram",
@@ -191,7 +191,7 @@ const VAPI_ASSISTANT_CONFIG = ({
   model: {
     model: "gpt-3.5-turbo",
     provider: "openai",
-    systemPrompt,
+    systemPrompt: prompt,
     temperature: 0.7,
     maxTokens: 150,
   },
@@ -451,8 +451,10 @@ const getAssistant = async (req, res) => {
     const assistant = await vapi.assistants.get(assistantId);
 
     console.log(
-      `Successfully retrieved details for Assistant: ${assistant.name} (ID: ${assistant.id})`,
+      `Successfully retrieved details for Assistant: ${assistant?.model?.prompt} (ID: ${assistant.id})`,
     );
+
+    console.log(assistant.model.systemPrompt);
 
     // The 'assistant' object contains all configuration details (model, voice, tools, etc.)
     return res.send({
