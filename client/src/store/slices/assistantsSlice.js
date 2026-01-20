@@ -678,7 +678,29 @@ export const fetchWalletBalance = createAsyncThunk(
   },
 );
 
+export const fetchTransactionHistory = createAsyncThunk(
+  "transactions/fetchHistory",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(
+        "/integrations/get-transaction-history",
+      );
 
+      // Based on your previous API patterns:
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to fetch transactions",
+        );
+      }
+
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Error fetching transaction history",
+      );
+    }
+  },
+);
 
 const assistantsSlice = createSlice({
   name: "assistants",
@@ -726,6 +748,9 @@ const assistantsSlice = createSlice({
     logsError: null,
     walletBalance: null,
     fetchingBalance: false,
+    transactions: [],
+    fetchingTransactions: false,
+    transactionError: null,
   },
   reducers: {
     clearSelectedAssistant: (state) => {
@@ -766,6 +791,10 @@ const assistantsSlice = createSlice({
         state.selectedAssistant = { ...state.selectedAssistant, ...updateData };
       }
     },
+    clearTransactionHistory: (state) => {
+      state.transactions = [];
+      state.transactionError = null;
+    }
   },
   extraReducers: (builder) => {
     builder
@@ -1145,6 +1174,20 @@ const assistantsSlice = createSlice({
         state.loadingOutbound = false;
         state.outboundError = action.payload;
       })
+
+      //fetch transaction history
+      .addCase(fetchTransactionHistory.pending, (state) => {
+        state.fetchingTransactions = true;
+        state.transactionError = null;
+      })
+      .addCase(fetchTransactionHistory.fulfilled, (state, action) => {
+        state.fetchingTransactions = false;
+        state.transactions = action.payload;
+      })
+      .addCase(fetchTransactionHistory.rejected, (state, action) => {
+        state.fetchingTransactions = false;
+        state.transactionError = action.payload;
+      });
   },
 });
 
