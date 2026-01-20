@@ -43,12 +43,13 @@ const chargeCustomerCard = async (req, res) => {
   const { amount } = req.body;
   const user = await userModel.findById(req.user);
   const connectedAccountId = await user.stripeUserId;
+  const stripeAccountId = process.env.STRIPE_PLATFORM_ACCOUNT_ID;
 
   console.log(
     "Charging card for user:",
     req.user,
     "on account:",
-    connectedAccountId,
+    stripeAccountId,
   );
 
   if (!connectedAccountId) {
@@ -75,7 +76,7 @@ const chargeCustomerCard = async (req, res) => {
         },
       },
       {
-        stripeAccount: connectedAccountId,
+        stripeAccount: stripeAccountId,
       },
     );
 
@@ -87,7 +88,7 @@ const chargeCustomerCard = async (req, res) => {
       message: "Payment Intent created successfully.",
       paymentIntentId: paymentIntent.id,
       clientSecret: paymentIntent.client_secret,
-      accountId: connectedAccountId,
+      accountId: stripeAccountId,
     });
   } catch (error) {
     console.error(
