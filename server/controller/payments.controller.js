@@ -75,7 +75,7 @@ const chargeCustomerCard = async (req, res) => {
         },
       },
       {
-        stripeAccount: connectedAccountId,
+        stripeAccount: process.env.STRIPE_PLATFORM_ACCOUNT_ID,
       },
     );
 
