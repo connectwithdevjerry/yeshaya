@@ -631,7 +631,26 @@ export const getAssistantCallLogs = createAsyncThunk(
   },
 );
 
+export const generateOutboundCallUrl = createAsyncThunk(
+  "assistants/generateOutboundUrl",
+  async ({ assistantId }, { rejectWithValue }) => {
+    try {
+      // Constructing: /assistants/generate-outbound-call-url?assistantId=f2efd35...
+      const response = await apiClient.get(
+        `/assistants/generate-outbound-call-url?assistantId=${assistantId}`
+      );
 
+      if (!response.data.status) {
+        return rejectWithValue(response.data.message || "Failed to generate outbound URL");
+      }
+
+      // Based on your example response: { status: true, data: { url: "..." } }
+      return response.data.data; 
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Error generating outbound URL");
+    }
+  }
+);
 
 //fetch wallet balance
 export const fetchWalletBalance = createAsyncThunk(
@@ -1107,7 +1126,21 @@ const assistantsSlice = createSlice({
       })
       .addCase(fetchWalletBalance.rejected, (state) => {
         state.fetchingBalance = false;
-      });
+      })
+
+      .addCase(generateOutboundCallUrl.pending, (state) => {
+      state.loadingOutbound = true;
+      state.outboundError = null;
+    })
+    .addCase(generateOutboundCallUrl.fulfilled, (state, action) => {
+      state.loadingOutbound = false;
+      // Store the specific generated URL in your state
+      state.generatedOutboundUrl = action.payload; 
+    })
+    .addCase(generateOutboundCallUrl.rejected, (state, action) => {
+      state.loadingOutbound = false;
+      state.outboundError = action.payload;
+    });
   },
 });
 
