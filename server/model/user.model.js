@@ -13,7 +13,11 @@ const userSchema = mongoose.Schema({
   openAIApiKey: { type: String, required: false },
   ghlAgencyId: { type: String, required: false },
   walletBalance: { type: Number, default: 10 },
-  autoCardCharging: { type: Boolean, default: false },
+  autoCardPay: {
+    status: { type: Boolean, default: true },
+    least: { type: Number, default: 25 },
+    refillAmount: { type: Number, default: 50 },
+  },
   allKnowledgeBaseToolIds: [String],
   ghlSubAccountIds: [
     {
@@ -21,6 +25,17 @@ const userSchema = mongoose.Schema({
       ghlSubRefreshToken: String,
       ghlSubRefreshTokenExpiry: Date,
       connected: { type: Boolean, default: false },
+      savedContacts: [
+        {
+          firstName: String,
+          email: String,
+          phone: String,
+          lastName: String,
+          linkedIn: String,
+          company: String,
+          title: String,
+        },
+      ],
       installationType: String,
       vapiAssistants: [
         {

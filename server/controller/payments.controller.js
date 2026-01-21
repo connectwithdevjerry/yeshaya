@@ -41,7 +41,8 @@ const chargeCustomerCard = async (req, res) => {
   // 1. Lookup the connected account's ID for the customer being paid
   // In a real app, this ID comes from your database based on who the customer is paying.
   const { amount } = req.body;
-  const user = await userModel.findById(req.user);
+  const userId = req.user;
+  const user = await userModel.findById(userId);
   const connectedAccountId = await user.stripeUserId;
   const stripeAccountId = process.env.STRIPE_PLATFORM_ACCOUNT_ID;
 
@@ -63,11 +64,23 @@ const chargeCustomerCard = async (req, res) => {
   }
 
   try {
+    if (!user.stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        metadata: { userId: userId },
+        email: user.email,
+      });
+
+      user.stripeCustomerId = customer.id;
+      await user.save();
+    }
+
     const paymentIntent = await stripe.paymentIntents.create(
       {
         // payment_method_types: ["card"],
         amount: amount * 100, // in cents ($10.00 for 1000 cents)
         currency: "usd",
+        customer: user.stripeCustomerId,
+        setup_future_usage: "off_session",
         // CRITICAL: Use the Stripe-Account header to act on their behalf
         automatic_payment_methods: { enabled: true },
         metadata: {
@@ -127,7 +140,7 @@ const stripeWebhook = async (req, res) => {
   const sig = req.headers["stripe-signature"];
   let event;
 
-  console.log("Received Stripe webhook:", req.body);
+  // console.log("Received Stripe webhook:", req.body);
 
   try {
     event = stripe.webhooks.constructEvent(
@@ -146,24 +159,40 @@ const stripeWebhook = async (req, res) => {
 
     // Only credit wallet for intended charges
     if (userId && type === "USAGE_CHARGE") {
-      const amountCents = paymentIntent.amount; // already in cents
+      const amountUsd = paymentIntent.amount / 100; // already in cents
+      const paymentMethodId = paymentIntent.payment_method;
 
       const user = await userModel.findById(userId);
 
+      const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+
+      if (!pm.customer) {
+        // attach payment method to customer
+        await stripe.paymentMethods.attach(paymentMethodId, {
+          customer: user.stripeCustomerId,
+        });
+
+        await stripe.customers.update(user.stripeCustomerId, {
+          invoice_settings: {
+            default_payment_method: paymentMethodId,
+          },
+        });
+      }
+
       // 1. Update wallet balance
-      user.walletBalance += paymentIntent.amount / 100; // convert to dollars
+      user.walletBalance += amountUsd; // convert to dollars
 
       // 2. Log transaction (strongly recommended)
 
       user.billingEvents.push({
         callId: paymentIntent.id,
         type: "WALLET_TOPUP",
-        amount: paymentIntent.amount / 100,
+        amount: amountUsd,
       });
 
       await user.save();
 
-      console.log(`Wallet credited: +${amountCents} cents for user ${userId}`);
+      console.log(`Wallet credited: +${amountUsd} USD for user ${userId}`);
     }
   }
 
@@ -177,7 +206,7 @@ const stripeWebhook = async (req, res) => {
     user.billingEvents.push({
       callId: paymentIntent.id,
       type: "WALLET_TOPUP_FAILED",
-      amount: paymentIntent.amount / 100,
+      amount: amountUsd,
     });
 
     // Optional:
@@ -199,7 +228,7 @@ const autoTopUpLowWalletUsers = async () => {
     walletBalance: { $lt: WALLET_THRESHOLD_CENTS },
     stripeCustomerId: { $exists: true, $ne: null },
     isActive: true,
-    autoCardCharging: true,
+    "autoCardPay.status": true,
   });
 
   for (const user of users) {
@@ -377,6 +406,86 @@ const getTransactionHistory = async (req, res) => {
   }
 };
 
+const getChargingDetails = async (req, res) => {
+  try {
+    const userId = req.user;
+    const user = await userModel.findById(userId);
+
+    if (!user) {
+      return res.send({ status: false, message: "User not found" });
+    }
+
+    let cardDetails = null;
+
+    console.log(user.stripeCustomerId);
+
+    console.log("customer id: ", user.stripeCustomerId);
+
+    // Fetch card details from Stripe if a customer ID exists
+    if (user.stripeCustomerId) {
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: user.stripeCustomerId,
+        type: "card",
+        limit: 1, // Get the primary/latest card
+      });
+
+      if (paymentMethods.data.length > 0) {
+        const card = paymentMethods.data[0].card;
+        cardDetails = {
+          brand: card.brand,
+          last4: card.last4,
+          expMonth: card.exp_month,
+          expYear: card.exp_year,
+        };
+      }
+    }
+
+    return res.send({
+      status: true,
+      data: {
+        autoCharging: user.autoCardPay || {
+          status: false,
+          least: 25,
+          refillAmount: 50,
+        },
+        card: cardDetails, // Will be null if no card is attached
+      },
+    });
+  } catch (error) {
+    console.error("Stripe/DB Error:", error.message);
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+const updateAutoChargingSettings = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { status, least, refillAmount } = req.body;
+
+    const user = await userModel.findById(userId);
+
+    if (!user) {
+      return res.send({ status: false, message: "User not found" });
+    }
+
+    user.autoCardPay = {
+      status: status !== undefined ? status : user.autoCardPay.status,
+      least: least !== undefined ? least : user.autoCardPay.least,
+      refillAmount:
+        refillAmount !== undefined
+          ? refillAmount
+          : user.autoCardPay.refillAmount,
+    };
+
+    await user.save();
+
+    return res.send({ status: true, message: "Settings updated successfully" });
+  } catch (error) {
+    console.error("DB Error:", error.message);
+    return res.send({ status: false, message: error.message });
+  }
+};
+
 module.exports = {
   callBillingWebhook,
   getLatestConnectedBalance,
@@ -385,4 +494,6 @@ module.exports = {
   autoTopUpLowWalletUsers,
   paymentConfirmation,
   getTransactionHistory,
+  getChargingDetails,
+  updateAutoChargingSettings,
 };

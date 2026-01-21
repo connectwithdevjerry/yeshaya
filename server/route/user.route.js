@@ -11,6 +11,7 @@ const {
   getCompanyDetails,
   createCompanyDetails,
   updateCompanyDetails,
+  getUserDetails,
   // admin_super_signup,
 } = require("../controller/user.controller");
 const {
@@ -24,6 +25,7 @@ const {
   GET_COMPANY_DETAILS,
   REGISTER_COMPANY,
   UPDATE_COMPANY_DETAILS,
+  GET_USER_DETAILS,
 } = require("../constants");
 const { verifyAccessToken } = require("../jwt_helpers");
 const multer = require("multer");
@@ -41,6 +43,7 @@ router.post(USER_RESET_PASS, handleResetPassword);
 router.delete(USER_LOGOUT, logout);
 router.post(EXCHANGE_TOKEN, exchangeToken);
 router.get(GET_COMPANY_DETAILS, verifyAccessToken, getCompanyDetails);
+router.get(GET_USER_DETAILS, verifyAccessToken, getUserDetails);
 router.post(
   REGISTER_COMPANY,
   verifyAccessToken,

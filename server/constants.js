@@ -68,6 +68,14 @@ const DELETE_KNOWLEDGE_BASE = "/delete-knowlege-base";
 const SEND_CHAT_MESSAGE = "/send-chat-message";
 const GET_WALLET_BALANCE = "/get-wallet-balance";
 const GET_TRANSACTION_HISTORY = "/get-transaction-history";
+const GET_CONTACTS = "/get-contacts";
+const GET_CONTACT = "/get-contact";
+const CREATE_CONTACT = "/create-contact";
+const UPDATE_CONTACT = "/update-contact";
+const DELETE_CONTACT = "/delete-contact";
+const GET_CHARGING_DETAILS = "/get-charging-details";
+const UPDATE_CHARGING_DETAILS = "/update-charging-details";
+const GET_USER_DETAILS = "/get-user-details";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -142,4 +150,11 @@ module.exports = {
   UPDATE_COMPANY_DETAILS,
   CONFIRM_PAYMENT,
   GET_TRANSACTION_HISTORY,
+  GET_CONTACTS,
+  GET_CONTACT,
+  CREATE_CONTACT,
+  UPDATE_CONTACT,
+  DELETE_CONTACT,
+  GET_CHARGING_DETAILS,
+  UPDATE_CHARGING_DETAILS,GET_USER_DETAILS
 };
