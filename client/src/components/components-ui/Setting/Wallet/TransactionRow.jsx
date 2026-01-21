@@ -44,11 +44,11 @@ const TransactionRow = ({
           {formattedAmount}
         </span>
         <div className="flex space-x-2 text-xs mt-1">
-          <button className="text-indigo-600 hover:text-indigo-800">Event</button>
+          {/* <button className="text-indigo-600 hover:text-indigo-800">Event</button>
           <span>|</span>
           <button className="text-indigo-600 hover:text-indigo-800 flex items-center">
             Invoice <FileText className="w-3 h-3 ml-1" />
-          </button>
+          </button> */}
         </div>
       </div>
     </div>

@@ -273,6 +273,35 @@ export const updateCompanyDetails = createAsyncThunk(
   },
 );
 
+// Fetch User Details Thunk
+export const getUserDetails = createAsyncThunk(
+  "auth/getUserDetails",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await axios.get(
+        "https://api.yashayah.cloud/auth/get-user-details",
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          },
+        },
+      );
+
+      const data = response.data;
+      if (data.status === false) {
+        return rejectWithValue(data.message || "Failed to load user details");
+      }
+
+      localStorage.setItem("user", JSON.stringify(data.data || null));
+      return data.data;
+    } catch (error) {
+      const msg =
+        error.response?.data?.message || error.message || "Network error";
+      return rejectWithValue(msg);
+    }
+  },
+);
+
 const authSlice = createSlice({
   name: "auth",
   initialState: {
@@ -495,6 +524,22 @@ const authSlice = createSlice({
         state.company = action.payload;
       })
       .addCase(updateCompanyDetails.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+
+      // Get User Details Cases
+      .addCase(getUserDetails.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(getUserDetails.fulfilled, (state, action) => {
+        state.loading = false;
+        state.user = action.payload;
+        state.isAuthenticated = true;
+        state.error = null;
+      })
+      .addCase(getUserDetails.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       });

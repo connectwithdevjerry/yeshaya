@@ -12,6 +12,7 @@ import UserMenuPopup from "../UserMenu";
 import { fetchAssistants } from "../../../store/slices/assistantsSlice";
 import { fetchPurchasedNumbers } from "../../../store/slices/numberSlice";
 import { fetchSubAccounts } from "../../../store/slices/integrationSlice";
+import { getUserDetails } from "../../../store/slices/authSlice";
 
 export function BottomInfo({ balance, currentUser }) {
   const dispatch = useDispatch();
@@ -22,10 +23,14 @@ export function BottomInfo({ balance, currentUser }) {
   const [allAssistants, setAllAssistants] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [numbersFetched, setNumbersFetched] = useState(false);
-
-  // Get purchased numbers from Redux (this will be populated by our API calls)
   const { purchasedNumbers, loadingPurchased } = useSelector((state) => state.numbers);
+  const { user, loading: userLoading } = useSelector((state) => state.auth);
 
+
+  // Fetch user details on mount
+  useEffect(() => {
+    dispatch(getUserDetails());
+  }, [dispatch]);
   // Step 1: Fetch all subaccounts on mount
   useEffect(() => {
     const getSubAccounts = async () => {
@@ -158,7 +163,6 @@ export function BottomInfo({ balance, currentUser }) {
     navigate("/settings?tab=billing");
   };
 
-  // Determine if we're still loading
   const isLoading = loadingData || loadingPurchased;
 
   return (
@@ -203,18 +207,23 @@ export function BottomInfo({ balance, currentUser }) {
       </div>
 
       <div
-        className="flex items-center space-x-2 px-3 py-2 bg-gray-100 cursor-pointer rounded-lg hover:bg-gray-200 transition-colors"
+        className="relative flex items-center space-x-2 px-3 py-2 bg-gray-100 cursor-pointer rounded-lg hover:bg-gray-200 transition-colors"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white text-xs font-bold">
-          {currentUser?.initial || "U"}
+        <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white text-xs font-bold shrink-0">
+          {/* Use the first letter of firstName or email */}
+          {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
         </div>
+        
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-medium text-gray-900">Current user</div>
-          <div className="text-xs text-gray-500 truncate">
-            {currentUser?.email || "No email"}
+          <div className="text-xs font-semibold text-gray-900 truncate">
+            {user ? `${user.firstName} ${user.lastName}` : "Loading..."}
+          </div>
+          <div className="text-[10px] text-gray-500 truncate">
+            {user?.email || "No email"}
           </div>
         </div>
+        
         <ChevronLeft className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
       </div>
       

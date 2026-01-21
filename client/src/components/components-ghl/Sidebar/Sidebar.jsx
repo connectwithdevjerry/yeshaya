@@ -18,7 +18,7 @@ export function SidebarGHL({ userInfo, navigationItems }) {
   const safeNavigationItems = navigationItems || [];
 
   return (
-    <div className="w-56 h-screen bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
+    <div className="w-56 h-screen bg-white border-r border-gray-200 flex flex-col overflow-visible">
       <UserProfile 
         name={safeUserInfo.name} 
         users={safeUserInfo.users} 
