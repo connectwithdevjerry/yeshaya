@@ -13,7 +13,7 @@ const userSchema = mongoose.Schema({
   openAIApiKey: { type: String, required: false },
   ghlAgencyId: { type: String, required: false },
   walletBalance: { type: Number, default: 10 },
-  autoCardCharging: {
+  autoCardPay: {
     status: { type: Boolean, default: false },
     least: { type: Number, default: 25 },
     refillAmount: { type: Number, default: 50 },

@@ -52,6 +52,7 @@ const {
   GHL_SUB_AUTHORIZE,
   GHL_SUB_OAUTH_CALLBACK,
   CONFIRM_PAYMENT,
+  GET_CHARGING_DETAILS,
 } = require("../constants");
 const {
   stripeWebhook,
@@ -59,6 +60,7 @@ const {
   paymentConfirmation,
   chargeCustomerCard,
   getTransactionHistory,
+  getChargingDetails,
 } = require("../controller/payments.controller");
 
 router.post(TWILIO_CALL_RECEIVER, twilioCallReceiver);
@@ -96,5 +98,6 @@ router.get(DELETE_TWILIO_NUMBER, verifyAccessToken, deleteTwilioNumber);
 
 // router for payments integration
 router.post(CALL_BILLING_WEBHOOK, express.json(), callBillingWebhook);
+router.get(GET_CHARGING_DETAILS, verifyAccessToken, getChargingDetails);
 
 module.exports = router;

@@ -203,7 +203,7 @@ const autoTopUpLowWalletUsers = async () => {
     walletBalance: { $lt: WALLET_THRESHOLD_CENTS },
     stripeCustomerId: { $exists: true, $ne: null },
     isActive: true,
-    autoCardCharging: true,
+    "autoCardPay.status": true,
   });
 
   for (const user of users) {
@@ -387,7 +387,7 @@ const getChargingDetails = async (req, res) => {
     const user = await userModel.findById(userId);
 
     if (!user) {
-      return res.status(404).send({ status: false, message: "User not found" });
+      return res.send({ status: false, message: "User not found" });
     }
 
     let cardDetails = null;
@@ -414,7 +414,7 @@ const getChargingDetails = async (req, res) => {
     return res.send({
       status: true,
       data: {
-        autoCharging: user.autoCardCharging || {
+        autoCharging: user.autoCardPay || {
           status: false,
           least: 25,
           refillAmount: 50,
