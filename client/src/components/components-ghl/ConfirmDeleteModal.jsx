@@ -17,10 +17,9 @@ const ConfirmDeleteModal = ({ isOpen, onClose, onConfirm, title }) => {
             </button>
           </div>
           
-          <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Knowledge Base</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">"{title}"</h3>
           <p className="text-sm text-gray-500">
-            Are you sure you want to delete <span className="font-semibold text-gray-700">"{title}"</span>? 
-            This action cannot be undone and all associated data will be lost.
+            Are you sure you want to delete?. This action cannot be undone and all associated data will be lost.
           </p>
         </div>
 

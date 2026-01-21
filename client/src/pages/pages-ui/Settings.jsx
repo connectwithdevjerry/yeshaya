@@ -63,12 +63,12 @@ const Settings = () => {
           >
             Workspace
           </TopTabButton>
-          <TopTabButton
+          {/* <TopTabButton
             isActive={activeTopTab === "members"}
             onClick={() => setActiveTopTab("members")}
           >
             Members
-          </TopTabButton>
+          </TopTabButton> */}
           <TopTabButton
             isActive={activeTopTab === "billing"}
             onClick={() => setActiveTopTab("billing")}

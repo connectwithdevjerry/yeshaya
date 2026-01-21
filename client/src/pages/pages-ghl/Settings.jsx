@@ -56,12 +56,12 @@ const GHLSettings = () => {
           >
             Workspace
           </TopTabButton>
-          <TopTabButton
+          {/* <TopTabButton
             isActive={activeTopTab === "members"}
             onClick={() => setActiveTopTab("members")}
           >
             Members
-          </TopTabButton>
+          </TopTabButton> */}
           <TopTabButton
             isActive={activeTopTab === "integration"}
             onClick={() => setActiveTopTab("integration")}
