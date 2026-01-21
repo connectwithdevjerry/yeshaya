@@ -2661,6 +2661,173 @@ const sendChatMessage = async (req, res) => {
   }
 };
 
+const getContacts = async (req, res) => {
+  const userId = req.user;
+  try {
+    const user = await userModel.findById(userId);
+    const contacts = user.ghlSubAccountIds
+      .map((acc) => acc.savedContacts)
+      .flat(); // assuming first subaccount for simplicity
+
+    return res.send({ status: true, data: contacts });
+  } catch (error) {
+    console.error(
+      "Error fetching Vapi contacts:",
+      error.response?.data || error.message,
+    );
+    return res.send({
+      status: false,
+      message: error.response?.data || error.message,
+    });
+  }
+};
+
+const createContact = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId } = req.query;
+    const contactData = req.body;
+
+    const user = await userModel.findById(userId);
+
+    user.ghlSubAccountIds
+      .find((subaccount) => subaccount.accountId === subaccountId)
+      .savedContacts.push(contactData);
+
+    await user.save();
+
+    return res.send({ status: true, message: "Contact created successfully." });
+  } catch (error) {
+    console.error(
+      "Error creating Vapi contact:",
+      error.response?.data || error.message,
+    );
+    return {
+      status: false,
+      message: error.response?.data || error.message,
+    };
+  }
+};
+
+const deleteContact = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId, contactId } = req.query;
+
+    const user = await userModel.findById(userId);
+
+    const subaccount = user.ghlSubAccountIds.find(
+      (subaccount) => subaccount.accountId === subaccountId,
+    );
+
+    if (!subaccount) {
+      return res
+        .status(404)
+        .send({ status: false, message: "Subaccount not found." });
+    }
+
+    subaccount.savedContacts = subaccount.savedContacts.filter(
+      (contact) => contact._id != contactId,
+    );
+
+    await user.save();
+
+    return res.send({ status: true, message: "Contact deleted successfully." });
+  } catch (error) {
+    console.error(
+      "Error deleting Vapi contact:",
+      error.response?.data || error.message,
+    );
+    return {
+      status: false,
+      message: error.response?.data || error.message,
+    };
+  }
+};
+
+const updateContact = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId, contactId } = req.query;
+    const updatedData = req.body;
+
+    const user = await userModel.findById(userId);
+
+    // 1. Find the subaccount
+    const subaccount = user.ghlSubAccountIds.find(
+      (sub) => sub.accountId === subaccountId,
+    );
+
+    if (!subaccount) {
+      return res.send({ status: false, message: "Subaccount not found." });
+    }
+
+    // 2. Find the specific contact subdocument
+    const contact = subaccount.savedContacts.id(contactId);
+
+    if (!contact) {
+      return res.send({ status: false, message: "Contact not found." });
+    }
+
+    if (!Object.keys(updatedData).length) {
+      return res
+        .status(400)
+        .send({ status: false, message: "No data provided." });
+    }
+
+    // 3. Update the data using .set()
+    contact.set(updatedData);
+
+    // 4. Save the parent document
+    await user.save();
+
+    return res.send({
+      status: true,
+      message: "Contact updated successfully.",
+      data: contact,
+    });
+  } catch (error) {
+    console.error("Error updating contact:", error.message);
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+const getContact = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId, contactId } = req.query;
+
+    const user = await userModel.findById(userId);
+
+    const subaccount = user.ghlSubAccountIds.find(
+      (subaccount) => subaccount.accountId === subaccountId,
+    );
+
+    if (!subaccount) {
+      return res.send({ status: false, message: "Subaccount not found." });
+    }
+
+    const contact = subaccount.savedContacts.find(
+      (contact) => contact._id == contactId,
+    );
+
+    if (!contact) {
+      return res.send({ status: false, message: "Contact not found." });
+    }
+
+    return res.send({ status: true, data: contact });
+  } catch (error) {
+    console.error(
+      "Error fetching Vapi contact:",
+      error.response?.data || error.message,
+    );
+    return res.send({
+      status: false,
+      message: error.response?.data || error.message,
+    });
+  }
+};
+
 // Execute the main function
 module.exports = {
   createAssistantAndSave,
@@ -2694,6 +2861,11 @@ module.exports = {
   removeKnowledgeBaseFromAssistant,
   sendChatMessage,
   checkWalletBalance,
+  getContacts,
+  createContact,
+  deleteContact,
+  updateContact,
+  getContact,
 };
 
 // what's left

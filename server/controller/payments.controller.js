@@ -144,26 +144,30 @@ const stripeWebhook = async (req, res) => {
     const paymentIntent = event.data.object;
     const { userId, type } = paymentIntent.metadata || {};
 
+    const stripeCustomerId = paymentIntent.customer;
+
     // Only credit wallet for intended charges
     if (userId && type === "USAGE_CHARGE") {
-      const amountCents = paymentIntent.amount; // already in cents
+      const amountUsd = paymentIntent.amount / 100; // already in cents
 
       const user = await userModel.findById(userId);
 
+      user.stripeCustomerId = stripeCustomerId;
+
       // 1. Update wallet balance
-      user.walletBalance += paymentIntent.amount / 100; // convert to dollars
+      user.walletBalance += amountUsd; // convert to dollars
 
       // 2. Log transaction (strongly recommended)
 
       user.billingEvents.push({
         callId: paymentIntent.id,
         type: "WALLET_TOPUP",
-        amount: paymentIntent.amount / 100,
+        amount: amountUsd,
       });
 
       await user.save();
 
-      console.log(`Wallet credited: +${amountCents} cents for user ${userId}`);
+      console.log(`Wallet credited: +${amountUsd} USD for user ${userId}`);
     }
   }
 
@@ -177,7 +181,7 @@ const stripeWebhook = async (req, res) => {
     user.billingEvents.push({
       callId: paymentIntent.id,
       type: "WALLET_TOPUP_FAILED",
-      amount: paymentIntent.amount / 100,
+      amount: amountUsd,
     });
 
     // Optional:
@@ -377,6 +381,53 @@ const getTransactionHistory = async (req, res) => {
   }
 };
 
+const getChargingDetails = async (req, res) => {
+  try {
+    const userId = req.user;
+    const user = await userModel.findById(userId);
+
+    if (!user) {
+      return res.status(404).send({ status: false, message: "User not found" });
+    }
+
+    let cardDetails = null;
+
+    // Fetch card details from Stripe if a customer ID exists
+    if (user.stripeCustomerId) {
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: user.stripeCustomerId,
+        type: "card",
+        limit: 1, // Get the primary/latest card
+      });
+
+      if (paymentMethods.data.length > 0) {
+        const card = paymentMethods.data[0].card;
+        cardDetails = {
+          brand: card.brand,
+          last4: card.last4,
+          expMonth: card.exp_month,
+          expYear: card.exp_year,
+        };
+      }
+    }
+
+    return res.send({
+      status: true,
+      data: {
+        autoCharging: user.autoCardCharging || {
+          status: false,
+          least: 25,
+          refillAmount: 50,
+        },
+        card: cardDetails, // Will be null if no card is attached
+      },
+    });
+  } catch (error) {
+    console.error("Stripe/DB Error:", error.message);
+    return res.status(500).send({ status: false, message: error.message });
+  }
+};
+
 module.exports = {
   callBillingWebhook,
   getLatestConnectedBalance,
@@ -385,4 +436,5 @@ module.exports = {
   autoTopUpLowWalletUsers,
   paymentConfirmation,
   getTransactionHistory,
+  getChargingDetails,
 };

@@ -32,6 +32,11 @@ const {
   executeToolFromVapi,
   sendChatMessage,
   checkWalletBalance,
+  getContacts,
+  getContact,
+  createContact,
+  updateContact,
+  deleteContact,
 } = require("../controller/assistant.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
 
@@ -66,6 +71,11 @@ const {
   DELETE_KNOWLEDGE_BASE,
   SEND_CHAT_MESSAGE,
   GET_WALLET_BALANCE,
+  GET_CONTACTS,
+  GET_CONTACT,
+  CREATE_CONTACT,
+  UPDATE_CONTACT,
+  DELETE_CONTACT,
 } = require("../constants");
 
 const upload = multer({
@@ -77,6 +87,11 @@ router.post(CREATE_ASSISTANT, verifyAccessToken, createAssistantAndSave);
 router.delete(DELETE_ASSISTANT, verifyAccessToken, deleteAssistant);
 router.get(GET_ASSISTANT, verifyAccessToken, getAssistant);
 router.get(GET_ASSISTANTS, verifyAccessToken, getAssistants);
+router.get(GET_CONTACTS, verifyAccessToken, getContacts);
+router.get(GET_CONTACT, verifyAccessToken, getContact);
+router.post(CREATE_CONTACT, verifyAccessToken, createContact);
+router.put(UPDATE_CONTACT, verifyAccessToken, updateContact);
+router.delete(DELETE_CONTACT, verifyAccessToken, deleteContact);
 router.put(UPDATE_ASSISTANT, verifyAccessToken, updateAssistant);
 router.post(GENERATE_PROMPT, verifyAccessToken, generatePrompt);
 router.delete(
