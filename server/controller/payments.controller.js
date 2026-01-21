@@ -41,7 +41,8 @@ const chargeCustomerCard = async (req, res) => {
   // 1. Lookup the connected account's ID for the customer being paid
   // In a real app, this ID comes from your database based on who the customer is paying.
   const { amount } = req.body;
-  const user = await userModel.findById(req.user);
+  const userId = req.user;
+  const user = await userModel.findById(userId);
   const connectedAccountId = await user.stripeUserId;
   const stripeAccountId = process.env.STRIPE_PLATFORM_ACCOUNT_ID;
 
@@ -63,11 +64,23 @@ const chargeCustomerCard = async (req, res) => {
   }
 
   try {
+    if (!user.stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        metadata: { userId: userId },
+        email: user.email,
+      });
+
+      user.stripeCustomerId = customer.id;
+      await user.save();
+    }
+
     const paymentIntent = await stripe.paymentIntents.create(
       {
         // payment_method_types: ["card"],
         amount: amount * 100, // in cents ($10.00 for 1000 cents)
         currency: "usd",
+        customer: user.stripeCustomerId,
+        setup_future_usage: "off_session",
         // CRITICAL: Use the Stripe-Account header to act on their behalf
         automatic_payment_methods: { enabled: true },
         metadata: {
@@ -151,19 +164,15 @@ const stripeWebhook = async (req, res) => {
 
       const user = await userModel.findById(userId);
 
-      if (!user.stripeCustomerId) {
-        const customer = await stripe.customers.create({
-          metadata: { userId: userId },
-          email: user.email,
-        });
+      const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
 
-        user.stripeCustomerId = customer.id;
-
+      if (!pm.customer) {
+        // attach payment method to customer
         await stripe.paymentMethods.attach(paymentMethodId, {
-          customer: customer.id,
+          customer: user.stripeCustomerId,
         });
 
-        await stripe.customers.update(customer.id, {
+        await stripe.customers.update(user.stripeCustomerId, {
           invoice_settings: {
             default_payment_method: paymentMethodId,
           },
