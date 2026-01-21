@@ -218,78 +218,99 @@ const stripeWebhook = async (req, res) => {
   res.json({ received: true });
 };
 
+// autoTopUpLowWalletUsers
+
 // Automatic Wallet Top-Up for Low Balances
-const autoTopUpLowWalletUsers = async () => {
-  const WALLET_THRESHOLD_CENTS = 500; // $5
-  const AUTO_TOPUP_AMOUNT_CENTS = 2000; // $20 auto top-up
+const autoTopUpLowWalletUsers = async (req, res) => {
+  const { userId } = req.body;
+  console.log("Auto-charge triggered for user:", userId);
 
-  // 1️ Find users with low balance
-  const users = await userModel.find({
-    walletBalance: { $lt: WALLET_THRESHOLD_CENTS },
-    stripeCustomerId: { $exists: true, $ne: null },
-    isActive: true,
-    "autoCardPay.status": true,
-  });
+  try {
+    const user = await userModel.findById(userId);
 
-  for (const user of users) {
-    try {
-      // 2️ Check for saved card
-      const paymentMethods = await stripe.paymentMethods.list({
-        customer: user.stripeCustomerId,
-        type: "card",
+    if (!user) {
+      return res.status(404).send({ status: false, message: "User not found" });
+    }
+
+    if (!user.isActive || !user.autoCardPay?.status) {
+      return res.status(400).send({
+        status: false,
+        message: "Auto-charge not enabled for this user",
       });
+    }
 
-      if (!paymentMethods.data.length) {
-        console.warn(`No saved card for user ${user._id}`);
-        continue;
-      }
+    if (user.walletBalance >= user.autoCardPay.least) {
+      return res.status(200).send({
+        status: true,
+        message: "Wallet above threshold, no charge needed",
+      });
+    }
 
-      const paymentMethod = paymentMethods.data[0];
+    // 1️ Get saved card
+    const paymentMethods = await stripe.paymentMethods.list({
+      customer: user.stripeCustomerId,
+      type: "card",
+    });
 
-      // 3️ Charge card (OFF-SESSION)
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: AUTO_TOPUP_AMOUNT_CENTS,
+    if (!paymentMethods.data.length) {
+      console.warn(`No saved card for user ${user._id}`);
+      return res
+        .status(400)
+        .send({ status: false, message: "No saved card for this user" });
+    }
+
+    const paymentMethod = paymentMethods.data[0];
+
+    // 2️ Charge amount
+    const amountToCharge = user.autoCardPay.refillAmount || 10; // dollars
+    const amountCents = amountToCharge * 100;
+
+    const paymentIntent = await stripe.paymentIntents.create(
+      {
+        amount: amountCents,
         currency: "usd",
         customer: user.stripeCustomerId,
         payment_method: paymentMethod.id,
         off_session: true,
         confirm: true,
-        description: "Automatic wallet top-up",
+        description: "Auto-deduction for wallet balance",
         metadata: {
           userId: user._id.toString(),
-          type: "AUTO_TOPUP",
+          type: "AUTO_DEDUCT",
         },
-      });
+      },
+      {
+        stripeAccount: process.env.STRIPE_PLATFORM_ACCOUNT_ID, // if using connected accounts
+      },
+    );
 
-      // 4️ Credit wallet
-      await userModel.findByIdAndUpdate(user._id, {
-        $inc: { walletBalance: AUTO_TOPUP_AMOUNT_CENTS },
-        $set: { dateUpdated: new Date() },
-      });
+    // 3️ Update wallet
+    user.walletBalance += amountToCharge;
+    user.dateUpdated = new Date();
+    await user.save();
 
-      // 5️ Log payment
-      await Payment.create({
-        userId: user._id,
-        stripePaymentIntentId: paymentIntent.id,
-        amountCents: AUTO_TOPUP_AMOUNT_CENTS,
-        status: "SUCCESS",
-        type: "CREDIT",
-        source: "AUTO_TOPUP",
-        createdAt: new Date(),
-      });
+    // 4️ Log billing event
+    user.billingEvents.push({
+      callId: paymentIntent.id,
+      type: "AUTO_WALLET_TOPUP",
+      amount: amountToCharge,
+    });
+    await user.save();
 
-      console.log(`Auto-topup success for user ${user._id}`);
-    } catch (error) {
-      // Very important: handle auth errors
-      if (error.code === "authentication_required") {
-        console.error(`Card requires authentication for user ${user._id}`);
-
-        // Optional: notify user, disable auto-topup, send email
-        continue;
-      }
-
-      console.error(`Auto-topup failed for user ${user._id}:`, error.message);
+    console.log(`Auto-charge successful for user ${user._id}`);
+    return res.send({
+      status: true,
+      message: "Auto-charge successful",
+      paymentIntentId: paymentIntent.id,
+    });
+  } catch (error) {
+    if (error.code === "authentication_required") {
+      console.error(`Card requires authentication for user ${userId}`);
+    } else {
+      console.error(`Auto-charge failed for user ${userId}:`, error.message);
     }
+
+    return res.status(500).send({ status: false, message: error.message });
   }
 };
 

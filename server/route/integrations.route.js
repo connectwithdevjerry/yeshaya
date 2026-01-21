@@ -54,6 +54,7 @@ const {
   CONFIRM_PAYMENT,
   GET_CHARGING_DETAILS,
   UPDATE_CHARGING_DETAILS,
+  AUTO_CARD_PAY_WEBHOOK,
 } = require("../constants");
 const {
   stripeWebhook,
@@ -63,6 +64,7 @@ const {
   getTransactionHistory,
   getChargingDetails,
   updateAutoChargingSettings,
+  autoTopUpLowWalletUsers,
 } = require("../controller/payments.controller");
 
 router.post(TWILIO_CALL_RECEIVER, twilioCallReceiver);
@@ -101,6 +103,11 @@ router.get(DELETE_TWILIO_NUMBER, verifyAccessToken, deleteTwilioNumber);
 // router for payments integration
 router.post(CALL_BILLING_WEBHOOK, express.json(), callBillingWebhook);
 router.get(GET_CHARGING_DETAILS, verifyAccessToken, getChargingDetails);
-router.put(UPDATE_CHARGING_DETAILS, verifyAccessToken, updateAutoChargingSettings);
+router.put(
+  UPDATE_CHARGING_DETAILS,
+  verifyAccessToken,
+  updateAutoChargingSettings,
+);
+router.post(AUTO_CARD_PAY_WEBHOOK, autoTopUpLowWalletUsers);
 
 module.exports = router;

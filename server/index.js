@@ -7,6 +7,8 @@ const assistantsRoutes = require("./route/assistant.route");
 const cookieParser = require("cookie-parser");
 const { verifyAccessToken } = require("./jwt_helpers");
 const { stripeWebhook } = require("./controller/payments.controller");
+const userModel = require("./model/user.model");
+const { default: axios } = require("axios");
 require("dotenv").config();
 
 const app = express();
@@ -46,6 +48,30 @@ app.use("/assistants", assistantsRoutes);
 
 app.get("/", (req, res) => {
   res.send("homepage");
+});
+
+const changeStream = userModel.watch([
+  {
+    $match: {
+      "updateDescription.updatedFields.walletBalance": { $exists: true },
+    },
+  },
+]);
+
+changeStream.on("change", async (change) => {
+  const userId = change.documentKey._id;
+
+  const user = await userModel
+    .findById(userId)
+    .select("walletBalance autoCardPay.least autoCardPay.status");
+
+  if (user.autoCardPay.status && user.walletBalance < user.autoCardPay.least) {
+    await axios.post(`${process.env.SERVER_URL}/integrations/autopay/webhook`, {
+      userId,
+      walletBalance: user.walletBalance,
+      least: user.autoCardPay.least,
+    });
+  }
 });
 
 app.listen(PORT, (err) => {
