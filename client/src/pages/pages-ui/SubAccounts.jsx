@@ -140,12 +140,12 @@ function SubAccounts() {
           </div>
 
           {/* New Folder */}
-          <button
+          {/* <button
             onClick={() => setIsModalOpen(true)}
             className="border border-gray-300 px-4 py-2 rounded-md text-sm hover:bg-gray-100 flex items-center gap-1"
           >
             <Folder size={14} /> New Folder
-          </button>
+          </button> */}
 
           {/* New Sub-account Dropdown */}
           <div className="relative" ref={dropdownRef}>
