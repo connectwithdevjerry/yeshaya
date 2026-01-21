@@ -9,10 +9,17 @@ const TransactionRow = ({
   eventId,
   amount,
 }) => {
-  const isNegative = amount.startsWith("-");
-  const amountColor = isNegative
-    ? "text-red-500 bg-red-50"
-    : "text-green-500 bg-green-50";
+  // Logic to determine color: WALLET_TOPUP is positive (green), end-of-call is usually a cost (red)
+  const isTopUp = description.includes("TOPUP");
+  const amountColor = isTopUp
+    ? "text-green-500 bg-green-50"
+    : "text-red-500 bg-red-50";
+
+  // Format amount to 4 decimal places for calls, 2 for topups
+  const formattedAmount = isTopUp 
+    ? `+$${parseFloat(amount).toFixed(2)}` 
+    : `-$${parseFloat(amount).toFixed(4)}`;
+
   return (
     <div className="grid grid-cols-[1fr_0.8fr_0.8fr_0.5fr] gap-4 py-3 border-b text-sm items-center">
       {/* Description */}
@@ -30,30 +37,23 @@ const TransactionRow = ({
       <div className="text-green-600 font-medium">Succeeded</div>
 
       {/* Event ID */}
-      <div className="text-gray-600 text-xs truncate">{eventId}</div>
+      <div className="text-gray-600 text-xs truncate" title={eventId}>{eventId}</div>
 
       {/* Amount & Actions */}
       <div className="flex flex-col items-end">
-        <span
-          className={`px-2 py-0.5 rounded text-xs font-semibold ${amountColor}`}
-        >
-          {amount}
+        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${amountColor}`}>
+          {formattedAmount}
         </span>
         <div className="flex space-x-2 text-xs mt-1">
-          <a href="#" className="text-indigo-600 hover:text-indigo-800">
-            Event
-          </a>
+          <button className="text-indigo-600 hover:text-indigo-800">Event</button>
           <span>|</span>
-          <a
-            href="#"
-            className="text-indigo-600 hover:text-indigo-800 flex items-center"
-          >
+          <button className="text-indigo-600 hover:text-indigo-800 flex items-center">
             Invoice <FileText className="w-3 h-3 ml-1" />
-          </a>
+          </button>
         </div>
       </div>
     </div>
   );
 };
+
 export default TransactionRow;
- 

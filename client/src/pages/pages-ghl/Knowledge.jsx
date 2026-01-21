@@ -8,6 +8,7 @@ import UploadModal from "../../components/components-ghl/Knowledge/UploadModal";
 import {
   fetchKnowledgeBases,
   deleteKnowledgeBase,
+  getFileDetails,
 } from "../../store/slices/assistantsSlice";
 import { toast } from "react-hot-toast";
 import ConfirmDeleteModal from "../../components/components-ghl/ConfirmDeleteModal";
@@ -18,8 +19,10 @@ const KnowledgePage = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, base: null });
 
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false);
+
   const { knowledgeBasesData = [], fetchingKnowledgeBases } = useSelector(
-    (state) => state.assistants
+    (state) => state.assistants,
   );
 
   useEffect(() => {
@@ -30,18 +33,44 @@ const KnowledgePage = () => {
   // const location = useLocation();
   // const account = useCurrentAccount();
 
-  // Open modal handler
+  const handleViewContent = async (base) => {
+    const fileId = base.fileIds && base.fileIds.length > 0 ? base.fileIds[0] : null;
+
+    if (!fileId) {
+      toast.error("No file associated with this knowledge base");
+      return;
+    }
+
+    setIsDetailsLoading(true);
+    try {
+      const result = await dispatch(getFileDetails({ fileId })).unwrap();
+
+      if (result && result.url) {
+        toast.success(`Opening ${result.name || "file"}...`);
+
+        // Open URL in new tab safely
+        window.open(result.url, "_blank", "noopener,noreferrer");
+      } else {
+        toast.error("File URL not found in the response");
+      }
+    } catch (error) {
+      console.error("Fetch error:", error);
+      toast.error(error || "Failed to load details");
+    } finally {
+      setIsDetailsLoading(false);
+    }
+  };
+
   const openDeleteModal = (e, base) => {
-    e.stopPropagation(); // Stop row click
+    e.stopPropagation();
     setDeleteModal({ isOpen: true, base });
   };
 
-  // Actual execution handler
   const handleConfirmDelete = async () => {
     if (deleteModal.base) {
       try {
         await dispatch(
-          deleteKnowledgeBase({ toolId: deleteModal.base.id })
+          deleteKnowledgeBase({ toolId: deleteModal.base.id }),
         ).unwrap();
         setDeleteModal({ isOpen: false, base: null });
         toast.success("Knowledge base deleted successfully");
@@ -58,7 +87,7 @@ const KnowledgePage = () => {
     return false;
   });
 
-  const headers = ["NAME", "UPDATED", "CREATED", "SOURCES"];
+  const headers = ["NAME", "UPDATED", "CREATED", "CONTENT"];
 
   // const handleKnowledgeClick = (base) => {
   //   if (location.pathname === "/app" && account) {
@@ -167,9 +196,13 @@ const KnowledgePage = () => {
                       {base.created}
                     </td>
                     <td className="px-3 py-2">
-                      <span className="border px-3 py-1 rounded-md text-sm">
-                        {base.sourcesCount} sources
-                      </span>
+                      <button
+                        onClick={() => handleViewContent(base)}
+                        disabled={isDetailsLoading}
+                        className="border px-3 py-1 rounded-md text-sm hover:bg-gray-100 cursor-pointer disabled:opacity-50"
+                      >
+                        {isDetailsLoading ? "Loading..." : "View Content"}
+                      </button>
                     </td>
                     <td className="px-6 py-2 text-right">
                       <div
