@@ -1,53 +1,125 @@
-// src/components/contacts/NewContactFormPanel.jsx
-import React from 'react';
-import { X, ChevronRight } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { ChevronRight, Loader2 } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
+import { createContact, updateContact, fetchContacts , clearContactStatus} from '../../../store/slices/assistantsSlice';
+import { toast } from 'react-hot-toast';
 
-export function NewContactFormPanel({ onClose }) {
-  const [formData, setFormData] = React.useState({});
+export function NewContactFormPanel({ onClose, subaccountId, initialData }) {
+  const dispatch = useDispatch();
+  
+  // Robust check for editing mode
+  const isEditing = !!(initialData?._id || initialData?.id);
+  
+  const { contactActionLoading } = useSelector((state) => state.assistants);
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    dispatch(clearContactStatus());
+  }, [dispatch]);
+
+  const [formData, setFormData] = React.useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    linkedin: '',
+    company: '',
+    title: '',
+  });
+
+  // Populate form when initialData is provided (Edit Mode)
+  useEffect(() => {
+    if (initialData && isEditing) {
+      setFormData({
+        firstName: initialData.firstName || '',
+        lastName: initialData.lastName || '',
+        email: initialData.email || '',
+        phone: initialData.phone || '',
+        linkedin: initialData.linkedin || '',
+        company: initialData.company || '',
+        title: initialData.title || '',
+      });
+    }
+  }, [initialData, isEditing]);
+
+  const handleChange = (e) => {
+    const { id, value, name } = e.target;
+    const fieldName = id || name;
+    setFormData((prev) => ({ ...prev, [fieldName]: value }));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Contact Data Submitted:', formData);
 
-    onClose();
+    if (!formData.firstName || !formData.email) {
+      toast.error("First name and Email are required");
+      return;
+    }
+
+    try {
+      if (isEditing) {
+        // UPDATE LOGIC
+        await dispatch(updateContact({ 
+          subaccountId, 
+          contactId: initialData._id || initialData.id, 
+          contactData: formData 
+        })).unwrap();
+        toast.success("Contact updated successfully");
+      } else {
+        // CREATE LOGIC
+        await dispatch(createContact({ 
+          subaccountId, 
+          contactData: formData 
+        })).unwrap();
+        toast.success("Contact created successfully");
+      }
+      
+      // Refresh the list and close
+      dispatch(fetchContacts({ subaccountId }));
+      onClose();
+    } catch (error) {
+      toast.error(error || `Failed to ${isEditing ? 'update' : 'create'} contact`);
+    }
   };
 
   return (
-
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 z-50 overflow-hidden">
-      
- 
-      <div 
-        className="fixed top-0 right-0 h-full bg-white shadow-2xl w-full max-w-lg transform translate-x-0 transition-transform duration-300 flex flex-col"
-      >
+      <div className="fixed top-0 right-0 h-full bg-white shadow-2xl w-full max-w-lg transform translate-x-0 transition-transform duration-300 flex flex-col">
         
         {/* Header */}
         <div className="p-4 border-b border-gray-200 flex items-center justify-start">
           <button 
             onClick={onClose} 
             className="text-gray-400 hover:text-gray-600 mr-4 p-1 rounded-full hover:bg-gray-100"
-            title="Close"
           >
             <ChevronRight className="w-5 h-5" /> 
           </button>
-          <h3 className="text-xl font-semibold text-gray-800">New Contact</h3>
+          <h3 className="text-xl font-semibold text-gray-800">
+            {isEditing ? 'Edit Contact' : 'New Contact'}
+          </h3>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 p-6 space-y-6 overflow-y-auto">
-          
+        <form id="contact-form" onSubmit={handleSubmit} className="flex-1 p-6 space-y-6 overflow-y-auto">
+          {/* Name Fields */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
             <div className="flex space-x-4">
               <div className="flex-1">
                 <input
                   type="text"
+                  name="firstName"
+                  value={formData.firstName}
+                  onChange={handleChange}
                   placeholder="First name"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+                  required
                 />
               </div>
               <div className="flex-1">
                 <input
                   type="text"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleChange}
                   placeholder="Last name"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:border-blue-500 focus:ring-blue-500"
                 />
@@ -55,47 +127,51 @@ export function NewContactFormPanel({ onClose }) {
             </div>
           </div>
 
-          {/* Title Field */}
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">Title</label>
             <input
               type="text"
               id="title"
+              value={formData.title}
+              onChange={handleChange}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:border-blue-500 focus:ring-blue-500"
             />
           </div>
 
-          {/* Email Field */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               type="email"
               id="email"
+              value={formData.email}
+              onChange={handleChange}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+              required
             />
           </div>
 
-          {/* Phone Field */}
           <div>
             <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
             <input
               type="tel"
               id="phone"
+              value={formData.phone}
+              onChange={handleChange}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:border-blue-500 focus:ring-blue-500"
             />
           </div>
 
-          {/* Company Field */}
           <div>
             <label htmlFor="company" className="block text-sm font-medium text-gray-700 mb-1">Company</label>
             <input
               type="text"
               id="company"
+              value={formData.company}
+              onChange={handleChange}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:border-blue-500 focus:ring-blue-500"
             />
           </div>
 
-          {/* LinkedIn Field */}
           <div>
             <label htmlFor="linkedin" className="block text-sm font-medium text-gray-700 mb-1">LinkedIn</label>
             <div className="mt-1 relative rounded-md shadow-sm">
@@ -105,39 +181,34 @@ export function NewContactFormPanel({ onClose }) {
                 <input
                     type="text"
                     id="linkedin"
+                    value={formData.linkedin}
+                    onChange={handleChange}
                     className="block w-full border border-gray-300 rounded-md p-2 text-sm pl-32 focus:border-blue-500 focus:ring-blue-500"
                 />
             </div>
           </div>
-
-          {/* Owner Field (Select Dropdown) */}
-          <div>
-            <label htmlFor="owner" className="block text-sm font-medium text-gray-700 mb-1">Owner</label>
-            <select
-              id="owner"
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-            >
-              <option>Select a lead owner</option>
-              {/* Add more owner options here */}
-            </select>
-          </div>
           
-          {/* Add some extra padding to make sure the last element isn't cut off by the footer */}
           <div className="h-20"></div>
-
         </form>
 
-        {/* Footer/Action Bar */}
+        {/* Footer */}
         <div className="p-4 border-t border-gray-200 bg-white flex justify-end">
           <button
             type="submit"
-            onClick={handleSubmit}
-            className="px-6 py-2 bg-black text-white font-medium rounded-md shadow-md"
+            form="contact-form"
+            disabled={contactActionLoading}
+            className="px-6 py-2 bg-black text-white font-medium rounded-md shadow-md flex items-center disabled:bg-gray-400"
           >
-            Add Contact
+            {contactActionLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                {isEditing ? 'Updating...' : 'Adding...'}
+              </>
+            ) : (
+              isEditing ? 'Save Changes' : 'Add Contact'
+            )}
           </button>
         </div>
-
       </div>
     </div>
   );

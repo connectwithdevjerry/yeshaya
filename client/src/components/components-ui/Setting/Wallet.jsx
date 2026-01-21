@@ -34,15 +34,12 @@ const WalletUsageContent = () => {
     dispatch(fetchTransactionHistory());
   }, [dispatch]);
 
-  // 1. FILTER & SEARCH LOGIC (useMemo for performance)
   const filteredTransactions = React.useMemo(() => {
-    return transactions.filter((tx) => {
-      // Search Filter: matches Call ID or Type
+    const filtered = transactions.filter((tx) => {
       const matchesSearch = 
         tx.callId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         tx.type?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // Type Filter: "Calls" vs "Topups"
       const matchesType = 
         filterType === "all" || 
         (filterType === "calls" && tx.type === "end-of-call-report") ||
@@ -50,12 +47,16 @@ const WalletUsageContent = () => {
 
       return matchesSearch && matchesType;
     });
-  }, [transactions, searchTerm, filterType]);
 
-  // 2. PAGINATION LOGIC (Based on filtered results)
+    return [...filtered].sort((a, b) => 
+      new Date(b.processedAt) - new Date(a.processedAt)
+    );
+  }, [transactions, searchTerm, filterType]);
+  
+
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
   
-  // Reset to page 1 if filters change
+
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, filterType]);

@@ -9,13 +9,12 @@ const TransactionRow = ({
   eventId,
   amount,
 }) => {
-  // Logic to determine color: WALLET_TOPUP is positive (green), end-of-call is usually a cost (red)
+
   const isTopUp = description.includes("TOPUP");
   const amountColor = isTopUp
     ? "text-green-500 bg-green-50"
     : "text-red-500 bg-red-50";
 
-  // Format amount to 4 decimal places for calls, 2 for topups
   const formattedAmount = isTopUp 
     ? `+$${parseFloat(amount).toFixed(2)}` 
     : `-$${parseFloat(amount).toFixed(4)}`;

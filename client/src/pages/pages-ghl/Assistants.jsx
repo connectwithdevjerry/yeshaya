@@ -102,12 +102,12 @@ const Assistants = () => {
         {/* 🔍 Top Bar */}
         <div className="flex justify-end items-center mb-6">
           <div className="flex items-center space-x-3">
-            <button
+            {/* <button
               onClick={() => setIsFolderModalOpen(true)}
               className="px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors"
             >
               + Create Folder
-            </button>
+            </button> */}
 
             <button
               onClick={() => setIsAssistantModalOpen(true)}

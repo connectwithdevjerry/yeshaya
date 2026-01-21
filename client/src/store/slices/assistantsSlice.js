@@ -678,6 +678,7 @@ export const fetchWalletBalance = createAsyncThunk(
   },
 );
 
+// ✅ 18. Fetch Transaction History
 export const fetchTransactionHistory = createAsyncThunk(
   "transactions/fetchHistory",
   async (_, { rejectWithValue }) => {
@@ -697,6 +698,97 @@ export const fetchTransactionHistory = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || "Error fetching transaction history",
+      );
+    }
+  },
+);
+
+// ✅ 19. Contacts Management Thunks
+export const fetchContacts = createAsyncThunk(
+  "assistants/fetchContacts",
+  async ({ subaccountId }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(
+        `/assistants/get-contacts?subaccountId=${subaccountId}`,
+      );
+      return response.data.status
+        ? response.data.data
+        : rejectWithValue(response.data.message);
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch contacts",
+      );
+    }
+  },
+);
+
+// ✅ 20. Create Contact
+export const createContact = createAsyncThunk(
+  "assistants/createContact",
+  async ({ subaccountId, contactData }, { rejectWithValue }) => {
+    try {
+      // Convert JSON object to x-www-form-urlencoded format per Postman screenshot
+      const params = new URLSearchParams();
+      Object.keys(contactData).forEach((key) =>
+        params.append(key, contactData[key]),
+      );
+
+      const response = await apiClient.post(
+        `/assistants/create-contact?subaccountId=${subaccountId}`,
+        params,
+        { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+      );
+      return response.data.status
+        ? response.data.data
+        : rejectWithValue(response.data.message);
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to create contact",
+      );
+    }
+  },
+);
+
+// ✅ 21. Update Contact
+export const updateContact = createAsyncThunk(
+  "assistants/updateContact",
+  async ({ subaccountId, contactId, contactData }, { rejectWithValue }) => {
+    try {
+      const params = new URLSearchParams();
+      Object.keys(contactData).forEach((key) =>
+        params.append(key, contactData[key]),
+      );
+
+      const response = await apiClient.put(
+        `/assistants/update-contact?subaccountId=${subaccountId}&contactId=${contactId}`,
+        params,
+        { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+      );
+      return response.data.status
+        ? response.data.data
+        : rejectWithValue(response.data.message);
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to update contact",
+      );
+    }
+  },
+);
+
+// ✅ 22. Delete Contact
+export const deleteContact = createAsyncThunk(
+  "assistants/deleteContact",
+  async ({ subaccountId, contactId }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.delete(
+        `/assistants/delete-contact?subaccountId=${subaccountId}&contactId=${contactId}`,
+      );
+      return response.data.status
+        ? contactId
+        : rejectWithValue(response.data.message);
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to delete contact",
       );
     }
   },
@@ -751,6 +843,9 @@ const assistantsSlice = createSlice({
     transactions: [],
     fetchingTransactions: false,
     transactionError: null,
+    contacts: [],
+    fetchingContacts: false,
+    contactActionLoading: false,
   },
   reducers: {
     clearSelectedAssistant: (state) => {
@@ -774,6 +869,9 @@ const assistantsSlice = createSlice({
     clearKnowledgeBaseError: (state) => {
       state.knowledgeBaseError = null;
     },
+    clearContactStatus: (state) => {
+      state.contactActionLoading = false;
+    },
     optimisticUpdate: (state, action) => {
       const { assistantId, updateData } = action.payload;
 
@@ -794,7 +892,7 @@ const assistantsSlice = createSlice({
     clearTransactionHistory: (state) => {
       state.transactions = [];
       state.transactionError = null;
-    }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -1187,6 +1285,56 @@ const assistantsSlice = createSlice({
       .addCase(fetchTransactionHistory.rejected, (state, action) => {
         state.fetchingTransactions = false;
         state.transactionError = action.payload;
+      })
+
+      // Fetch Contacts
+      .addCase(fetchContacts.pending, (state) => {
+        state.fetchingContacts = true;
+      })
+      .addCase(fetchContacts.fulfilled, (state, action) => {
+        state.fetchingContacts = false;
+        state.contacts = Array.isArray(action.payload) ? action.payload : [];
+      })
+      .addCase(fetchContacts.rejected, (state) => {
+        state.fetchingContacts = false;
+      })
+
+      // Create Contact
+      .addCase(createContact.pending, (state) => {
+        state.contactActionLoading = true;
+      })
+      .addCase(createContact.fulfilled, (state, action) => {
+        state.contactActionLoading = false;
+        state.contacts.unshift(action.payload);
+      })
+      .addCase(createContact.rejected, (state) => {
+        state.contactActionLoading = false;
+      })
+
+      // Update Contact
+      .addCase(updateContact.fulfilled, (state, action) => {
+        state.contactActionLoading = false;
+        const index = state.contacts.findIndex(
+          (c) => c.id === action.payload.id,
+        );
+        if (index !== -1) state.contacts[index] = action.payload;
+      })
+      .addCase(updateContact.pending, (state) => {
+        state.contactActionLoading = true;
+      })
+      .addCase(updateContact.rejected, (state) => {
+        state.contactActionLoading = false;
+      })
+
+      // Delete Contact
+      .addCase(deleteContact.fulfilled, (state, action) => {
+        state.contacts = state.contacts.filter((c) => c.id !== action.payload);
+      })
+      .addCase(deleteContact.pending, (state) => {
+        state.contactActionLoading = true;
+      })
+      .addCase(deleteContact.rejected, (state) => {
+        state.contactActionLoading = false;
       });
   },
 });
@@ -1199,6 +1347,7 @@ export const {
   clearDynamicMessage,
   clearFileDetails,
   clearKnowledgeBaseError,
+  clearContactStatus,
 } = assistantsSlice.actions;
 
 export default assistantsSlice.reducer;
