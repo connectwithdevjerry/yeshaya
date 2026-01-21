@@ -144,17 +144,31 @@ const stripeWebhook = async (req, res) => {
     const paymentIntent = event.data.object;
     const { userId, type } = paymentIntent.metadata || {};
 
-    console.log({ paymentIntent });
-
-    const stripeCustomerId = paymentIntent.customer;
-
     // Only credit wallet for intended charges
     if (userId && type === "USAGE_CHARGE") {
       const amountUsd = paymentIntent.amount / 100; // already in cents
+      const paymentMethodId = paymentIntent.payment_method;
 
       const user = await userModel.findById(userId);
 
-      user.stripeCustomerId = stripeCustomerId;
+      if (!user.stripeCustomerId) {
+        const customer = await stripe.customers.create({
+          metadata: { userId: userId },
+          email: user.email,
+        });
+
+        user.stripeCustomerId = customer.id;
+
+        await stripe.paymentMethods.attach(paymentMethodId, {
+          customer: customer.id,
+        });
+
+        await stripe.customers.update(customer.id, {
+          invoice_settings: {
+            default_payment_method: paymentMethodId,
+          },
+        });
+      }
 
       // 1. Update wallet balance
       user.walletBalance += amountUsd; // convert to dollars
