@@ -127,7 +127,7 @@ const stripeWebhook = async (req, res) => {
   const sig = req.headers["stripe-signature"];
   let event;
 
-  console.log("Received Stripe webhook:", req.body);
+  // console.log("Received Stripe webhook:", req.body);
 
   try {
     event = stripe.webhooks.constructEvent(
@@ -143,6 +143,8 @@ const stripeWebhook = async (req, res) => {
   if (event.type === "payment_intent.succeeded") {
     const paymentIntent = event.data.object;
     const { userId, type } = paymentIntent.metadata || {};
+
+    console.log({ paymentIntent });
 
     const stripeCustomerId = paymentIntent.customer;
 
@@ -392,6 +394,10 @@ const getChargingDetails = async (req, res) => {
 
     let cardDetails = null;
 
+    console.log(user.stripeCustomerId);
+
+    console.log("customer id: ", user.stripeCustomerId);
+
     // Fetch card details from Stripe if a customer ID exists
     if (user.stripeCustomerId) {
       const paymentMethods = await stripe.paymentMethods.list({
@@ -424,7 +430,7 @@ const getChargingDetails = async (req, res) => {
     });
   } catch (error) {
     console.error("Stripe/DB Error:", error.message);
-    return res.status(500).send({ status: false, message: error.message });
+    return res.send({ status: false, message: error.message });
   }
 };
 

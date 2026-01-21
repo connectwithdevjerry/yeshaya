@@ -14,7 +14,7 @@ const userSchema = mongoose.Schema({
   ghlAgencyId: { type: String, required: false },
   walletBalance: { type: Number, default: 10 },
   autoCardPay: {
-    status: { type: Boolean, default: false },
+    status: { type: Boolean, default: true },
     least: { type: Number, default: 25 },
     refillAmount: { type: Number, default: 50 },
   },
