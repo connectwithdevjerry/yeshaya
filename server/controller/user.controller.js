@@ -529,6 +529,28 @@ const getCompanyDetails = async (req, res, next) => {
   }
 };
 
+const getUserDetails = async (req, res) => {
+  try {
+    const user = await userModel.findById(req.user);
+
+    return res.send({
+      status: true,
+      data: {
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
+    });
+  } catch (error) {
+    console.log("Error getting user details:", error.data);
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   signup,
   signin,
@@ -540,4 +562,5 @@ module.exports = {
   getCompanyDetails,
   createCompanyDetails,
   updateCompanyDetails,
+  getUserDetails,
 };

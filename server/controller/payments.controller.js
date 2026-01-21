@@ -457,6 +457,35 @@ const getChargingDetails = async (req, res) => {
   }
 };
 
+const updateAutoChargingSettings = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { status, least, refillAmount } = req.body;
+
+    const user = await userModel.findById(userId);
+
+    if (!user) {
+      return res.send({ status: false, message: "User not found" });
+    }
+
+    user.autoCardPay = {
+      status: status !== undefined ? status : user.autoCardPay.status,
+      least: least !== undefined ? least : user.autoCardPay.least,
+      refillAmount:
+        refillAmount !== undefined
+          ? refillAmount
+          : user.autoCardPay.refillAmount,
+    };
+
+    await user.save();
+
+    return res.send({ status: true, message: "Settings updated successfully" });
+  } catch (error) {
+    console.error("DB Error:", error.message);
+    return res.send({ status: false, message: error.message });
+  }
+};
+
 module.exports = {
   callBillingWebhook,
   getLatestConnectedBalance,
@@ -466,4 +495,5 @@ module.exports = {
   paymentConfirmation,
   getTransactionHistory,
   getChargingDetails,
+  updateAutoChargingSettings,
 };

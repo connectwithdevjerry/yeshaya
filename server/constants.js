@@ -74,6 +74,8 @@ const CREATE_CONTACT = "/create-contact";
 const UPDATE_CONTACT = "/update-contact";
 const DELETE_CONTACT = "/delete-contact";
 const GET_CHARGING_DETAILS = "/get-charging-details";
+const UPDATE_CHARGING_DETAILS = "/update-charging-details";
+const GET_USER_DETAILS = "/get-user-details";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -154,4 +156,5 @@ module.exports = {
   UPDATE_CONTACT,
   DELETE_CONTACT,
   GET_CHARGING_DETAILS,
+  UPDATE_CHARGING_DETAILS,GET_USER_DETAILS
 };
