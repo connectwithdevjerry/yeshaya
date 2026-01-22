@@ -98,23 +98,29 @@ export default function MainContent() {
     const currentUrl = window.location.href;
     const referrer = document.referrer;
     
+    console.log('🔍 Early Capture Check');
+    console.log('  - Current URL:', currentUrl);
+    console.log('  - Referrer:', referrer);
+    console.log('  - All search params:', Object.fromEntries(searchParams.entries()));
+    
     // Check if we're coming from GHL custom menu link
     if (referrer.includes('app.gohighlevel.com') || currentUrl.includes('gohighlevel')) {
-      console.log('🔍 Early capture - Referrer:', referrer);
-      console.log('🔍 Early capture - Current URL:', currentUrl);
       
       // Try to extract locationId from referrer or current URL
       const extractLocationId = (url) => {
+        console.log('  - Trying to extract from:', url);
         const patterns = [
-          /\/location\/([a-zA-Z0-9_-]+)/, // Standard: /location/ID
-          /\/v2\/location\/([a-zA-Z0-9_-]+)/, // V2: /v2/location/ID
-          /locationId=([a-zA-Z0-9_-]+)/, // Query: ?locationId=ID
-          /location=([a-zA-Z0-9_-]+)/, // Query: ?location=ID
+          /\/location\/([a-zA-Z0-9_-]{15,25})/, // Standard: /location/ID
+          /\/v2\/location\/([a-zA-Z0-9_-]{15,25})/, // V2: /v2/location/ID
+          /locationId=([a-zA-Z0-9_-]{15,25})/, // Query: ?locationId=ID
+          /location=([a-zA-Z0-9_-]{15,25})/, // Query: ?location=ID
+          /subaccount=([a-zA-Z0-9_-]{15,25})/, // Query: ?subaccount=ID
         ];
         
         for (const pattern of patterns) {
           const match = url.match(pattern);
           if (match && match[1]) {
+            console.log('  - ✅ Match found with pattern:', pattern);
             return match[1];
           }
         }
@@ -128,11 +134,15 @@ export default function MainContent() {
         locationId = searchParams.get('locationId') || 
                      searchParams.get('location') || 
                      searchParams.get('subaccount');
+        if (locationId) console.log('  - ✅ Found in URL params:', locationId);
       }
       
       if (locationId) {
         console.log('✅ Captured locationId:', locationId);
         sessionStorage.setItem('ghl_locationId', locationId);
+        sessionStorage.setItem('ghl_captureTime', Date.now().toString());
+      } else {
+        console.log('❌ Could not extract locationId from any source');
       }
     }
   }, []); // Run once on mount
@@ -146,11 +156,25 @@ export default function MainContent() {
 
   // 🔥 Helper: Get locationId from storage or URL
   const getLocationId = () => {
+    console.log('🔍 Getting locationId...');
+    
     // First check sessionStorage
     let locationId = sessionStorage.getItem('ghl_locationId');
+    const captureTime = sessionStorage.getItem('ghl_captureTime');
+    
     if (locationId) {
-      console.log('✅ LocationId from sessionStorage:', locationId);
-      return locationId;
+      console.log('  - Found in sessionStorage:', locationId);
+      console.log('  - Capture time:', new Date(parseInt(captureTime || '0')).toISOString());
+      
+      // Clear if older than 5 minutes
+      if (captureTime && Date.now() - parseInt(captureTime) > 5 * 60 * 1000) {
+        console.log('  - ⚠️ LocationId expired (>5min), clearing');
+        sessionStorage.removeItem('ghl_locationId');
+        sessionStorage.removeItem('ghl_captureTime');
+        locationId = null;
+      } else {
+        return locationId;
+      }
     }
     
     // Check URL params
@@ -159,7 +183,9 @@ export default function MainContent() {
                  searchParams.get('subaccount');
     
     if (locationId) {
-      console.log('✅ LocationId from URL params:', locationId);
+      console.log('  - Found in URL params:', locationId);
+    } else {
+      console.log('  - ❌ Not found in sessionStorage or URL params');
     }
     
     return locationId;
@@ -242,10 +268,17 @@ export default function MainContent() {
           console.log('📥 Fetching subaccounts for locationId:', locationId);
           
           const result = await dispatch(fetchImportedSubAccounts());
-          const fetchedSubAccounts = result.payload?.data || [];
-          const fetchedAgencyId = result.payload?.agencyId || null;
           
+          // 🔥 FIX: The API response structure is { status, data: [...], agencyId }
+          const apiResponse = result.payload;
+          const fetchedSubAccounts = Array.isArray(apiResponse?.data) 
+            ? apiResponse.data 
+            : (Array.isArray(apiResponse) ? apiResponse : []);
+          const fetchedAgencyId = apiResponse?.agencyId || null;
+          
+          console.log('📦 API Response:', apiResponse);
           console.log('📦 Fetched subaccounts:', fetchedSubAccounts);
+          console.log('🏢 Agency ID:', fetchedAgencyId);
           console.log('🏢 Agency ID:', fetchedAgencyId);
           
           // Find matching account by locationId
