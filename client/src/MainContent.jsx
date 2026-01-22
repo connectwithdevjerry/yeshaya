@@ -121,49 +121,48 @@ export default function MainContent() {
     }
   }, [searchParams]);
 
-// 🔥 2. AUTO-NAVIGATION: Updated to trigger immediately after login
+// 🔥 2. AUTO-NAVIGATION & AUTO-REFRESH LOGIC
 useEffect(() => {
   const handleGhlNavigation = async () => {
     const pendingId = localStorage.getItem('ghl_pending_locationId');
     
     // EXIT CONDITIONS
     if (!isAuthenticated || !pendingId || hasRedirected.current) return;
-    
-    // If we are already in the app with parameters, don't re-run
     if (searchParams.get("subaccount")) {
         localStorage.removeItem('ghl_pending_locationId');
         return;
     }
-
-    // Prevent double-execution
     if (isProcessing.current) return;
 
     try {
       isProcessing.current = true;
       setIsNavigatingToGhl(true);
       
-      console.log('🔄 Login Detected. Matching GHL ID:', pendingId);
+      console.log('🔄 Login/Entry Detected. Matching GHL ID:', pendingId);
 
-      // --- ATTEMPT 1 ---
+      // --- ATTEMPT 1: Fetch Immediately ---
       const result = await dispatch(fetchImportedSubAccounts());
       let subAccountList = Array.isArray(result.payload?.data) ? result.payload.data : [];
 
-      // --- THE "WAIT" LOGIC ---
-      // If 0 accounts, wait 3.5 seconds and try again (Handles the DB buffering)
-      if (subAccountList.length === 0) {
-        console.warn("⏳ List empty. Waiting 3.5s for backend sync...");
-        await new Promise(resolve => setTimeout(resolve, 3500)); 
+      // --- MATCHING ATTEMPT 1 ---
+      let match = subAccountList.find(acc => String(acc.id) === String(pendingId));
+
+      // --- NEW LOGIC: If no match, wait 5 seconds then force page refresh ---
+      if (!match) {
+        console.warn("⏳ No match found yet. DB might be slow. Refreshing page in 5s...");
         
-        const retryResult = await dispatch(fetchImportedSubAccounts());
-        subAccountList = Array.isArray(retryResult.payload?.data) ? retryResult.payload.data : [];
+        // Show a message to the user so they know why it's taking long
+        const timer = setTimeout(() => {
+          console.log("🚀 5 Seconds up! Reloading page to sync with DB...");
+          window.location.reload(); 
+        }, 5000);
+
+        return () => clearTimeout(timer); // Cleanup if component unmounts
       }
 
-      console.log(`📊 Final Check: Found ${subAccountList.length} accounts.`);
-
-      const match = subAccountList.find(acc => String(acc.id) === String(pendingId));
-
+      // --- IF MATCH FOUND BEFORE REFRESH ---
       if (match) {
-        console.log('🎯 Match found! Navigating to Assistant Page...');
+        console.log('🎯 Match found! Navigating...');
         hasRedirected.current = true;
         
         const finalAgencyId = result.payload?.agencyId || match.companyId || agencyId;
@@ -177,30 +176,18 @@ useEffect(() => {
           route: "/assistants",
         });
 
-        // CLEAR STORAGE BEFORE NAVIGATING
         localStorage.removeItem('ghl_pending_locationId');
         setIsNavigatingToGhl(false);
-        
-        // Use replace: true to prevent "back" button loops
         navigate(`/app?${params.toString()}`, { replace: true });
-      } else {
-        // If we found accounts but none match, stop processing but don't clear 
-        // until we are sure it's not a slow DB update.
-        console.warn('⚠️ No match found in current list.');
-        setIsNavigatingToGhl(false);
-        isProcessing.current = false; 
       }
     } catch (error) {
-      console.error('❌ GHL Navigation Error:', error);
+      console.error('❌ GHL Sync Error:', error);
       setIsNavigatingToGhl(false);
       isProcessing.current = false;
     }
   };
 
   handleGhlNavigation();
-
-  // Added 'isAuthenticated' and 'location' to ensure this fires 
-  // the moment the user lands on the dashboard after login.
 }, [isAuthenticated, location.pathname, dispatch, navigate, agencyId, searchParams]);
 
   const pageTitles = useMemo(
