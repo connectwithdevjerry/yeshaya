@@ -88,27 +88,38 @@ export default function MainContent() {
   const [searchParams] = useSearchParams();
   
   const hasRedirected = useRef(false);
+  const isProcessing = useRef(false);
 
   const { agencyId } = useSelector((state) => state.integrations || {});
   const { companyDetails, isAuthenticated } = useSelector((state) => state.auth || {});
 
-  // 🔥 MAIN FIX: Extract locationId from GoHighLevel URL
+  // 🔥 Helper: Check if URL is from GoHighLevel
+  const isFromGoHighLevel = () => {
+    const currentUrl = window.location.href;
+    const referrer = document.referrer;
+    
+    return (
+      currentUrl.includes('app.gohighlevel.com') ||
+      referrer.includes('app.gohighlevel.com')
+    );
+  };
+
+  // 🔥 Helper: Extract locationId from GoHighLevel URL
   const extractLocationIdFromUrl = () => {
     const currentUrl = window.location.href;
     const referrer = document.referrer;
     
-    // Check if current URL or referrer contains GoHighLevel location pattern
     const isGHLUrl = (url) => url.includes('app.gohighlevel.com') && url.includes('/location/');
     
     let locationId = null;
     
-    // Try to extract from current URL first
+    // Try current URL first
     if (isGHLUrl(currentUrl)) {
       const match = currentUrl.match(/\/location\/([^\/\?&#]+)/);
       if (match) locationId = match[1];
     }
     
-    // If not found, try referrer
+    // Try referrer
     if (!locationId && isGHLUrl(referrer)) {
       const match = referrer.match(/\/location\/([^\/\?&#]+)/);
       if (match) locationId = match[1];
@@ -124,106 +135,106 @@ export default function MainContent() {
     return locationId;
   };
 
-  // 1️⃣ Effect: Auto-navigate from GHL Custom Menu Link
+  // 1️⃣ UNIFIED EFFECT: Handle all navigation logic in one place
   useEffect(() => {
-    const handleGHLNavigation = async () => {
-      // Prevent multiple redirects
-      if (hasRedirected.current || !isAuthenticated) return;
+    const handleNavigation = async () => {
+      // 🛑 Prevent multiple runs
+      if (hasRedirected.current || isProcessing.current || !isAuthenticated) return;
       
-      // Only run on root or /app paths
+      // 🛑 Only run on root or /app paths
       if (location.pathname !== '/' && location.pathname !== '/app') return;
-      
-      // Extract locationId from URL
-      const locationId = extractLocationIdFromUrl();
-      
-      console.log('🔍 Detected locationId:', locationId);
-      
-      // If no locationId detected, skip
-      if (!locationId) return;
-      
-      // If already on correct subaccount, skip
-      if (searchParams.get('subaccount') === locationId) return;
 
-      try {
-        hasRedirected.current = true;
-        console.log('📥 Fetching subaccounts for locationId:', locationId);
+      const subaccountParam = searchParams.get("subaccount");
+      const agencyidParam = searchParams.get("agencyid");
+      const isFromGHL = isFromGoHighLevel();
+      
+      console.log('🔍 Navigation check:', {
+        path: location.pathname,
+        isFromGHL,
+        hasSubaccount: !!subaccountParam,
+        hasAgency: !!agencyidParam
+      });
+
+      // CASE 1: Coming from GoHighLevel without params - need to fetch and redirect
+      if (isFromGHL && !subaccountParam) {
+        const locationId = extractLocationIdFromUrl();
         
-        const result = await dispatch(fetchImportedSubAccounts());
+        console.log('🔍 GHL detected, locationId:', locationId);
         
-        // ✅ Access the correct structure from your API response
-        const fetchedSubAccounts = result.payload?.data || [];
-        const fetchedAgencyId = result.payload?.agencyId || null;
-        
-        console.log('📦 Fetched subaccounts:', fetchedSubAccounts);
-        console.log('🏢 Agency ID:', fetchedAgencyId);
-        
-        // Find matching account by locationId
-        const matchingAccount = fetchedSubAccounts.find(acc => acc.id === locationId);
-        
-        if (!matchingAccount) {
-          console.warn('❌ No matching subaccount found for locationId:', locationId);
-          hasRedirected.current = false;
+        if (!locationId) {
+          console.warn('⚠️ No locationId found in GHL URL');
           return;
         }
-        
-        console.log('✅ Found matching account:', matchingAccount);
 
-        // Determine target route
-        let targetRoute = "/assistants";
-        if (location.pathname === "/app") {
-          targetRoute = searchParams.get("route") || "/assistants";
-        } else if (["/inbox", "/call", "/contacts", "/knowledge", "/assistants", "/activetags", "/numbers", "/pools", "/widgets", "/helps", "/ghl_settings"].includes(location.pathname)) {
-          targetRoute = location.pathname;
-        }
+        try {
+          isProcessing.current = true;
+          hasRedirected.current = true;
+          
+          console.log('📥 Fetching subaccounts for locationId:', locationId);
+          
+          const result = await dispatch(fetchImportedSubAccounts());
+          const fetchedSubAccounts = result.payload?.data || [];
+          const fetchedAgencyId = result.payload?.agencyId || null;
+          
+          console.log('📦 Fetched subaccounts:', fetchedSubAccounts);
+          
+          const matchingAccount = fetchedSubAccounts.find(acc => acc.id === locationId);
+          
+          if (!matchingAccount) {
+            console.warn('❌ No matching subaccount found for locationId:', locationId);
+            isProcessing.current = false;
+            hasRedirected.current = false;
+            return;
+          }
+          
+          console.log('✅ Found matching account:', matchingAccount);
 
-        // Use companyId from matched account, fallback to fetched agencyId
-        const finalAgencyId = matchingAccount.companyId || fetchedAgencyId || companyDetails?.id || agencyId || "UNKNOWN_COMPANY";
-        
-        // Build navigation params
-        const params = new URLSearchParams({
-          agencyid: finalAgencyId,
-          subaccount: matchingAccount.id,
-          allow: "yes",
-          myname: encodeURIComponent(matchingAccount.name || "NoName"),
-          myemail: encodeURIComponent(matchingAccount.email || "noemail@example.com"),
-          route: targetRoute,
-        });
+          const targetRoute = searchParams.get("route") || "/assistants";
+          const finalAgencyId = matchingAccount.companyId || fetchedAgencyId || companyDetails?.id || agencyId;
+          
+          const params = new URLSearchParams({
+            agencyid: finalAgencyId,
+            subaccount: matchingAccount.id,
+            allow: "yes",
+            myname: encodeURIComponent(matchingAccount.name || "NoName"),
+            myemail: encodeURIComponent(matchingAccount.email || "noemail@example.com"),
+            route: targetRoute,
+          });
 
-        console.log('🚀 Navigating with params:', params.toString());
+          console.log('🚀 GHL Navigation to:', `/app?${params.toString()}`);
 
-        // Navigate to /app with proper parameters
-        setTimeout(() => {
           navigate(`/app?${params.toString()}`, { replace: true });
-        }, 0);
-        
-      } catch (error) {
-        console.error('❌ Navigation Error:', error);
-        hasRedirected.current = false;
+          
+        } catch (error) {
+          console.error('❌ GHL Navigation Error:', error);
+          isProcessing.current = false;
+          hasRedirected.current = false;
+        }
+        return;
+      }
+
+      // CASE 2: Already have params (from GHL or direct) - just redirect to /app
+      if (location.pathname === "/" && subaccountParam && agencyidParam) {
+        hasRedirected.current = true;
+        console.log("🚀 Redirecting to /app with existing params");
+
+        const params = new URLSearchParams(searchParams);
+        if (!params.get("route")) params.set("route", "/assistants");
+        if (!params.has("allow")) params.set("allow", "yes");
+
+        navigate(`/app?${params.toString()}`, { replace: true });
+        return;
+      }
+
+      // CASE 3: Coming from GHL but already on /app with params - do nothing
+      if (location.pathname === "/app" && subaccountParam) {
+        console.log("✅ Already on /app with correct params");
+        return;
       }
     };
     
-    handleGHLNavigation();
-  }, [location.pathname, isAuthenticated, dispatch, navigate, searchParams, agencyId, companyDetails]);
-
-  // 2️⃣ Effect: Handle basic GHL context redirect (fallback)
-  useEffect(() => {
-    if (hasRedirected.current) return;
-
-    const subaccount = searchParams.get("subaccount");
-    const agencyid = searchParams.get("agencyid");
-    const isGHLReferrer = document.referrer.includes("app.gohighlevel.com");
-    
-    if (location.pathname === "/" && ((subaccount && agencyid) || isGHLReferrer)) {
-      hasRedirected.current = true;
-      console.log("🚀 Basic GHL context redirecting...");
-
-      const params = new URLSearchParams(searchParams);
-      if (!params.get("route")) params.set("route", "/assistants");
-      if (!params.has("allow")) params.set("allow", "yes");
-
-      navigate(`/app?${params.toString()}`, { replace: true });
-    }
-  }, [location.pathname, searchParams, navigate]);
+    handleNavigation();
+  }, [location.pathname, searchParams, isAuthenticated, dispatch, navigate, agencyId, companyDetails]);
 
   const pageTitles = useMemo(() => ({
     "/": "Accounts",
