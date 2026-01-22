@@ -95,14 +95,13 @@ export default function MainContent() {
 
   const hasRedirected = useRef(false);
   const isProcessing = useRef(false);
-  const [isNavigatingToGhl, setIsNavigatingToGhl] = useState(false);
 
   const { agencyId } = useSelector((state) => state.integrations || {});
   const { companyDetails, isAuthenticated } = useSelector(
     (state) => state.auth || {},
   );
 
-  // 🔥 1. IMMEDIATE CAPTURE: Store in localStorage to survive login redirects
+  // 🔥 1. IMMEDIATE CAPTURE: Store in localStorage
   useEffect(() => {
     let detectedId =
       searchParams.get("subaccount") || searchParams.get("locationId");
@@ -121,78 +120,69 @@ export default function MainContent() {
     }
   }, [searchParams]);
 
-// 🔥 AUTO-NAVIGATION: Now with a mandatory 5-second auto-refresh failsafe
-useEffect(() => {
-  let refreshTimer;
+  // 🔥 2. SILENT AUTO-NAVIGATION & REFRESH (Background only)
+  useEffect(() => {
+    let refreshTimer;
 
-  const handleGhlNavigation = async () => {
-    const pendingId = localStorage.getItem('ghl_pending_locationId');
-    
-    // 1. Only run if user is logged in and we have a GHL ID waiting
-    if (!isAuthenticated || !pendingId || hasRedirected.current) return;
-    
-    // 2. Lock the process to prevent loops
-    if (isProcessing.current) return;
-    isProcessing.current = true;
-    setIsNavigatingToGhl(true);
+    const handleGhlNavigation = async () => {
+      const pendingId = localStorage.getItem("ghl_pending_locationId");
 
-    // --- 🚀 THE "MANUAL REFRESH" AUTOMATION ---
-    // If we haven't successfully navigated in 5 seconds, we FORCE a page reload.
-    console.log("⏱️ Failsafe active: Automating page refresh in 5 seconds...");
-    refreshTimer = setTimeout(() => {
-      if (!hasRedirected.current) {
-        console.log("🔄 5s reached. Performing auto-refresh to trigger navigation...");
-        window.location.reload();
+      // Only run if logged in and we have an ID to find
+      if (!isAuthenticated || !pendingId || hasRedirected.current) return;
+
+      if (isProcessing.current) return;
+      isProcessing.current = true;
+
+      // --- MANDATORY 5-SECOND REFRESH ---
+      // If we don't navigate in 5 seconds, perform the manual refresh automatically
+      console.log("⏱️ Background refresh timer started (5s)...");
+      refreshTimer = setTimeout(() => {
+        if (!hasRedirected.current) {
+          console.log("🔄 5s reached. Auto-refreshing to trigger GHL match...");
+          window.location.reload();
+        }
+      }, 5000);
+
+      try {
+        console.log("🔄 Background check for match:", pendingId);
+
+        const result = await dispatch(fetchImportedSubAccounts());
+        const subAccountList = Array.isArray(result.payload?.data)
+          ? result.payload.data
+          : [];
+
+        const match = subAccountList.find(
+          (acc) => String(acc.id) === String(pendingId)
+        );
+
+        if (match) {
+          console.log("🎯 Match found! Navigating to assistant...");
+          clearTimeout(refreshTimer);
+          hasRedirected.current = true;
+
+          const params = new URLSearchParams({
+            agencyid: match.companyId || agencyId,
+            subaccount: match.id,
+            allow: "yes",
+            myname: encodeURIComponent(match.name || "User"),
+            myemail: encodeURIComponent(match.email || ""),
+            route: "/assistants",
+          });
+
+          localStorage.removeItem("ghl_pending_locationId");
+          navigate(`/app?${params.toString()}`, { replace: true });
+        }
+      } catch (error) {
+        console.error("❌ GHL Sync Error:", error);
       }
-    }, 5000);
+    };
 
-    try {
-      console.log('🔄 Attempting immediate match for:', pendingId);
+    handleGhlNavigation();
 
-      // Fetch the subaccounts from Redux/API
-      const result = await dispatch(fetchImportedSubAccounts());
-      const subAccountList = Array.isArray(result.payload?.data) ? result.payload.data : [];
-      
-      // Look for the specific GHL ID
-      const match = subAccountList.find(acc => String(acc.id) === String(pendingId));
-
-      if (match) {
-        console.log('🎯 Match found! Cancelling auto-refresh and navigating...');
-        
-        // SUCCESS: Kill the refresh timer so the page doesn't reload
-        clearTimeout(refreshTimer);
-        hasRedirected.current = true;
-        
-        const params = new URLSearchParams({
-          agencyid: match.companyId || agencyId,
-          subaccount: match.id,
-          allow: "yes",
-          myname: encodeURIComponent(match.name || "User"),
-          myemail: encodeURIComponent(match.email || ""),
-          route: "/assistants",
-        });
-
-        localStorage.removeItem('ghl_pending_locationId');
-        setIsNavigatingToGhl(false);
-        
-        // Final Jump
-        navigate(`/app?${params.toString()}`, { replace: true });
-      } else {
-        console.warn('⚠️ ID not found in list yet. Homepage will auto-refresh shortly...');
-      }
-    } catch (error) {
-      console.error('❌ GHL Sync Error:', error);
-      // We do nothing here; the 5-second timer will trigger the refresh anyway
-    }
-  };
-
-  handleGhlNavigation();
-
-  return () => {
-    if (refreshTimer) clearTimeout(refreshTimer);
-  };
-  // We track location.pathname to catch the moment the user hits the dashboard after login
-}, [isAuthenticated, location.pathname, dispatch, navigate, agencyId]);
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
+  }, [isAuthenticated, location.pathname, dispatch, navigate, agencyId]);
 
   const pageTitles = useMemo(
     () => ({
@@ -219,7 +209,7 @@ useEffect(() => {
       "/payment/connection-success": "Payment Success",
       "/payment/connection-failed": "Payment Failed",
     }),
-    [],
+    []
   );
 
   const getCurrentTitle = () => {
@@ -234,16 +224,6 @@ useEffect(() => {
 
   return (
     <div className="flex flex-col flex-1 relative">
-      {/* 🚀 Loading Overlay for GHL Auto-Navigation */}
-      {isNavigatingToGhl && (
-        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="mt-4 text-blue-800 font-semibold animate-pulse">
-            Connecting to your GHL Assistant...
-          </p>
-        </div>
-      )}
-
       <Header title={getCurrentTitle()} />
       <main className="flex-1 overflow-y-auto">
         <Routes>
