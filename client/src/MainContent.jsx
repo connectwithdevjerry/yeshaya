@@ -34,7 +34,7 @@ import GHLSettings from "./pages/pages-ghl/Settings";
 import { AssistantBuilderPage } from "./components/components-ghl/AssistantsBuilder/AssistantsBuilder";
 import KnowledgeDetailPage from "./components/components-ghl/Knowledge/BlogEdit";
 
-// ✅ Component to render based on route parameter
+// ✅ Component to render based on route parameterss
 const AppRouter = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const route = searchParams.get("route") || "/assistants";
@@ -104,6 +104,103 @@ export default function MainContent() {
   const { subAccounts, agencyId } = useSelector(
     (state) => state.integrations || {}
   );
+  const { companyDetails } = useSelector((state) => state.auth || {});
+
+  // New useEffect: Auto-navigate from GHL Custom Menu Link in URL or referrer
+  useEffect(() => {
+    const handleGHLUrlNavigation = async () => {
+      // Only run on root path or /app when no subaccount params exist
+      if (location.pathname !== '/' && location.pathname !== '/app') return;
+      
+      // Check if current URL or referrer contains GHL custom menu link pattern
+      const currentUrl = window.location.href;
+      const referrer = document.referrer;
+      
+      // Check both current URL and referrer for GHL custom menu link
+      const urlToCheck = currentUrl.includes('app.gohighlevel.com') && 
+                         currentUrl.includes('/location/') && 
+                         currentUrl.includes('/custom-menu-link/') 
+                         ? currentUrl 
+                         : (referrer.includes('app.gohighlevel.com') && 
+                            referrer.includes('/location/') && 
+                            referrer.includes('/custom-menu-link/')
+                            ? referrer 
+                            : null);
+      
+      if (!urlToCheck) {
+        return;
+      }
+      
+      console.log('🔗 Detected GHL custom menu link:', urlToCheck);
+      
+      // Extract location ID from URL
+      // Format: https://app.gohighlevel.com/v2/location/{LOCATION_ID}/custom-menu-link/{LINK_ID}
+      const locationMatch = urlToCheck.match(/\/location\/([^\/]+)\//);
+      if (!locationMatch) {
+        console.log('❌ Could not extract location ID from URL');
+        return;
+      }
+      
+      const locationId = locationMatch[1];
+      console.log('🔍 Extracted GHL location ID:', locationId);
+      
+      // Check if we already have this subaccount in params (avoid infinite loop)
+      const existingSubaccount = searchParams.get('subaccount');
+      if (existingSubaccount === locationId) {
+        console.log('ℹ️ Already navigated to this subaccount');
+        return;
+      }
+      
+      // Fetch subaccounts if not already loaded
+      if (!subAccounts || subAccounts.length === 0) {
+        console.log('📥 Fetching subaccounts...');
+        await dispatch(fetchImportedSubAccounts());
+      }
+      
+      setTimeout(() => {
+        // Re-read from selector after dispatch
+        const store = dispatch((_, getState) => getState());
+        const currentSubAccounts = store.integrations?.subAccounts || subAccounts;
+        
+        if (!currentSubAccounts || currentSubAccounts.length === 0) {
+          console.log('❌ No subaccounts available');
+          return;
+        }
+        
+        // Find matching subaccount by location ID
+        const matchingAccount = currentSubAccounts.find(
+          acc => acc.id === locationId
+        );
+        
+        if (!matchingAccount) {
+          console.log('❌ No matching subaccount found for location:', locationId);
+          console.log('📋 Available subaccounts:', currentSubAccounts.map(a => a.id));
+          return;
+        }
+        
+        console.log('✅ Found matching account:', matchingAccount.name);
+        
+        // Build navigation URL with all required params (same as UserProfile)
+        const params = new URLSearchParams({
+          agencyid: companyDetails?.id || companyDetails?.companyId || agencyId || 'UNKNOWN_COMPANY',
+          subaccount: matchingAccount.id,
+          allow: 'yes',
+          myname: matchingAccount.name || matchingAccount.companyName || 'NoName',
+          myemail: matchingAccount.email || 'noemail@example.com',
+          route: '/assistants'
+        });
+        
+        const targetUrl = `/app?${params.toString()}`;
+        console.log('🚀 Auto-navigating to:', targetUrl);
+        
+        // Navigate to assistants page
+        navigate(targetUrl, { replace: true });
+        
+      }, 500);
+    };
+    
+    handleGHLUrlNavigation();
+  }, [location.pathname, subAccounts, agencyId, companyDetails, dispatch, navigate, searchParams]);
 
   // First useEffect: Handle basic GHL context redirect
   useEffect(() => {

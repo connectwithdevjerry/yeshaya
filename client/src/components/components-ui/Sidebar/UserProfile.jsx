@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Building2 } from 'lucide-react';
 import { getCompanyDetails } from '../../../store/slices/authSlice';
 import { fetchSubAccounts } from '../../../store/slices/integrationSlice';
 
 export function UserProfile() {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Get company details and subaccounts from Redux
@@ -26,6 +30,52 @@ export function UserProfile() {
 
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
+  };
+
+  const handleSubAccountClick = (subAccount) => {
+    try {
+      let targetRoute = "/assistants";
+
+      if (location.pathname === "/app") {
+        targetRoute = searchParams.get("route") || "/assistants";
+      } else if (
+        [
+          "/inbox",
+          "/call",
+          "/contacts",
+          "/knowledge",
+          "/assistants",
+          "/activetags",
+          "/numbers",
+          "/pools",
+          "/widgets",
+          "/helps",
+          "/ghl_settings",
+          "/blog",
+        ].includes(location.pathname)
+      ) {
+        targetRoute = location.pathname;
+      }
+
+      const params = new URLSearchParams({
+        agencyid: companyDetails?.id || companyDetails?.companyId || "UNKNOWN_COMPANY",
+        subaccount: subAccount.id || "NO_ID",
+        allow: "yes",
+        myname: subAccount.name || subAccount.companyName || "NoName",
+        myemail: subAccount.email || "noemail@example.com",
+        route: targetRoute,
+      });
+
+      const url = `/app?${params.toString()}`;
+      
+      setIsDropdownOpen(false);
+      
+      setTimeout(() => {
+        navigate(url);
+      }, 0);
+    } catch (err) {
+      console.error("❌ Navigation error:", err);
+    }
   };
 
   return (
@@ -85,6 +135,7 @@ export function UserProfile() {
               {subAccounts.map((subAccount) => (
                 <div
                   key={subAccount.id}
+                  onClick={() => handleSubAccountClick(subAccount)}
                   className="px-4 py-2 hover:bg-gray-50 cursor-pointer transition-colors"
                 >
                   <div className="flex items-center space-x-3">
