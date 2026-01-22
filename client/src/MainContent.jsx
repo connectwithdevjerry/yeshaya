@@ -151,56 +151,75 @@ export default function MainContent() {
         return;
       }
       
-      // Fetch subaccounts if not already loaded
-      if (!subAccounts || subAccounts.length === 0) {
-        console.log('📥 Fetching subaccounts...');
-        await dispatch(fetchImportedSubAccounts());
-      }
-      
-      setTimeout(() => {
-        // Re-read from selector after dispatch
-        const store = dispatch((_, getState) => getState());
-        const currentSubAccounts = store.integrations?.subAccounts || subAccounts;
+      try {
+        // Always fetch subaccounts using fetchImportedSubAccounts to get the latest data
+        console.log('📥 Fetching subaccounts using fetchImportedSubAccounts...');
+        const result = await dispatch(fetchImportedSubAccounts());
         
-        if (!currentSubAccounts || currentSubAccounts.length === 0) {
-          console.log('❌ No subaccounts available');
+        // Extract subaccounts and agencyId from the fetch result
+        // fetchImportedSubAccounts returns { locations, agencyId }
+        const fetchedSubAccounts = result.payload?.locations || [];
+        const fetchedAgencyId = result.payload?.agencyId || null;
+        
+        if (!fetchedSubAccounts || fetchedSubAccounts.length === 0) {
+          console.log('❌ No subaccounts available after fetch');
           return;
         }
         
-        // Find matching subaccount by location ID
-        const matchingAccount = currentSubAccounts.find(
+        console.log('📋 Fetched subaccounts:', fetchedSubAccounts.length);
+        console.log('📋 Available subaccount IDs:', fetchedSubAccounts.map(a => a.id));
+        
+        // Find matching subaccount by location ID (the id field matches the locationId from URL)
+        const matchingAccount = fetchedSubAccounts.find(
           acc => acc.id === locationId
         );
         
         if (!matchingAccount) {
           console.log('❌ No matching subaccount found for location:', locationId);
-          console.log('📋 Available subaccounts:', currentSubAccounts.map(a => a.id));
+          console.log('📋 Available subaccount IDs:', fetchedSubAccounts.map(a => a.id));
           return;
         }
         
         console.log('✅ Found matching account:', matchingAccount.name);
+        console.log('📦 Account data:', {
+          id: matchingAccount.id,
+          companyId: matchingAccount.companyId,
+          name: matchingAccount.name,
+          email: matchingAccount.email,
+          firstName: matchingAccount.firstName,
+          lastName: matchingAccount.lastName
+        });
         
-        // Build navigation URL with all required params (same as UserProfile)
+        // Build navigation URL using all required parameters from the fetched subaccount data
         const params = new URLSearchParams({
-          agencyid: companyDetails?.id || companyDetails?.companyId || agencyId || 'UNKNOWN_COMPANY',
+          agencyid: matchingAccount.companyId || fetchedAgencyId || agencyId || 'UNKNOWN_COMPANY',
           subaccount: matchingAccount.id,
           allow: 'yes',
-          myname: matchingAccount.name || matchingAccount.companyName || 'NoName',
-          myemail: matchingAccount.email || 'noemail@example.com',
+          myname: matchingAccount.name || matchingAccount.business?.name || 'NoName',
+          myemail: matchingAccount.email || matchingAccount.business?.email || 'noemail@example.com',
           route: '/assistants'
         });
         
         const targetUrl = `/app?${params.toString()}`;
         console.log('🚀 Auto-navigating to:', targetUrl);
+        console.log('📋 Navigation params:', {
+          agencyid: params.get('agencyid'),
+          subaccount: params.get('subaccount'),
+          myname: params.get('myname'),
+          myemail: params.get('myemail'),
+          route: params.get('route')
+        });
         
         // Navigate to assistants page
         navigate(targetUrl, { replace: true });
         
-      }, 500);
+      } catch (error) {
+        console.error('❌ Error fetching or navigating to subaccount:', error);
+      }
     };
     
     handleGHLUrlNavigation();
-  }, [location.pathname, subAccounts, agencyId, companyDetails, dispatch, navigate, searchParams]);
+  }, [location.pathname, agencyId, dispatch, navigate, searchParams]);
 
   // First useEffect: Handle basic GHL context redirect
   useEffect(() => {
