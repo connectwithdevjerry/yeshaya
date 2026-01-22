@@ -20,6 +20,7 @@ import ProtectedRoute from "./ProtectedRoutes";
 import { verifyToken } from "./store/slices/authSlice";
 import { useCurrentAccount } from "./hooks/useCurrentAccount";
 import {Toaster} from 'react-hot-toast';
+import {GHLLocationCapture} from './GHLLocationCapture.jsx'
 
 // Auth pages
 import Login from "./pages/pages-ui/Login";
@@ -90,6 +91,7 @@ function Layout() {
 
   return (
     <div className="flex h-screen bg-gray-50">
+      <GHLLocationCapture />
       <Toaster position="top-right" reverseOrder={false} />
       {!isAuthPage &&
         isAuthenticated &&

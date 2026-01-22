@@ -93,81 +93,75 @@ export default function MainContent() {
   const { agencyId } = useSelector((state) => state.integrations || {});
   const { companyDetails, isAuthenticated } = useSelector((state) => state.auth || {});
 
+  // 🔥 CAPTURE locationId EARLY - before any navigation
+  useEffect(() => {
+    const currentUrl = window.location.href;
+    const referrer = document.referrer;
+    
+    // Check if we're coming from GHL custom menu link
+    if (referrer.includes('app.gohighlevel.com') || currentUrl.includes('gohighlevel')) {
+      console.log('🔍 Early capture - Referrer:', referrer);
+      console.log('🔍 Early capture - Current URL:', currentUrl);
+      
+      // Try to extract locationId from referrer or current URL
+      const extractLocationId = (url) => {
+        const patterns = [
+          /\/location\/([a-zA-Z0-9_-]+)/, // Standard: /location/ID
+          /\/v2\/location\/([a-zA-Z0-9_-]+)/, // V2: /v2/location/ID
+          /locationId=([a-zA-Z0-9_-]+)/, // Query: ?locationId=ID
+          /location=([a-zA-Z0-9_-]+)/, // Query: ?location=ID
+        ];
+        
+        for (const pattern of patterns) {
+          const match = url.match(pattern);
+          if (match && match[1]) {
+            return match[1];
+          }
+        }
+        return null;
+      };
+      
+      let locationId = extractLocationId(referrer) || extractLocationId(currentUrl);
+      
+      // Also check URL params
+      if (!locationId) {
+        locationId = searchParams.get('locationId') || 
+                     searchParams.get('location') || 
+                     searchParams.get('subaccount');
+      }
+      
+      if (locationId) {
+        console.log('✅ Captured locationId:', locationId);
+        sessionStorage.setItem('ghl_locationId', locationId);
+      }
+    }
+  }, []); // Run once on mount
+
   // 🔥 Helper: Check if URL is from GoHighLevel
   const isFromGoHighLevel = () => {
-    const currentUrl = window.location.href;
     const referrer = document.referrer;
-    
-    return (
-      currentUrl.includes('app.gohighlevel.com') ||
-      referrer.includes('app.gohighlevel.com')
-    );
+    const hasStoredLocation = !!sessionStorage.getItem('ghl_locationId');
+    return referrer.includes('app.gohighlevel.com') || hasStoredLocation;
   };
 
-  // 🔥 Helper: Extract locationId from GoHighLevel URL
-  const extractLocationIdFromUrl = () => {
-    const currentUrl = window.location.href;
-    const referrer = document.referrer;
-    
-    console.log('🔍 URL Debug:', {
-      currentUrl,
-      referrer,
-      searchParams: Object.fromEntries(searchParams.entries())
-    });
-    
-    const isGHLUrl = (url) => url.includes('app.gohighlevel.com') && url.includes('/location/');
-    
-    let locationId = null;
-    
-    // Try current URL first
-    if (isGHLUrl(currentUrl)) {
-      const match = currentUrl.match(/\/location\/([^\/\?&#]+)/);
-      if (match) {
-        locationId = match[1];
-        console.log('✅ LocationId from current URL:', locationId);
-      }
+  // 🔥 Helper: Get locationId from storage or URL
+  const getLocationId = () => {
+    // First check sessionStorage
+    let locationId = sessionStorage.getItem('ghl_locationId');
+    if (locationId) {
+      console.log('✅ LocationId from sessionStorage:', locationId);
+      return locationId;
     }
     
-    // Try referrer
-    if (!locationId && isGHLUrl(referrer)) {
-      const match = referrer.match(/\/location\/([^\/\?&#]+)/);
-      if (match) {
-        locationId = match[1];
-        console.log('✅ LocationId from referrer:', locationId);
-      }
+    // Check URL params
+    locationId = searchParams.get('locationId') || 
+                 searchParams.get('location') || 
+                 searchParams.get('subaccount');
+    
+    if (locationId) {
+      console.log('✅ LocationId from URL params:', locationId);
     }
     
-    // Check URL params as fallback
-    if (!locationId) {
-      locationId = searchParams.get('locationId') || 
-                   searchParams.get('location') || 
-                   searchParams.get('subaccount');
-      if (locationId) {
-        console.log('✅ LocationId from params:', locationId);
-      }
-    }
-    
-    // 🔥 NEW: Try to extract from the full GHL URL structure
-    // Sometimes GHL URLs look like: https://app.gohighlevel.com/v2/location/LOCATION_ID/...
-    if (!locationId && referrer.includes('gohighlevel.com')) {
-      const patterns = [
-        /\/location\/([a-zA-Z0-9_-]+)/,  // Standard pattern
-        /\/v2\/location\/([a-zA-Z0-9_-]+)/, // V2 pattern
-        /location=([a-zA-Z0-9_-]+)/, // Query param
-        /locationId=([a-zA-Z0-9_-]+)/ // Query param variant
-      ];
-      
-      for (const pattern of patterns) {
-        const match = referrer.match(pattern);
-        if (match && match[1]) {
-          locationId = match[1];
-          console.log('✅ LocationId from pattern match:', locationId);
-          break;
-        }
-      }
-    }
-    
-    console.log('🎯 Final locationId:', locationId);
     return locationId;
   };
 
@@ -193,23 +187,25 @@ export default function MainContent() {
 
       // CASE 1: Coming from GoHighLevel without params - need to fetch and redirect
       if (isFromGHL && !subaccountParam) {
-        const locationId = extractLocationIdFromUrl();
+        const locationId = getLocationId();
         
         console.log('🔍 GHL detected, locationId:', locationId);
         
         if (!locationId) {
-          console.warn('⚠️ No locationId found in GHL URL, trying fallback...');
+          console.warn('⚠️ No locationId found, fetching all subaccounts...');
           
           // 🔥 FALLBACK: Fetch subaccounts and use first one if only one exists
           try {
             isProcessing.current = true;
             const result = await dispatch(fetchImportedSubAccounts());
             const fetchedSubAccounts = result.payload?.data || [];
+            const fetchedAgencyId = result.payload?.agencyId || null;
+            
+            console.log('📦 Fetched subaccounts:', fetchedSubAccounts);
             
             if (fetchedSubAccounts.length === 1) {
               console.log('✅ Only one subaccount found, using it automatically');
               const account = fetchedSubAccounts[0];
-              const fetchedAgencyId = result.payload?.agencyId || null;
               const finalAgencyId = account.companyId || fetchedAgencyId || companyDetails?.id || agencyId;
               
               const params = new URLSearchParams({
@@ -222,16 +218,19 @@ export default function MainContent() {
               });
               
               hasRedirected.current = true;
+              sessionStorage.removeItem('ghl_locationId'); // Clean up
               navigate(`/app?${params.toString()}`, { replace: true });
               return;
             } else {
               console.warn('⚠️ Multiple subaccounts found, cannot auto-select');
               isProcessing.current = false;
+              sessionStorage.removeItem('ghl_locationId'); // Clean up
               return;
             }
           } catch (error) {
             console.error('❌ Fallback error:', error);
             isProcessing.current = false;
+            sessionStorage.removeItem('ghl_locationId'); // Clean up
             return;
           }
         }
@@ -247,13 +246,16 @@ export default function MainContent() {
           const fetchedAgencyId = result.payload?.agencyId || null;
           
           console.log('📦 Fetched subaccounts:', fetchedSubAccounts);
+          console.log('🏢 Agency ID:', fetchedAgencyId);
           
+          // Find matching account by locationId
           const matchingAccount = fetchedSubAccounts.find(acc => acc.id === locationId);
           
           if (!matchingAccount) {
             console.warn('❌ No matching subaccount found for locationId:', locationId);
             isProcessing.current = false;
             hasRedirected.current = false;
+            sessionStorage.removeItem('ghl_locationId'); // Clean up
             return;
           }
           
@@ -273,12 +275,14 @@ export default function MainContent() {
 
           console.log('🚀 GHL Navigation to:', `/app?${params.toString()}`);
 
+          sessionStorage.removeItem('ghl_locationId'); // Clean up after successful navigation
           navigate(`/app?${params.toString()}`, { replace: true });
           
         } catch (error) {
           console.error('❌ GHL Navigation Error:', error);
           isProcessing.current = false;
           hasRedirected.current = false;
+          sessionStorage.removeItem('ghl_locationId'); // Clean up
         }
         return;
       }
@@ -292,6 +296,7 @@ export default function MainContent() {
         if (!params.get("route")) params.set("route", "/assistants");
         if (!params.has("allow")) params.set("allow", "yes");
 
+        sessionStorage.removeItem('ghl_locationId'); // Clean up
         navigate(`/app?${params.toString()}`, { replace: true });
         return;
       }
@@ -299,6 +304,7 @@ export default function MainContent() {
       // CASE 3: Coming from GHL but already on /app with params - do nothing
       if (location.pathname === "/app" && subaccountParam) {
         console.log("✅ Already on /app with correct params");
+        sessionStorage.removeItem('ghl_locationId'); // Clean up
         return;
       }
     };
