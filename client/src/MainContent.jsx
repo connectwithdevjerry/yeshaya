@@ -121,90 +121,87 @@ export default function MainContent() {
     }
   }, [searchParams]);
 
-  // 🔥 2. AUTO-NAVIGATION: Enhanced with Delay & Matching Logic
-  useEffect(() => {
-    const handleGhlNavigation = async () => {
-      const pendingId = localStorage.getItem("ghl_pending_locationId");
-
-      // Stop if conditions aren't met
-      if (
-        !isAuthenticated ||
-        !pendingId ||
-        hasRedirected.current ||
-        isProcessing.current
-      )
+// 🔥 2. AUTO-NAVIGATION: Updated to trigger immediately after login
+useEffect(() => {
+  const handleGhlNavigation = async () => {
+    const pendingId = localStorage.getItem('ghl_pending_locationId');
+    
+    // EXIT CONDITIONS
+    if (!isAuthenticated || !pendingId || hasRedirected.current) return;
+    
+    // If we are already in the app with parameters, don't re-run
+    if (searchParams.get("subaccount")) {
+        localStorage.removeItem('ghl_pending_locationId');
         return;
-      if (searchParams.get("subaccount")) return;
+    }
 
-      try {
-        isProcessing.current = true;
-        setIsNavigatingToGhl(true);
+    // Prevent double-execution
+    if (isProcessing.current) return;
 
-        console.log("🔄 Attempting GHL Match for ID:", pendingId);
+    try {
+      isProcessing.current = true;
+      setIsNavigatingToGhl(true);
+      
+      console.log('🔄 Login Detected. Matching GHL ID:', pendingId);
 
-        // 1. Initial Fetch
-        const result = await dispatch(fetchImportedSubAccounts());
-        // Handle the nested structure: result.payload.data
-        let subAccountList = Array.isArray(result.payload?.data)
-          ? result.payload.data
-          : [];
+      // --- ATTEMPT 1 ---
+      const result = await dispatch(fetchImportedSubAccounts());
+      let subAccountList = Array.isArray(result.payload?.data) ? result.payload.data : [];
 
-        // 2. If list is empty (Buffering), Wait 3 seconds and try ONE more time
-        if (subAccountList.length === 0) {
-          console.warn(
-            "⏳ List empty (possible DB buffer). Waiting 3s before retry...",
-          );
-
-          await new Promise((resolve) => setTimeout(resolve, 3000)); // The "Wait a while" logic
-
-          const retryResult = await dispatch(fetchImportedSubAccounts());
-          subAccountList = Array.isArray(retryResult.payload?.data)
-            ? retryResult.payload.data
-            : [];
-        }
-
-        console.log(`📊 Final Check: Found ${subAccountList.length} accounts.`);
-
-        // 3. Perform the Match
-        const match = subAccountList.find((acc) => acc.id === pendingId);
-
-        if (match) {
-          console.log("🎯 Match found:", match.name);
-          hasRedirected.current = true;
-
-          // Use agencyId from payload or match object
-          const finalAgencyId =
-            result.payload?.agencyId || match.companyId || agencyId;
-
-          const params = new URLSearchParams({
-            agencyid: finalAgencyId,
-            subaccount: match.id,
-            allow: "yes",
-            myname: encodeURIComponent(match.name || "User"),
-            myemail: encodeURIComponent(match.email || ""),
-            route: "/assistants",
-          });
-
-          localStorage.removeItem("ghl_pending_locationId");
-          setIsNavigatingToGhl(false);
-          navigate(`/app?${params.toString()}`, { replace: true });
-        } else {
-          console.warn(
-            "⚠️ ID captured but not found in the 3 subaccounts. Clearing.",
-          );
-          localStorage.removeItem("ghl_pending_locationId");
-          setIsNavigatingToGhl(false);
-          isProcessing.current = false;
-        }
-      } catch (error) {
-        console.error("❌ GHL Sync Error:", error);
-        setIsNavigatingToGhl(false);
-        isProcessing.current = false;
+      // --- THE "WAIT" LOGIC ---
+      // If 0 accounts, wait 3.5 seconds and try again (Handles the DB buffering)
+      if (subAccountList.length === 0) {
+        console.warn("⏳ List empty. Waiting 3.5s for backend sync...");
+        await new Promise(resolve => setTimeout(resolve, 3500)); 
+        
+        const retryResult = await dispatch(fetchImportedSubAccounts());
+        subAccountList = Array.isArray(retryResult.payload?.data) ? retryResult.payload.data : [];
       }
-    };
 
-    handleGhlNavigation();
-  }, [isAuthenticated, dispatch, navigate, agencyId, searchParams]);
+      console.log(`📊 Final Check: Found ${subAccountList.length} accounts.`);
+
+      const match = subAccountList.find(acc => String(acc.id) === String(pendingId));
+
+      if (match) {
+        console.log('🎯 Match found! Navigating to Assistant Page...');
+        hasRedirected.current = true;
+        
+        const finalAgencyId = result.payload?.agencyId || match.companyId || agencyId;
+        
+        const params = new URLSearchParams({
+          agencyid: finalAgencyId,
+          subaccount: match.id,
+          allow: "yes",
+          myname: encodeURIComponent(match.name || "User"),
+          myemail: encodeURIComponent(match.email || ""),
+          route: "/assistants",
+        });
+
+        // CLEAR STORAGE BEFORE NAVIGATING
+        localStorage.removeItem('ghl_pending_locationId');
+        setIsNavigatingToGhl(false);
+        
+        // Use replace: true to prevent "back" button loops
+        navigate(`/app?${params.toString()}`, { replace: true });
+      } else {
+        // If we found accounts but none match, stop processing but don't clear 
+        // until we are sure it's not a slow DB update.
+        console.warn('⚠️ No match found in current list.');
+        setIsNavigatingToGhl(false);
+        isProcessing.current = false; 
+      }
+    } catch (error) {
+      console.error('❌ GHL Navigation Error:', error);
+      setIsNavigatingToGhl(false);
+      isProcessing.current = false;
+    }
+  };
+
+  handleGhlNavigation();
+
+  // Added 'isAuthenticated' and 'location' to ensure this fires 
+  // the moment the user lands on the dashboard after login.
+}, [isAuthenticated, location.pathname, dispatch, navigate, agencyId, searchParams]);
 
   const pageTitles = useMemo(
     () => ({
