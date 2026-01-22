@@ -92,52 +92,48 @@ export default function MainContent() {
   const { agencyId } = useSelector((state) => state.integrations || {});
   const { companyDetails, isAuthenticated } = useSelector((state) => state.auth || {});
 
-  // 🔥 1. CAPTURE locationId FROM GHL URL STRUCTURE
+  // 🔥 1. UPDATED EXTRACTION: Capture ID from the new GHL Custom Link params
   useEffect(() => {
     const currentUrl = window.location.href;
     const referrer = document.referrer;
     
-    // Pattern designed to catch 'r4butMmtLNMrYoaq29aF' from /location/ID/
-    const ghlPattern = /\/location\/([a-zA-Z0-9_-]{15,30})/;
+    // First Priority: Check for the direct 'subaccount' param from your GHL URL
+    let detectedId = searchParams.get('subaccount');
 
-    const extractId = (url) => {
-      const match = url.match(ghlPattern);
-      return match ? match[1] : null;
-    };
+    // Second Priority: Fallback to URL Pattern matching if direct param is missing
+    if (!detectedId || detectedId.includes('{{')) {
+      const ghlPattern = /\/location\/([a-zA-Z0-9_-]{15,30})/;
+      const extractId = (url) => (url.match(ghlPattern) || [])[1];
+      detectedId = extractId(referrer) || extractId(currentUrl) || searchParams.get('locationId');
+    }
 
-    // Priority: Referrer (Parent GHL Window) > Current URL > Search Params
-    const detectedId = extractId(referrer) || 
-                       extractId(currentUrl) || 
-                       searchParams.get('locationId') || 
-                       searchParams.get('subaccount');
-
-    if (detectedId) {
+    if (detectedId && !detectedId.includes('{{')) {
       console.log('✅ Captured GHL Location ID:', detectedId);
       sessionStorage.setItem('ghl_locationId', detectedId);
       sessionStorage.setItem('ghl_captureTime', Date.now().toString());
     }
   }, [searchParams]);
 
-  // 🔥 2. NAVIGATION EFFECT: Compare captured ID with fetched accounts
+  // 🔥 2. NAVIGATION EFFECT: Match extracted ID with your DB sub-accounts
   useEffect(() => {
-    const handleGhlNavigation = async () => {
-      // Safety checks: stop if already redirecting, not logged in, or already have params
+    const handleNavigation = async () => {
+      // Safety checks: stop if already redirecting, not logged in, or already on an app route
       if (hasRedirected.current || isProcessing.current || !isAuthenticated) return;
-      if (searchParams.get("subaccount")) return; 
+      if (location.pathname !== '/' && location.pathname !== '/app') return;
 
       const storedLocationId = sessionStorage.getItem('ghl_locationId');
       
       if (storedLocationId) {
         try {
           isProcessing.current = true;
-          console.log('🔄 Matching GHL ID against accounts...');
+          console.log('🔄 Matching GHL ID against database...');
           
           const result = await dispatch(fetchImportedSubAccounts());
           const apiResponse = result.payload;
           const fetchedSubAccounts = Array.isArray(apiResponse?.data) ? apiResponse.data : [];
           const fetchedAgencyId = apiResponse?.agencyId || null;
           
-          // Find account matching the URL ID
+          // Match the URL ID with one of your fetched sub-accounts
           const matchingAccount = fetchedSubAccounts.find(acc => acc.id === storedLocationId);
 
           if (matchingAccount) {
@@ -146,30 +142,31 @@ export default function MainContent() {
             
             const finalAgencyId = matchingAccount.companyId || fetchedAgencyId || companyDetails?.id || agencyId;
             
+            // Build the params for your /app route
             const params = new URLSearchParams({
               agencyid: finalAgencyId,
               subaccount: matchingAccount.id,
               allow: "yes",
-              myname: encodeURIComponent(matchingAccount.name || "User"),
-              myemail: encodeURIComponent(matchingAccount.email || ""),
-              route: "/assistants", // Navigate directly to assistant page
+              myname: searchParams.get("myname") || encodeURIComponent(matchingAccount.name || "User"),
+              myemail: searchParams.get("myemail") || encodeURIComponent(matchingAccount.email || ""),
+              route: "/assistants", // Force navigation to the assistant view
             });
 
             sessionStorage.removeItem('ghl_locationId'); // Clear to prevent loops
             navigate(`/app?${params.toString()}`, { replace: true });
           } else {
-            console.warn('⚠️ No matching account found for GHL ID:', storedLocationId);
+            console.warn('⚠️ No match found for GHL ID:', storedLocationId);
             isProcessing.current = false;
           }
         } catch (error) {
-          console.error('❌ GHL Navigation Error:', error);
+          console.error('❌ Auto-navigation Error:', error);
           isProcessing.current = false;
         }
       }
     };
     
-    handleGhlNavigation();
-  }, [isAuthenticated, searchParams, dispatch, navigate, agencyId, companyDetails]);
+    handleNavigation();
+  }, [location.pathname, searchParams, isAuthenticated, dispatch, navigate, agencyId, companyDetails]);
 
   const pageTitles = useMemo(() => ({
     "/": "Accounts",
