@@ -97,14 +97,11 @@ export default function MainContent() {
   const isProcessing = useRef(false);
 
   const { agencyId } = useSelector((state) => state.integrations || {});
-  const { companyDetails, isAuthenticated } = useSelector(
-    (state) => state.auth || {},
-  );
+  const { isAuthenticated } = useSelector((state) => state.auth || {});
 
-  // 🔥 1. IMMEDIATE CAPTURE: Store in localStorage
+  // 🔥 1. IMMEDIATE CAPTURE
   useEffect(() => {
-    let detectedId =
-      searchParams.get("subaccount") || searchParams.get("locationId");
+    let detectedId = searchParams.get("subaccount") || searchParams.get("locationId");
 
     if (!detectedId || detectedId.includes("{{")) {
       const currentUrl = window.location.href;
@@ -120,28 +117,15 @@ export default function MainContent() {
     }
   }, [searchParams]);
 
-  // 🔥 2. SILENT AUTO-NAVIGATION & REFRESH (Background only)
+  // 🔥 2. SILENT AUTO-NAVIGATION (No Refresh)
   useEffect(() => {
-    let refreshTimer;
-
     const handleGhlNavigation = async () => {
       const pendingId = localStorage.getItem("ghl_pending_locationId");
 
-      // Only run if logged in and we have an ID to find
       if (!isAuthenticated || !pendingId || hasRedirected.current) return;
-
       if (isProcessing.current) return;
-      isProcessing.current = true;
 
-      // --- MANDATORY 5-SECOND REFRESH ---
-      // If we don't navigate in 5 seconds, perform the manual refresh automatically
-      console.log("⏱️ Background refresh timer started (5s)...");
-      refreshTimer = setTimeout(() => {
-        if (!hasRedirected.current) {
-          console.log("🔄 5s reached. Auto-refreshing to trigger GHL match...");
-          window.location.reload();
-        }
-      }, 5000);
+      isProcessing.current = true;
 
       try {
         console.log("🔄 Background check for match:", pendingId);
@@ -156,8 +140,7 @@ export default function MainContent() {
         );
 
         if (match) {
-          console.log("🎯 Match found! Navigating to assistant...");
-          clearTimeout(refreshTimer);
+          console.log("🎯 Match found! Redirecting...");
           hasRedirected.current = true;
 
           const params = new URLSearchParams({
@@ -171,17 +154,17 @@ export default function MainContent() {
 
           localStorage.removeItem("ghl_pending_locationId");
           navigate(`/app?${params.toString()}`, { replace: true });
+        } else {
+          console.warn("⚠️ Match not found yet. Navigation skipped.");
+          isProcessing.current = false; // Allow it to try again on next render
         }
       } catch (error) {
         console.error("❌ GHL Sync Error:", error);
+        isProcessing.current = false;
       }
     };
 
     handleGhlNavigation();
-
-    return () => {
-      if (refreshTimer) clearTimeout(refreshTimer);
-    };
   }, [isAuthenticated, location.pathname, dispatch, navigate, agencyId]);
 
   const pageTitles = useMemo(
@@ -197,7 +180,6 @@ export default function MainContent() {
       "/contacts": "Contacts",
       "/knowledge": "Knowledge",
       "/assistants": "Assistants",
-      "/blog": "Knowledge",
       "/activetags": "Active Tags",
       "/numbers": "Numbers",
       "/pools": "Number Pools",
