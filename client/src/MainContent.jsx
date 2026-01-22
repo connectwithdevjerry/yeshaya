@@ -121,71 +121,92 @@ export default function MainContent() {
     }
   }, [searchParams]);
 
-// 🔥 2. AUTO-NAVIGATION with Mandatory 5-Second Refresh
-useEffect(() => {
-  let refreshTimer;
+  // 🔥 2. AUTO-NAVIGATION & FORCED REFRESH
+  useEffect(() => {
+    let refreshTimer;
 
-  const handleGhlNavigation = async () => {
-    const pendingId = localStorage.getItem('ghl_pending_locationId');
-    
-    // Only proceed if logged in and we have a GHL ID to find
-    if (!isAuthenticated || !pendingId || hasRedirected.current) return;
-    
-    // Prevent double-processing
-    if (isProcessing.current) return;
-    isProcessing.current = true;
-    setIsNavigatingToGhl(true);
+    const handleGhlNavigation = async () => {
+      const pendingId = localStorage.getItem("ghl_pending_locationId");
 
-    // --- START THE 5-SECOND REFRESH TIMER IMMEDIATELY ---
-    console.log("⏱️ Refresh timer started. Page will reload in 5 seconds...");
-    refreshTimer = setTimeout(() => {
-      console.log("🚀 5 seconds reached. Refreshing page...");
-      window.location.reload();
-    }, 5000);
+      // Only run if: Logged in AND we have an ID AND we aren't already at the destination
+      if (!isAuthenticated || !pendingId || hasRedirected.current) return;
 
-    try {
-      console.log('🔄 Checking GHL Match for:', pendingId);
-
-      const result = await dispatch(fetchImportedSubAccounts());
-      const subAccountList = Array.isArray(result.payload?.data) ? result.payload.data : [];
-      
-      const match = subAccountList.find(acc => String(acc.id) === String(pendingId));
-
-      if (match) {
-        console.log('🎯 Match found! Navigating...');
-        hasRedirected.current = true;
-        
-        // Clear the refresh timer because we succeeded!
-        clearTimeout(refreshTimer);
-
-        const params = new URLSearchParams({
-          agencyid: match.companyId || agencyId,
-          subaccount: match.id,
-          allow: "yes",
-          myname: encodeURIComponent(match.name || "User"),
-          myemail: encodeURIComponent(match.email || ""),
-          route: "/assistants",
-        });
-
-        localStorage.removeItem('ghl_pending_locationId');
-        setIsNavigatingToGhl(false);
-        navigate(`/app?${params.toString()}`, { replace: true });
-      } else {
-        console.warn('⚠️ ID not in list yet. Waiting for the auto-refresh...');
+      // If the URL already has the subaccount, we are done.
+      if (searchParams.get("subaccount") === pendingId) {
+        localStorage.removeItem("ghl_pending_locationId");
+        return;
       }
-    } catch (error) {
-      console.error('❌ Sync Error:', error);
-      // We don't need to do anything else; the refreshTimer will handle the recovery
-    }
-  };
 
-  handleGhlNavigation();
+      if (isProcessing.current) return;
+      isProcessing.current = true;
+      setIsNavigatingToGhl(true);
 
-  // Cleanup: clear timer if the user manually leaves the page
-  return () => {
-    if (refreshTimer) clearTimeout(refreshTimer);
-  };
-}, [isAuthenticated, location.pathname, dispatch, navigate, agencyId]);
+      // --- MANDATORY 5-SECOND REFRESH ---
+      // This automates your "manual refresh"
+      refreshTimer = setTimeout(() => {
+        if (!hasRedirected.current) {
+          console.log("🚀 5s Failsafe: Triggering Auto-Refresh...");
+          window.location.reload();
+        }
+      }, 5000);
+
+      try {
+        console.log("🔄 Checking GHL Match for:", pendingId);
+
+        // Fetch the subaccounts
+        const result = await dispatch(fetchImportedSubAccounts());
+
+        // Look at your log: "🟢Subaccounts Object" -> structure is result.payload.data
+        const subAccountList = Array.isArray(result.payload?.data)
+          ? result.payload.data
+          : [];
+
+        const match = subAccountList.find(
+          (acc) => String(acc.id) === String(pendingId),
+        );
+
+        if (match) {
+          console.log("🎯 Match found! Stopping timer and navigating...");
+          clearTimeout(refreshTimer); // Stop the auto-refresh, we found it!
+          hasRedirected.current = true;
+
+          const params = new URLSearchParams({
+            agencyid: match.companyId || agencyId,
+            subaccount: match.id,
+            allow: "yes",
+            myname: encodeURIComponent(match.name || "User"),
+            myemail: encodeURIComponent(match.email || ""),
+            route: "/assistants",
+          });
+
+          localStorage.removeItem("ghl_pending_locationId");
+          setIsNavigatingToGhl(false);
+          navigate(`/app?${params.toString()}`, { replace: true });
+        } else {
+          console.warn(
+            "⚠️ ID not found in list. Page will auto-refresh in 5s.",
+          );
+        }
+      } catch (error) {
+        console.error("❌ Sync Error:", error);
+        // Let the refreshTimer handle the recovery
+      }
+    };
+
+    handleGhlNavigation();
+
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
+    // We add location.search and location.pathname to ensure it fires immediately on login redirect
+  }, [
+    isAuthenticated,
+    location.pathname,
+    location.search,
+    dispatch,
+    navigate,
+    agencyId,
+  ]);
 
   const pageTitles = useMemo(
     () => ({
