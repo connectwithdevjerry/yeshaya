@@ -1,5 +1,5 @@
 // src/MainContent.jsx
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react"; // Added useRef
 import { Routes, Route, useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import { Header } from "./components/components-ui/Header";
 import { useDispatch, useSelector } from "react-redux";
@@ -34,12 +34,11 @@ import GHLSettings from "./pages/pages-ghl/Settings";
 import { AssistantBuilderPage } from "./components/components-ghl/AssistantsBuilder/AssistantsBuilder";
 import KnowledgeDetailPage from "./components/components-ghl/Knowledge/BlogEdit";
 
-// ✅ Component to render based on route parameterss
+// ✅ Component to render based on route parameters
 const AppRouter = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const route = searchParams.get("route") || "/assistants";
 
-  // Store account data in sessionStorage
   useEffect(() => {
     const agencyid = searchParams.get("agencyid");
     const subaccount = searchParams.get("subaccount");
@@ -48,13 +47,7 @@ const AppRouter = () => {
     const myemail = searchParams.get("myemail");
 
     if (agencyid && subaccount) {
-      const accountData = {
-        agencyid,
-        subaccount,
-        allow,
-        myname,
-        myemail,
-      };
+      const accountData = { agencyid, subaccount, allow, myname, myemail };
       sessionStorage.setItem("currentAccount", JSON.stringify(accountData));
       console.log("✅ Account stored:", accountData);
 
@@ -66,7 +59,6 @@ const AppRouter = () => {
     }
   }, [searchParams, setSearchParams]);
 
-  // Route mapping
   const routeComponents = {
     "/assistants": <Assistants />,
     "/inbox": <Inbox />,
@@ -83,13 +75,8 @@ const AppRouter = () => {
     "/dashboard": <DashboardPage />,
   };
 
-  if (route.startsWith("/assistants/")) {
-    return <AssistantBuilderPage />;
-  }
-
-  if (route.startsWith("/knowledge/")) {
-    return <KnowledgeDetailPage />;
-  }
+  if (route.startsWith("/assistants/")) return <AssistantBuilderPage />;
+  if (route.startsWith("/knowledge/")) return <KnowledgeDetailPage />;
 
   return routeComponents[route] || <Assistants />;
 };
@@ -99,293 +86,142 @@ export default function MainContent() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
+  
+  // ✅ Ref to ensure redirect logic only runs once
+  const hasRedirected = useRef(false);
 
-  // Get subAccounts and agencyId from Redux store
-  const { subAccounts, agencyId } = useSelector(
-    (state) => state.integrations || {}
-  );
+  const { agencyId } = useSelector((state) => state.integrations || {});
   const { companyDetails, isAuthenticated } = useSelector((state) => state.auth || {});
 
-  // New useEffect: Auto-navigate from GHL Custom Menu Link in URL or referrer
-  // This should run FIRST to handle custom menu links before basic GHL redirect
-  // Runs immediately after login (isAuthenticated becomes true)
+  // 1️⃣ Effect: Auto-navigate from GHL Custom Menu Link
   useEffect(() => {
     const handleGHLUrlNavigation = async () => {
-      // Only run when authenticated
-      if (!isAuthenticated) {
-        console.log('⏳ Waiting for authentication...');
-        return;
-      }
-      
-      // Only run on root path or /app when no subaccount params exist
+      // Guard clauses: already redirected, not logged in, or wrong path
+      if (hasRedirected.current || !isAuthenticated) return;
       if (location.pathname !== '/' && location.pathname !== '/app') return;
       
-      // Check if current URL or referrer contains GHL custom menu link pattern
       const currentUrl = window.location.href;
       const referrer = document.referrer;
       
-      console.log('🔍 Checking for GHL custom menu link...');
-      console.log('📍 Current URL:', currentUrl);
-      console.log('📍 Referrer:', referrer || '(empty)');
-      console.log('📍 Search Params:', Object.fromEntries(searchParams.entries()));
+      const isCurrentUrlGHL = currentUrl.includes('app.gohighlevel.com') && currentUrl.includes('/location/') && currentUrl.includes('/custom-menu-link/');
+      const isReferrerGHL = referrer && referrer.includes('app.gohighlevel.com') && referrer.includes('/location/') && referrer.includes('/custom-menu-link/');
+      const referrerHasLocation = referrer && referrer.includes('app.gohighlevel.com') && referrer.includes('/location/');
+      const locationIdFromParams = searchParams.get('locationId') || searchParams.get('location') || searchParams.get('subaccount');
       
-      // Check both current URL and referrer for GHL custom menu link
-      const isCurrentUrlGHL = currentUrl.includes('app.gohighlevel.com') && 
-                                currentUrl.includes('/location/') && 
-                                currentUrl.includes('/custom-menu-link/');
-      
-      const isReferrerGHL = referrer && referrer.includes('app.gohighlevel.com') && 
-                            referrer.includes('/location/') && 
-                            referrer.includes('/custom-menu-link/');
-      
-      // Also check if referrer contains location pattern (even without custom-menu-link)
-      const referrerHasLocation = referrer && referrer.includes('app.gohighlevel.com') && 
-                                  referrer.includes('/location/');
-      
-      // Check for location ID in query parameters as fallback
-      const locationIdFromParams = searchParams.get('locationId') || 
-                                   searchParams.get('location') || 
-                                   searchParams.get('subaccount');
-      
-      let urlToCheck = isCurrentUrlGHL ? currentUrl : (isReferrerGHL ? referrer : null);
       let locationId = null;
-      
-      // If we have a direct custom menu link URL, extract location ID from it
-      if (urlToCheck) {
-        console.log('🔗 Detected GHL custom menu link:', urlToCheck);
+
+      if (isCurrentUrlGHL || isReferrerGHL) {
+        const urlToCheck = isCurrentUrlGHL ? currentUrl : referrer;
         const locationMatch = urlToCheck.match(/\/location\/([^\/]+)\//);
-        if (locationMatch) {
-          locationId = locationMatch[1];
-          console.log('🔍 Extracted GHL location ID from URL:', locationId);
-        }
-      }
-      // If referrer has location pattern but not custom-menu-link, try to extract location ID
-      else if (referrerHasLocation) {
-        console.log('🔗 Detected GHL referrer with location pattern:', referrer);
+        if (locationMatch) locationId = locationMatch[1];
+      } else if (referrerHasLocation) {
         const locationMatch = referrer.match(/\/location\/([^\/]+)/);
-        if (locationMatch) {
-          locationId = locationMatch[1];
-          console.log('🔍 Extracted GHL location ID from referrer:', locationId);
-        }
-      }
-      // Check if location ID is in query parameters
-      else if (locationIdFromParams) {
+        if (locationMatch) locationId = locationMatch[1];
+      } else if (locationIdFromParams) {
         locationId = locationIdFromParams;
-        console.log('🔍 Found location ID in query parameters:', locationId);
-      }
-      // If coming from GHL but no location ID found, return early
-      else {
-        const isGHLReferrer = referrer && referrer.includes('app.gohighlevel.com');
-        if (!isGHLReferrer) {
-          console.log('ℹ️ Not from GHL - skipping custom menu link detection');
-          return;
-        }
-        console.log('ℹ️ Coming from GHL but no location ID found in URL, referrer, or params');
-        console.log('   Current URL check:', {
-          hasGHL: currentUrl.includes('app.gohighlevel.com'),
-          hasLocation: currentUrl.includes('/location/'),
-          hasCustomMenu: currentUrl.includes('/custom-menu-link/')
-        });
-        console.log('   Referrer check:', {
-          hasReferrer: !!referrer,
-          hasGHL: referrer ? referrer.includes('app.gohighlevel.com') : false,
-          hasLocation: referrer ? referrer.includes('/location/') : false,
-          hasCustomMenu: referrer ? referrer.includes('/custom-menu-link/') : false,
-          fullReferrer: referrer
-        });
-        return;
       }
       
-      if (!locationId) {
-        console.log('❌ Could not extract location ID from any source');
-        return;
-      }
-      
-      // Check if we already have this subaccount in params (avoid infinite loop)
-      const existingSubaccount = searchParams.get('subaccount');
-      if (existingSubaccount === locationId) {
-        console.log('ℹ️ Already navigated to this subaccount');
-        return;
-      }
-      
+      if (!locationId || searchParams.get('subaccount') === locationId) return;
+
       try {
-        // Always fetch subaccounts using fetchImportedSubAccounts to get the latest data
-        console.log('📥 Fetching subaccounts using fetchImportedSubAccounts...');
-        const result = await dispatch(fetchImportedSubAccounts());
+        // ✅ Mark as redirected immediately to prevent parallel triggers
+        hasRedirected.current = true;
+        console.log('📥 Fetching subaccounts for custom menu link context...');
         
-        // Extract subaccounts and agencyId from the fetch result
-        // fetchImportedSubAccounts returns { locations, agencyId }
+        const result = await dispatch(fetchImportedSubAccounts());
         const fetchedSubAccounts = result.payload?.locations || [];
         const fetchedAgencyId = result.payload?.agencyId || null;
         
-        if (!fetchedSubAccounts || fetchedSubAccounts.length === 0) {
-          console.log('❌ No subaccounts available after fetch');
-          return;
-        }
-        
-        console.log('📋 Fetched subaccounts:', fetchedSubAccounts.length);
-        console.log('📋 Available subaccount IDs:', fetchedSubAccounts.map(a => a.id));
-        
-        // Find matching subaccount by location ID (the id field matches the locationId from URL)
-        const matchingAccount = fetchedSubAccounts.find(
-          acc => acc.id === locationId
-        );
+        const matchingAccount = fetchedSubAccounts.find(acc => acc.id === locationId);
         
         if (!matchingAccount) {
-          console.log('❌ No matching subaccount found for location:', locationId);
-          console.log('📋 Available subaccount IDs:', fetchedSubAccounts.map(a => a.id));
+          console.log('❌ No matching subaccount found.');
+          hasRedirected.current = false; // Reset if fetch didn't yield a result
           return;
         }
-        
-        console.log('✅ Found matching account:', matchingAccount.name);
-        console.log('📦 Account data:', {
-          id: matchingAccount.id,
-          companyId: matchingAccount.companyId,
-          name: matchingAccount.name,
-          email: matchingAccount.email,
-          firstName: matchingAccount.firstName,
-          lastName: matchingAccount.lastName
-        });
-        console.log('📦 Available agency IDs:', {
-          fromAccount: matchingAccount.companyId,
-          fromFetch: fetchedAgencyId,
-          fromRedux: agencyId,
-          fromCompanyDetails: companyDetails?.id || companyDetails?.companyId
-        });
-        
-        // Determine target route (same logic as AccountActionsMenu)
+
         let targetRoute = "/assistants";
-        
         if (location.pathname === "/app") {
           targetRoute = searchParams.get("route") || "/assistants";
-        } else if (
-          [
-            "/inbox",
-            "/call",
-            "/contacts",
-            "/knowledge",
-            "/assistants",
-            "/activetags",
-            "/numbers",
-            "/pools",
-            "/widgets",
-            "/helps",
-            "/ghl_settings",
-            "/blog",
-          ].includes(location.pathname)
-        ) {
+        } else if (["/inbox", "/call", "/contacts", "/knowledge", "/assistants", "/activetags", "/numbers", "/pools", "/widgets", "/helps", "/ghl_settings", "/blog"].includes(location.pathname)) {
           targetRoute = location.pathname;
         }
+
+        const finalAgencyId = matchingAccount.companyId || fetchedAgencyId || companyDetails?.id || agencyId || "UNKNOWN_COMPANY";
         
-        // Determine agencyid - prioritize in order: account.companyId > fetchedAgencyId > companyDetails > Redux agencyId
-        const finalAgencyId = matchingAccount.companyId || 
-                              fetchedAgencyId || 
-                              companyDetails?.id || 
-                              companyDetails?.companyId || 
-                              agencyId || 
-                              "UNKNOWN_COMPANY";
-        
-        console.log('🏢 Final agency ID selected:', finalAgencyId);
-        
-        // Build navigation URL using all required parameters from the fetched subaccount data
-        // Using same parameter structure as AccountActionsMenu
         const params = new URLSearchParams({
           agencyid: finalAgencyId,
-          subaccount: matchingAccount.id || "NO_ID",
+          subaccount: matchingAccount.id,
           allow: "yes",
           myname: matchingAccount.name || "NoName",
           myemail: matchingAccount.email || "noemail@example.com",
-          route: targetRoute, // ✅ Include the route as a parameter
+          route: targetRoute,
         });
-        
-        const targetUrl = `/app?${params.toString()}`;
-        console.log('🚀 Auto-navigating to:', targetUrl);
-        console.log('📋 Navigation params:', {
-          agencyid: params.get('agencyid'),
-          subaccount: params.get('subaccount'),
-          myname: params.get('myname'),
-          myemail: params.get('myemail'),
-          route: params.get('route')
-        });
-        
-        // Navigate to assistants page (using setTimeout like AccountActionsMenu for consistency)
+
         setTimeout(() => {
-          navigate(targetUrl, { replace: true });
+          navigate(`/app?${params.toString()}`, { replace: true });
         }, 0);
         
       } catch (error) {
-        console.error('❌ Error fetching or navigating to subaccount:', error);
+        console.error('❌ Redirect Error:', error);
+        hasRedirected.current = false;
       }
     };
     
     handleGHLUrlNavigation();
-  }, [location.pathname, agencyId, isAuthenticated, dispatch, navigate, searchParams]);
+  }, [location.pathname, isAuthenticated, dispatch, navigate, searchParams]);
 
-  // Second useEffect: Handle basic GHL context redirect (runs after custom menu link check)
+  // 2️⃣ Effect: Handle basic GHL context redirect
   useEffect(() => {
+    if (hasRedirected.current) return;
+
     const subaccount = searchParams.get("subaccount");
     const agencyid = searchParams.get("agencyid");
-    
     const isGHLReferrer = document.referrer.includes("app.gohighlevel.com");
-    const hasGHLParams = subaccount && agencyid;
-
-    // Only redirect if we have params or GHL referrer, but NOT if it's a custom menu link
-    // Check both current URL and referrer for custom menu link pattern
+    
     const currentUrl = window.location.href;
     const referrer = document.referrer;
     const isCustomMenuLink = (currentUrl.includes('/custom-menu-link/') && currentUrl.includes('/location/')) ||
-                            (referrer.includes('/custom-menu-link/') && referrer.includes('/location/'));
+                             (referrer.includes('/custom-menu-link/') && referrer.includes('/location/'));
     
-    // Skip basic redirect if custom menu link is detected (let the first useEffect handle it)
-    if (isCustomMenuLink) {
-      console.log("ℹ️ Custom menu link detected, skipping basic GHL redirect");
-      return;
-    }
+    if (isCustomMenuLink) return;
     
-    if (location.pathname === "/" && (hasGHLParams || isGHLReferrer)) {
-      console.log("🚀 GHL context detected. Redirecting to Assistants context...");
+    if (location.pathname === "/" && ((subaccount && agencyid) || isGHLReferrer)) {
+      hasRedirected.current = true;
+      console.log("🚀 Basic GHL context redirecting...");
 
       const params = new URLSearchParams(searchParams);
-
-      if (!params.get("route")) {
-        params.set("route", "/assistants");
-      }
-
-      if (!params.has("allow")) {
-        params.set("allow", "yes");
-      }
+      if (!params.get("route")) params.set("route", "/assistants");
+      if (!params.has("allow")) params.set("allow", "yes");
 
       navigate(`/app?${params.toString()}`, { replace: true });
     }
   }, [location.pathname, searchParams, navigate]);
 
-  const pageTitles = useMemo(
-    () => ({
-      "/": "Accounts",
-      "/agency": "Agency",
-      "/integrations": "Integrations",
-      "/rebilling": "Rebilling",
-      "/settings": "Settings",
-      "/dashboard": "Dashboard",
-      "/inbox": "Inbox",
-      "/call": "Call Center",
-      "/contacts": "Contacts",
-      "/knowledge": "Knowledge",
-      "/assistants": "Assistants",
-      "/blog": "Knowledge",
-      "/activetags": "Active Tags",
-      "/numbers": "Numbers",
-      "/pools": "Number Pools",
-      "/widgets": "Widgets",
-      "/helps": "Help Center",
-      "/ghl_settings": "Settings",
-      "/connection-success": "Integration Success",
-      "/connection-failed": "Integration Failed",
-      "/payment/connection-success": "Payment Success",
-      "/payment/connection-failed": "Payment Failed",
-    }),
-    []
-  );
+  const pageTitles = useMemo(() => ({
+    "/": "Accounts",
+    "/agency": "Agency",
+    "/integrations": "Integrations",
+    "/rebilling": "Rebilling",
+    "/settings": "Settings",
+    "/dashboard": "Dashboard",
+    "/inbox": "Inbox",
+    "/call": "Call Center",
+    "/contacts": "Contacts",
+    "/knowledge": "Knowledge",
+    "/assistants": "Assistants",
+    "/blog": "Knowledge",
+    "/activetags": "Active Tags",
+    "/numbers": "Numbers",
+    "/pools": "Number Pools",
+    "/widgets": "Widgets",
+    "/helps": "Help Center",
+    "/ghl_settings": "Settings",
+    "/connection-success": "Integration Success",
+    "/connection-failed": "Integration Failed",
+    "/payment/connection-success": "Payment Success",
+    "/payment/connection-failed": "Payment Failed",
+  }), []);
 
   const getCurrentTitle = () => {
     if (location.pathname === "/app") {
@@ -397,11 +233,9 @@ export default function MainContent() {
     return pageTitles[location.pathname] || "Dashboard";
   };
 
-  const currentTitle = getCurrentTitle();
-
   return (
     <div className="flex flex-col flex-1">
-      <Header title={currentTitle} />
+      <Header title={getCurrentTitle()} />
       <main className="flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<SubAccounts />} />
