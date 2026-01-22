@@ -1,5 +1,5 @@
 // src/MainContent.jsx
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Routes, Route, useLocation, useSearchParams, useNavigate, Navigate } from "react-router-dom";
 import { Header } from "./components/components-ui/Header";
 import { useDispatch, useSelector } from "react-redux";
@@ -88,6 +88,7 @@ export default function MainContent() {
   
   const hasRedirected = useRef(false);
   const isProcessing = useRef(false);
+  const [isNavigatingToGhl, setIsNavigatingToGhl] = useState(false);
 
   const { agencyId } = useSelector((state) => state.integrations || {});
   const { companyDetails, isAuthenticated } = useSelector((state) => state.auth || {});
@@ -106,7 +107,6 @@ export default function MainContent() {
 
     if (detectedId && !detectedId.includes('{{')) {
       console.log('✅ Captured GHL Location ID:', detectedId);
-      // localStorage survives the redirect to /login and back
       localStorage.setItem('ghl_pending_locationId', detectedId);
     }
   }, [searchParams]);
@@ -114,10 +114,7 @@ export default function MainContent() {
   // 🔥 2. AUTO-NAVIGATION: Runs once user IS authenticated
   useEffect(() => {
     const handleGhlNavigation = async () => {
-      // Logic: If logged in, check if we have a pending GHL subaccount to open
       if (!isAuthenticated || hasRedirected.current || isProcessing.current) return;
-      
-      // If we are already on an app route with a subaccount param, don't trigger auto-logic
       if (searchParams.get("subaccount")) return;
 
       const pendingId = localStorage.getItem('ghl_pending_locationId');
@@ -125,19 +122,28 @@ export default function MainContent() {
       if (pendingId) {
         try {
           isProcessing.current = true;
+          setIsNavigatingToGhl(true);
           console.log('🔄 Authenticated. Matching GHL ID:', pendingId);
           
           const result = await dispatch(fetchImportedSubAccounts());
           const apiResponse = result.payload;
           const fetchedSubAccounts = Array.isArray(apiResponse?.data) ? apiResponse.data : [];
           
+          // RACE CONDITION FIX: If list is empty, reset processing to allow retry on next state change
+          if (fetchedSubAccounts.length === 0) {
+            console.log("⏳ Subaccounts list empty, waiting for data...");
+            isProcessing.current = false;
+            setIsNavigatingToGhl(false);
+            return;
+          }
+
           const match = fetchedSubAccounts.find(acc => acc.id === pendingId);
 
           if (match) {
-            console.log('🎯 Match found! Redirecting to App...');
+            console.log('🎯 Match found! Redirecting to Assistant Page...');
             hasRedirected.current = true;
             
-            const finalAgencyId = match.companyId || apiResponse?.agencyId || companyDetails?.id || agencyId;
+            const finalAgencyId = apiResponse?.agencyId || match.companyId || companyDetails?.id || agencyId;
             
             const params = new URLSearchParams({
               agencyid: finalAgencyId,
@@ -148,14 +154,17 @@ export default function MainContent() {
               route: "/assistants",
             });
 
-            localStorage.removeItem('ghl_pending_locationId'); // Clear storage to prevent loops
+            localStorage.removeItem('ghl_pending_locationId'); 
             navigate(`/app?${params.toString()}`, { replace: true });
           } else {
             console.warn('⚠️ GHL ID captured but not found in linked accounts.');
+            localStorage.removeItem('ghl_pending_locationId');
+            setIsNavigatingToGhl(false);
             isProcessing.current = false;
           }
         } catch (error) {
           console.error('❌ GHL Sync Error:', error);
+          setIsNavigatingToGhl(false);
           isProcessing.current = false;
         }
       }
@@ -200,7 +209,17 @@ export default function MainContent() {
   };
 
   return (
-    <div className="flex flex-col flex-1">
+    <div className="flex flex-col flex-1 relative">
+      {/* 🚀 Loading Overlay for GHL Auto-Navigation */}
+      {isNavigatingToGhl && (
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="mt-4 text-blue-800 font-semibold animate-pulse">
+            Connecting to your GHL Assistant...
+          </p>
+        </div>
+      )}
+
       <Header title={getCurrentTitle()} />
       <main className="flex-1 overflow-y-auto">
         <Routes>
@@ -211,7 +230,6 @@ export default function MainContent() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           
-          {/* Protected App Route */}
           <Route 
             path="/app" 
             element={!isAuthenticated ? <Navigate to="/login" replace /> : <AppRouter />} 
