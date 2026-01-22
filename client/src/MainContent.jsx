@@ -1,4 +1,86 @@
-// src/MainContent.jsx
+// 🔥 CAPTURE locationId EARLY - before any navigation
+  useEffect(() => {
+    const currentUrl = window.location.href;
+    const referrer = document.referrer;
+    
+    console.log('🔍 Early Capture Check');
+    console.log('  - Current URL:', currentUrl);
+    console.log('  - Referrer:', referrer);
+    console.log('  - All search params:', Object.fromEntries(searchParams.entries()));
+    
+    // 🔥 NEW: Try to extract from Performance API (recent navigation)
+    try {
+      const perfEntries = performance.getEntriesByType('navigation');
+      const resourceEntries = performance.getEntriesByType('resource');
+      
+      console.log('  - Performance navigation entries:', perfEntries.length);
+      console.log('  - Performance resource entries:', resourceEntries.length);
+      
+      // Check recent resource loads for GHL URLs
+      const ghlResources = resourceEntries.filter(entry => 
+        entry.name.includes('gohighlevel.com') && entry.name.includes('/location/')
+      );
+      
+      if (ghlResources.length > 0) {
+        console.log('  - Found GHL resources:', ghlResources);
+        for (const resource of ghlResources) {
+          const match = resource.name.match(/\/location\/([a-zA-Z0-9_-]{15,25})/);
+          if (match) {
+            const locationId = match[1];
+            console.log('✅ Captured locationId from Performance API:', locationId);
+            sessionStorage.setItem('ghl_locationId', locationId);
+            sessionStorage.setItem('ghl_captureTime', Date.now().toString());
+            return; // Exit early if found
+          }
+        }
+      }
+    } catch (perfError) {
+      console.log('  - Performance API not available:', perfError.message);
+    }
+    
+    // Check if we're coming from GHL custom menu link
+    if (referrer.includes('app.gohighlevel.com') || currentUrl.includes('gohighlevel')) {
+      
+      // Try to extract locationId from referrer or current URL
+      const extractLocationId = (url) => {
+        console.log('  - Trying to extract from:', url);
+        const patterns = [
+          /\/location\/([a-zA-Z0-9_-]{15,25})/, // Standard: /location/ID
+          /\/v2\/location\/([a-zA-Z0-9_-]{15,25})/, // V2: /v2/location/ID
+          /locationId=([a-zA-Z0-9_-]{15,25})/, // Query: ?locationId=ID
+          /location=([a-zA-Z0-9_-]{15,25})/, // Query: ?location=ID
+          /subaccount=([a-zA-Z0-9_-]{15,25})/, // Query: ?subaccount=ID
+        ];
+        
+        for (const pattern of patterns) {
+          const match = url.match(pattern);
+          if (match && match[1]) {
+            console.log('  - ✅ Match found with pattern:', pattern);
+            return match[1];
+          }
+        }
+        return null;
+      };
+      
+      let locationId = extractLocationId(referrer) || extractLocationId(currentUrl);
+      
+      // Also check URL params
+      if (!locationId) {
+        locationId = searchParams.get('locationId') || 
+                     searchParams.get('location') || 
+                     searchParams.get('subaccount');
+        if (locationId) console.log('  - ✅ Found in URL params:', locationId);
+      }
+      
+      if (locationId) {
+        console.log('✅ Captured locationId:', locationId);
+        sessionStorage.setItem('ghl_locationId', locationId);
+        sessionStorage.setItem('ghl_captureTime', Date.now().toString());
+      } else {
+        console.log('❌ Could not extract locationId from any source');
+      }
+    }
+  }, []); // Run once on mount// src/MainContent.jsx
 import React, { useEffect, useMemo, useRef } from "react";
 import { Routes, Route, useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import { Header } from "./components/components-ui/Header";
