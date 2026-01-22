@@ -1,6 +1,6 @@
 // src/MainContent.jsx
 import React, { useEffect, useMemo, useRef } from "react";
-import { Routes, Route, useLocation, useSearchParams, useNavigate } from "react-router-dom";
+import { Routes, Route, useLocation, useSearchParams, useNavigate, Navigate } from "react-router-dom";
 import { Header } from "./components/components-ui/Header";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchImportedSubAccounts } from "./store/slices/integrationSlice";
@@ -92,81 +92,77 @@ export default function MainContent() {
   const { agencyId } = useSelector((state) => state.integrations || {});
   const { companyDetails, isAuthenticated } = useSelector((state) => state.auth || {});
 
-  // 🔥 1. UPDATED EXTRACTION: Capture ID from the new GHL Custom Link params
+  // 🔥 1. IMMEDIATE CAPTURE: Store in localStorage to survive login redirects
   useEffect(() => {
-    const currentUrl = window.location.href;
-    const referrer = document.referrer;
-    
-    // First Priority: Check for the direct 'subaccount' param from your GHL URL
-    let detectedId = searchParams.get('subaccount');
+    let detectedId = searchParams.get('subaccount') || searchParams.get('locationId');
 
-    // Second Priority: Fallback to URL Pattern matching if direct param is missing
     if (!detectedId || detectedId.includes('{{')) {
+      const currentUrl = window.location.href;
+      const referrer = document.referrer;
       const ghlPattern = /\/location\/([a-zA-Z0-9_-]{15,30})/;
       const extractId = (url) => (url.match(ghlPattern) || [])[1];
-      detectedId = extractId(referrer) || extractId(currentUrl) || searchParams.get('locationId');
+      detectedId = extractId(referrer) || extractId(currentUrl);
     }
 
     if (detectedId && !detectedId.includes('{{')) {
       console.log('✅ Captured GHL Location ID:', detectedId);
-      sessionStorage.setItem('ghl_locationId', detectedId);
-      sessionStorage.setItem('ghl_captureTime', Date.now().toString());
+      // localStorage survives the redirect to /login and back
+      localStorage.setItem('ghl_pending_locationId', detectedId);
     }
   }, [searchParams]);
 
-  // 🔥 2. NAVIGATION EFFECT: Match extracted ID with your DB sub-accounts
+  // 🔥 2. AUTO-NAVIGATION: Runs once user IS authenticated
   useEffect(() => {
-    const handleNavigation = async () => {
-      // Safety checks: stop if already redirecting, not logged in, or already on an app route
-      if (hasRedirected.current || isProcessing.current || !isAuthenticated) return;
-      if (location.pathname !== '/' && location.pathname !== '/app') return;
-
-      const storedLocationId = sessionStorage.getItem('ghl_locationId');
+    const handleGhlNavigation = async () => {
+      // Logic: If logged in, check if we have a pending GHL subaccount to open
+      if (!isAuthenticated || hasRedirected.current || isProcessing.current) return;
       
-      if (storedLocationId) {
+      // If we are already on an app route with a subaccount param, don't trigger auto-logic
+      if (searchParams.get("subaccount")) return;
+
+      const pendingId = localStorage.getItem('ghl_pending_locationId');
+      
+      if (pendingId) {
         try {
           isProcessing.current = true;
-          console.log('🔄 Matching GHL ID against database...');
+          console.log('🔄 Authenticated. Matching GHL ID:', pendingId);
           
           const result = await dispatch(fetchImportedSubAccounts());
           const apiResponse = result.payload;
           const fetchedSubAccounts = Array.isArray(apiResponse?.data) ? apiResponse.data : [];
-          const fetchedAgencyId = apiResponse?.agencyId || null;
           
-          // Match the URL ID with one of your fetched sub-accounts
-          const matchingAccount = fetchedSubAccounts.find(acc => acc.id === storedLocationId);
+          const match = fetchedSubAccounts.find(acc => acc.id === pendingId);
 
-          if (matchingAccount) {
-            console.log('🎯 Match found. Redirecting to Assistants...');
+          if (match) {
+            console.log('🎯 Match found! Redirecting to App...');
             hasRedirected.current = true;
             
-            const finalAgencyId = matchingAccount.companyId || fetchedAgencyId || companyDetails?.id || agencyId;
+            const finalAgencyId = match.companyId || apiResponse?.agencyId || companyDetails?.id || agencyId;
             
-            // Build the params for your /app route
             const params = new URLSearchParams({
               agencyid: finalAgencyId,
-              subaccount: matchingAccount.id,
+              subaccount: match.id,
               allow: "yes",
-              myname: searchParams.get("myname") || encodeURIComponent(matchingAccount.name || "User"),
-              myemail: searchParams.get("myemail") || encodeURIComponent(matchingAccount.email || ""),
-              route: "/assistants", // Force navigation to the assistant view
+              myname: encodeURIComponent(match.name || "User"),
+              myemail: encodeURIComponent(match.email || ""),
+              route: "/assistants",
             });
 
-            sessionStorage.removeItem('ghl_locationId'); // Clear to prevent loops
+            localStorage.removeItem('ghl_pending_locationId'); // Clear storage to prevent loops
             navigate(`/app?${params.toString()}`, { replace: true });
           } else {
-            console.warn('⚠️ No match found for GHL ID:', storedLocationId);
+            console.warn('⚠️ GHL ID captured but not found in linked accounts.');
             isProcessing.current = false;
           }
         } catch (error) {
-          console.error('❌ Auto-navigation Error:', error);
+          console.error('❌ GHL Sync Error:', error);
           isProcessing.current = false;
         }
       }
     };
     
-    handleNavigation();
-  }, [location.pathname, searchParams, isAuthenticated, dispatch, navigate, agencyId, companyDetails]);
+    handleGhlNavigation();
+  }, [isAuthenticated, dispatch, navigate, agencyId, companyDetails, searchParams]);
 
   const pageTitles = useMemo(() => ({
     "/": "Accounts",
@@ -214,7 +210,13 @@ export default function MainContent() {
           <Route path="/rebilling" element={<Rebilling />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/app" element={<AppRouter />} />
+          
+          {/* Protected App Route */}
+          <Route 
+            path="/app" 
+            element={!isAuthenticated ? <Navigate to="/login" replace /> : <AppRouter />} 
+          />
+
           <Route path="/connection-success/:message" element={<GHLConnectionSuccess />} />
           <Route path="/connection-failed" element={<GHLConnectionFailed />} />
           <Route path="/payment/connection-success" element={<StripeConnectionSuccess />} />
