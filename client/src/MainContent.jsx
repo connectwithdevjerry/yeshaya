@@ -111,67 +111,72 @@ export default function MainContent() {
     }
   }, [searchParams]);
 
-  // 🔥 2. AUTO-NAVIGATION: Runs once user IS authenticated
-  useEffect(() => {
-    const handleGhlNavigation = async () => {
-      if (!isAuthenticated || hasRedirected.current || isProcessing.current) return;
-      if (searchParams.get("subaccount")) return;
 
-      const pendingId = localStorage.getItem('ghl_pending_locationId');
-      
-      if (pendingId) {
-        try {
-          isProcessing.current = true;
-          setIsNavigatingToGhl(true);
-          console.log('🔄 Authenticated. Matching GHL ID:', pendingId);
-          
-          const result = await dispatch(fetchImportedSubAccounts());
-          const apiResponse = result.payload;
-          const fetchedSubAccounts = Array.isArray(apiResponse?.data) ? apiResponse.data : [];
-          
-          // RACE CONDITION FIX: If list is empty, reset processing to allow retry on next state change
-          if (fetchedSubAccounts.length === 0) {
-            console.log("⏳ Subaccounts list empty, waiting for data...");
-            isProcessing.current = false;
-            setIsNavigatingToGhl(false);
-            return;
-          }
-
-          const match = fetchedSubAccounts.find(acc => acc.id === pendingId);
-
-          if (match) {
-            console.log('🎯 Match found! Redirecting to Assistant Page...');
-            hasRedirected.current = true;
-            
-            const finalAgencyId = apiResponse?.agencyId || match.companyId || companyDetails?.id || agencyId;
-            
-            const params = new URLSearchParams({
-              agencyid: finalAgencyId,
-              subaccount: match.id,
-              allow: "yes",
-              myname: encodeURIComponent(match.name || "User"),
-              myemail: encodeURIComponent(match.email || ""),
-              route: "/assistants",
-            });
-
-            localStorage.removeItem('ghl_pending_locationId'); 
-            navigate(`/app?${params.toString()}`, { replace: true });
-          } else {
-            console.warn('⚠️ GHL ID captured but not found in linked accounts.');
-            localStorage.removeItem('ghl_pending_locationId');
-            setIsNavigatingToGhl(false);
-            isProcessing.current = false;
-          }
-        } catch (error) {
-          console.error('❌ GHL Sync Error:', error);
-          setIsNavigatingToGhl(false);
-          isProcessing.current = false;
-        }
-      }
-    };
+// 🔥 2. AUTO-NAVIGATION: Runs once user IS authenticated
+useEffect(() => {
+  const handleGhlNavigation = async () => {
+    // 1. Check if we should even attempt navigation
+    const pendingId = localStorage.getItem('ghl_pending_locationId');
+    if (!isAuthenticated || !pendingId || hasRedirected.current) return;
     
-    handleGhlNavigation();
-  }, [isAuthenticated, dispatch, navigate, agencyId, companyDetails, searchParams]);
+    // 2. Prevent concurrent API calls, but allow retry if previous attempt was empty
+    if (isProcessing.current) return;
+
+    try {
+      isProcessing.current = true;
+      setIsNavigatingToGhl(true);
+      console.log('🔄 Authenticated. Matching GHL ID:', pendingId);
+      
+      const result = await dispatch(fetchImportedSubAccounts());
+      const apiResponse = result.payload;
+      const fetchedSubAccounts = Array.isArray(apiResponse?.data) ? apiResponse.data : [];
+      
+      console.log(`📊 Check: Found ${fetchedSubAccounts.length} accounts in DB.`);
+
+      if (fetchedSubAccounts.length === 0) {
+        console.log("⏳ Subaccounts list empty, releasing lock for retry...");
+        isProcessing.current = false; // RELEASE THE LOCK
+        setIsNavigatingToGhl(false);
+        return; // Exit and wait for the next render/dependency trigger
+      }
+
+      const match = fetchedSubAccounts.find(acc => acc.id === pendingId);
+
+      if (match) {
+        console.log('🎯 Match found! Redirecting to Assistant Page...');
+        hasRedirected.current = true;
+        
+        const finalAgencyId = apiResponse?.agencyId || match.companyId || companyDetails?.id || agencyId;
+        
+        const params = new URLSearchParams({
+          agencyid: finalAgencyId,
+          subaccount: match.id,
+          allow: "yes",
+          myname: encodeURIComponent(match.name || "User"),
+          myemail: encodeURIComponent(match.email || ""),
+          route: "/assistants",
+        });
+
+        localStorage.removeItem('ghl_pending_locationId'); 
+        navigate(`/app?${params.toString()}`, { replace: true });
+      } else {
+        console.warn('⚠️ GHL ID not found in matched accounts. Clearing pending ID.');
+        localStorage.removeItem('ghl_pending_locationId');
+        setIsNavigatingToGhl(false);
+        isProcessing.current = false;
+      }
+    } catch (error) {
+      console.error('❌ GHL Sync Error:', error);
+      isProcessing.current = false;
+      setIsNavigatingToGhl(false);
+    }
+  };
+  
+  handleGhlNavigation();
+  
+  // We add 'location.pathname' so that if they are on the dashboard, it keeps trying 
+  // until the subaccounts are actually loaded into the state.
+}, [isAuthenticated, dispatch, navigate, agencyId, companyDetails, location.pathname]);
 
   const pageTitles = useMemo(() => ({
     "/": "Accounts",
