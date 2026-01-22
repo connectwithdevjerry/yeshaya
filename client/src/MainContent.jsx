@@ -1,5 +1,5 @@
 // src/MainContent.jsx
-import React, { useEffect, useMemo, useRef } from "react"; // Added useRef
+import React, { useEffect, useMemo, useRef } from "react";
 import { Routes, Route, useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import { Header } from "./components/components-ui/Header";
 import { useDispatch, useSelector } from "react-redux";
@@ -87,104 +87,131 @@ export default function MainContent() {
   const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
   
-  // ✅ Ref to ensure redirect logic only runs once
   const hasRedirected = useRef(false);
 
   const { agencyId } = useSelector((state) => state.integrations || {});
   const { companyDetails, isAuthenticated } = useSelector((state) => state.auth || {});
 
+  // 🔥 MAIN FIX: Extract locationId from GoHighLevel URL
+  const extractLocationIdFromUrl = () => {
+    const currentUrl = window.location.href;
+    const referrer = document.referrer;
+    
+    // Check if current URL or referrer contains GoHighLevel location pattern
+    const isGHLUrl = (url) => url.includes('app.gohighlevel.com') && url.includes('/location/');
+    
+    let locationId = null;
+    
+    // Try to extract from current URL first
+    if (isGHLUrl(currentUrl)) {
+      const match = currentUrl.match(/\/location\/([^\/\?&#]+)/);
+      if (match) locationId = match[1];
+    }
+    
+    // If not found, try referrer
+    if (!locationId && isGHLUrl(referrer)) {
+      const match = referrer.match(/\/location\/([^\/\?&#]+)/);
+      if (match) locationId = match[1];
+    }
+    
+    // Check URL params as fallback
+    if (!locationId) {
+      locationId = searchParams.get('locationId') || 
+                   searchParams.get('location') || 
+                   searchParams.get('subaccount');
+    }
+    
+    return locationId;
+  };
+
   // 1️⃣ Effect: Auto-navigate from GHL Custom Menu Link
   useEffect(() => {
-    const handleGHLUrlNavigation = async () => {
-      // Guard clauses: already redirected, not logged in, or wrong path
+    const handleGHLNavigation = async () => {
+      // Prevent multiple redirects
       if (hasRedirected.current || !isAuthenticated) return;
+      
+      // Only run on root or /app paths
       if (location.pathname !== '/' && location.pathname !== '/app') return;
       
-      const currentUrl = window.location.href;
-      const referrer = document.referrer;
+      // Extract locationId from URL
+      const locationId = extractLocationIdFromUrl();
       
-      const isCurrentUrlGHL = currentUrl.includes('app.gohighlevel.com') && currentUrl.includes('/location/') && currentUrl.includes('/custom-menu-link/');
-      const isReferrerGHL = referrer && referrer.includes('app.gohighlevel.com') && referrer.includes('/location/') && referrer.includes('/custom-menu-link/');
-      const referrerHasLocation = referrer && referrer.includes('app.gohighlevel.com') && referrer.includes('/location/');
-      const locationIdFromParams = searchParams.get('locationId') || searchParams.get('location') || searchParams.get('subaccount');
+      console.log('🔍 Detected locationId:', locationId);
       
-      let locationId = null;
-
-      if (isCurrentUrlGHL || isReferrerGHL) {
-        const urlToCheck = isCurrentUrlGHL ? currentUrl : referrer;
-        const locationMatch = urlToCheck.match(/\/location\/([^\/]+)\//);
-        if (locationMatch) locationId = locationMatch[1];
-      } else if (referrerHasLocation) {
-        const locationMatch = referrer.match(/\/location\/([^\/]+)/);
-        if (locationMatch) locationId = locationMatch[1];
-      } else if (locationIdFromParams) {
-        locationId = locationIdFromParams;
-      }
+      // If no locationId detected, skip
+      if (!locationId) return;
       
-      if (!locationId || searchParams.get('subaccount') === locationId) return;
+      // If already on correct subaccount, skip
+      if (searchParams.get('subaccount') === locationId) return;
 
       try {
-        // ✅ Mark as redirected immediately to prevent parallel triggers
         hasRedirected.current = true;
-        console.log('📥 Fetching subaccounts for custom menu link context...');
+        console.log('📥 Fetching subaccounts for locationId:', locationId);
         
         const result = await dispatch(fetchImportedSubAccounts());
-        const fetchedSubAccounts = result.payload?.locations || [];
+        
+        // ✅ Access the correct structure from your API response
+        const fetchedSubAccounts = result.payload?.data || [];
         const fetchedAgencyId = result.payload?.agencyId || null;
         
+        console.log('📦 Fetched subaccounts:', fetchedSubAccounts);
+        console.log('🏢 Agency ID:', fetchedAgencyId);
+        
+        // Find matching account by locationId
         const matchingAccount = fetchedSubAccounts.find(acc => acc.id === locationId);
         
         if (!matchingAccount) {
-          console.log('❌ No matching subaccount found.');
-          hasRedirected.current = false; // Reset if fetch didn't yield a result
+          console.warn('❌ No matching subaccount found for locationId:', locationId);
+          hasRedirected.current = false;
           return;
         }
+        
+        console.log('✅ Found matching account:', matchingAccount);
 
+        // Determine target route
         let targetRoute = "/assistants";
         if (location.pathname === "/app") {
           targetRoute = searchParams.get("route") || "/assistants";
-        } else if (["/inbox", "/call", "/contacts", "/knowledge", "/assistants", "/activetags", "/numbers", "/pools", "/widgets", "/helps", "/ghl_settings", "/blog"].includes(location.pathname)) {
+        } else if (["/inbox", "/call", "/contacts", "/knowledge", "/assistants", "/activetags", "/numbers", "/pools", "/widgets", "/helps", "/ghl_settings"].includes(location.pathname)) {
           targetRoute = location.pathname;
         }
 
+        // Use companyId from matched account, fallback to fetched agencyId
         const finalAgencyId = matchingAccount.companyId || fetchedAgencyId || companyDetails?.id || agencyId || "UNKNOWN_COMPANY";
         
+        // Build navigation params
         const params = new URLSearchParams({
           agencyid: finalAgencyId,
           subaccount: matchingAccount.id,
           allow: "yes",
-          myname: matchingAccount.name || "NoName",
-          myemail: matchingAccount.email || "noemail@example.com",
+          myname: encodeURIComponent(matchingAccount.name || "NoName"),
+          myemail: encodeURIComponent(matchingAccount.email || "noemail@example.com"),
           route: targetRoute,
         });
 
+        console.log('🚀 Navigating with params:', params.toString());
+
+        // Navigate to /app with proper parameters
         setTimeout(() => {
           navigate(`/app?${params.toString()}`, { replace: true });
         }, 0);
         
       } catch (error) {
-        console.error('❌ Redirect Error:', error);
+        console.error('❌ Navigation Error:', error);
         hasRedirected.current = false;
       }
     };
     
-    handleGHLUrlNavigation();
-  }, [location.pathname, isAuthenticated, dispatch, navigate, searchParams]);
+    handleGHLNavigation();
+  }, [location.pathname, isAuthenticated, dispatch, navigate, searchParams, agencyId, companyDetails]);
 
-  // 2️⃣ Effect: Handle basic GHL context redirect
+  // 2️⃣ Effect: Handle basic GHL context redirect (fallback)
   useEffect(() => {
     if (hasRedirected.current) return;
 
     const subaccount = searchParams.get("subaccount");
     const agencyid = searchParams.get("agencyid");
     const isGHLReferrer = document.referrer.includes("app.gohighlevel.com");
-    
-    const currentUrl = window.location.href;
-    const referrer = document.referrer;
-    const isCustomMenuLink = (currentUrl.includes('/custom-menu-link/') && currentUrl.includes('/location/')) ||
-                             (referrer.includes('/custom-menu-link/') && referrer.includes('/location/'));
-    
-    if (isCustomMenuLink) return;
     
     if (location.pathname === "/" && ((subaccount && agencyid) || isGHLReferrer)) {
       hasRedirected.current = true;
