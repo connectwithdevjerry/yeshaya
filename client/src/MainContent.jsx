@@ -121,42 +121,35 @@ export default function MainContent() {
     }
   }, [searchParams]);
 
-  // 🔥 2. AUTO-NAVIGATION & FORCED REFRESH
+  // 🔥 2. AUTO-NAVIGATION with Forced 5-Second Refresh
   useEffect(() => {
     let refreshTimer;
 
     const handleGhlNavigation = async () => {
       const pendingId = localStorage.getItem("ghl_pending_locationId");
 
-      // Only run if: Logged in AND we have an ID AND we aren't already at the destination
+      // 1. Only run if we have a target and are logged in
       if (!isAuthenticated || !pendingId || hasRedirected.current) return;
 
-      // If the URL already has the subaccount, we are done.
-      if (searchParams.get("subaccount") === pendingId) {
-        localStorage.removeItem("ghl_pending_locationId");
-        return;
-      }
-
+      // 2. Lock the process
       if (isProcessing.current) return;
       isProcessing.current = true;
       setIsNavigatingToGhl(true);
 
-      // --- MANDATORY 5-SECOND REFRESH ---
-      // This automates your "manual refresh"
+      // --- 🚀 THE AUTO-REFRESH TIMER ---
+      // We start this immediately. If we haven't navigated in 5s, we RELOAD.
+      console.log("⏱️ Timer started: Will auto-refresh in 5 seconds...");
       refreshTimer = setTimeout(() => {
         if (!hasRedirected.current) {
-          console.log("🚀 5s Failsafe: Triggering Auto-Refresh...");
+          console.log("🔄 5s reached without navigation. Refreshing now...");
           window.location.reload();
         }
       }, 5000);
 
       try {
-        console.log("🔄 Checking GHL Match for:", pendingId);
+        console.log("🔄 Attempting immediate match for:", pendingId);
 
-        // Fetch the subaccounts
         const result = await dispatch(fetchImportedSubAccounts());
-
-        // Look at your log: "🟢Subaccounts Object" -> structure is result.payload.data
         const subAccountList = Array.isArray(result.payload?.data)
           ? result.payload.data
           : [];
@@ -166,8 +159,10 @@ export default function MainContent() {
         );
 
         if (match) {
-          console.log("🎯 Match found! Stopping timer and navigating...");
-          clearTimeout(refreshTimer); // Stop the auto-refresh, we found it!
+          console.log("🎯 Match found! Redirecting...");
+
+          // STOP the refresh timer because we succeeded!
+          clearTimeout(refreshTimer);
           hasRedirected.current = true;
 
           const params = new URLSearchParams({
@@ -184,12 +179,12 @@ export default function MainContent() {
           navigate(`/app?${params.toString()}`, { replace: true });
         } else {
           console.warn(
-            "⚠️ ID not found in list. Page will auto-refresh in 5s.",
+            "⚠️ Match not found in this pass. Standing by for auto-refresh...",
           );
         }
       } catch (error) {
-        console.error("❌ Sync Error:", error);
-        // Let the refreshTimer handle the recovery
+        console.error("❌ GHL Sync Error:", error);
+        // Let the 5-second timer handle the recovery via refresh
       }
     };
 
@@ -198,16 +193,8 @@ export default function MainContent() {
     return () => {
       if (refreshTimer) clearTimeout(refreshTimer);
     };
-    // We add location.search and location.pathname to ensure it fires immediately on login redirect
-  }, [
-    isAuthenticated,
-    location.pathname,
-    location.search,
-    dispatch,
-    navigate,
-    agencyId,
-  ]);
-
+    // Adding location.pathname ensures it triggers the moment the Login redirect hits '/'
+  }, [isAuthenticated, location.pathname, dispatch, navigate, agencyId]);
   const pageTitles = useMemo(
     () => ({
       "/": "Accounts",
