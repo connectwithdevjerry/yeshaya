@@ -104,12 +104,19 @@ export default function MainContent() {
   const { subAccounts, agencyId } = useSelector(
     (state) => state.integrations || {}
   );
-  const { companyDetails } = useSelector((state) => state.auth || {});
+  const { companyDetails, isAuthenticated } = useSelector((state) => state.auth || {});
 
   // New useEffect: Auto-navigate from GHL Custom Menu Link in URL or referrer
   // This should run FIRST to handle custom menu links before basic GHL redirect
+  // Runs immediately after login (isAuthenticated becomes true)
   useEffect(() => {
     const handleGHLUrlNavigation = async () => {
+      // Only run when authenticated
+      if (!isAuthenticated) {
+        console.log('⏳ Waiting for authentication...');
+        return;
+      }
+      
       // Only run on root path or /app when no subaccount params exist
       if (location.pathname !== '/' && location.pathname !== '/app') return;
       
@@ -120,6 +127,7 @@ export default function MainContent() {
       console.log('🔍 Checking for GHL custom menu link...');
       console.log('📍 Current URL:', currentUrl);
       console.log('📍 Referrer:', referrer || '(empty)');
+      console.log('📍 Search Params:', Object.fromEntries(searchParams.entries()));
       
       // Check both current URL and referrer for GHL custom menu link
       const isCurrentUrlGHL = currentUrl.includes('app.gohighlevel.com') && 
@@ -130,10 +138,49 @@ export default function MainContent() {
                             referrer.includes('/location/') && 
                             referrer.includes('/custom-menu-link/');
       
-      const urlToCheck = isCurrentUrlGHL ? currentUrl : (isReferrerGHL ? referrer : null);
+      // Also check if referrer contains location pattern (even without custom-menu-link)
+      const referrerHasLocation = referrer && referrer.includes('app.gohighlevel.com') && 
+                                  referrer.includes('/location/');
       
-      if (!urlToCheck) {
-        console.log('ℹ️ Not from GHL custom menu link - current URL or referrer does not match pattern');
+      // Check for location ID in query parameters as fallback
+      const locationIdFromParams = searchParams.get('locationId') || 
+                                   searchParams.get('location') || 
+                                   searchParams.get('subaccount');
+      
+      let urlToCheck = isCurrentUrlGHL ? currentUrl : (isReferrerGHL ? referrer : null);
+      let locationId = null;
+      
+      // If we have a direct custom menu link URL, extract location ID from it
+      if (urlToCheck) {
+        console.log('🔗 Detected GHL custom menu link:', urlToCheck);
+        const locationMatch = urlToCheck.match(/\/location\/([^\/]+)\//);
+        if (locationMatch) {
+          locationId = locationMatch[1];
+          console.log('🔍 Extracted GHL location ID from URL:', locationId);
+        }
+      }
+      // If referrer has location pattern but not custom-menu-link, try to extract location ID
+      else if (referrerHasLocation) {
+        console.log('🔗 Detected GHL referrer with location pattern:', referrer);
+        const locationMatch = referrer.match(/\/location\/([^\/]+)/);
+        if (locationMatch) {
+          locationId = locationMatch[1];
+          console.log('🔍 Extracted GHL location ID from referrer:', locationId);
+        }
+      }
+      // Check if location ID is in query parameters
+      else if (locationIdFromParams) {
+        locationId = locationIdFromParams;
+        console.log('🔍 Found location ID in query parameters:', locationId);
+      }
+      // If coming from GHL but no location ID found, return early
+      else {
+        const isGHLReferrer = referrer && referrer.includes('app.gohighlevel.com');
+        if (!isGHLReferrer) {
+          console.log('ℹ️ Not from GHL - skipping custom menu link detection');
+          return;
+        }
+        console.log('ℹ️ Coming from GHL but no location ID found in URL, referrer, or params');
         console.log('   Current URL check:', {
           hasGHL: currentUrl.includes('app.gohighlevel.com'),
           hasLocation: currentUrl.includes('/location/'),
@@ -143,23 +190,16 @@ export default function MainContent() {
           hasReferrer: !!referrer,
           hasGHL: referrer ? referrer.includes('app.gohighlevel.com') : false,
           hasLocation: referrer ? referrer.includes('/location/') : false,
-          hasCustomMenu: referrer ? referrer.includes('/custom-menu-link/') : false
+          hasCustomMenu: referrer ? referrer.includes('/custom-menu-link/') : false,
+          fullReferrer: referrer
         });
         return;
       }
       
-      console.log('🔗 Detected GHL custom menu link:', urlToCheck);
-      
-      // Extract location ID from URL
-      // Format: https://app.gohighlevel.com/v2/location/{LOCATION_ID}/custom-menu-link/{LINK_ID}
-      const locationMatch = urlToCheck.match(/\/location\/([^\/]+)\//);
-      if (!locationMatch) {
-        console.log('❌ Could not extract location ID from URL');
+      if (!locationId) {
+        console.log('❌ Could not extract location ID from any source');
         return;
       }
-      
-      const locationId = locationMatch[1];
-      console.log('🔍 Extracted GHL location ID:', locationId);
       
       // Check if we already have this subaccount in params (avoid infinite loop)
       const existingSubaccount = searchParams.get('subaccount');
@@ -206,6 +246,12 @@ export default function MainContent() {
           firstName: matchingAccount.firstName,
           lastName: matchingAccount.lastName
         });
+        console.log('📦 Available agency IDs:', {
+          fromAccount: matchingAccount.companyId,
+          fromFetch: fetchedAgencyId,
+          fromRedux: agencyId,
+          fromCompanyDetails: companyDetails?.id || companyDetails?.companyId
+        });
         
         // Determine target route (same logic as AccountActionsMenu)
         let targetRoute = "/assistants";
@@ -231,10 +277,20 @@ export default function MainContent() {
           targetRoute = location.pathname;
         }
         
+        // Determine agencyid - prioritize in order: account.companyId > fetchedAgencyId > companyDetails > Redux agencyId
+        const finalAgencyId = matchingAccount.companyId || 
+                              fetchedAgencyId || 
+                              companyDetails?.id || 
+                              companyDetails?.companyId || 
+                              agencyId || 
+                              "UNKNOWN_COMPANY";
+        
+        console.log('🏢 Final agency ID selected:', finalAgencyId);
+        
         // Build navigation URL using all required parameters from the fetched subaccount data
         // Using same parameter structure as AccountActionsMenu
         const params = new URLSearchParams({
-          agencyid: matchingAccount.companyId || fetchedAgencyId || agencyId || "UNKNOWN_COMPANY",
+          agencyid: finalAgencyId,
           subaccount: matchingAccount.id || "NO_ID",
           allow: "yes",
           myname: matchingAccount.name || "NoName",
@@ -263,7 +319,7 @@ export default function MainContent() {
     };
     
     handleGHLUrlNavigation();
-  }, [location.pathname, agencyId, dispatch, navigate, searchParams]);
+  }, [location.pathname, agencyId, isAuthenticated, dispatch, navigate, searchParams]);
 
   // Second useEffect: Handle basic GHL context redirect (runs after custom menu link check)
   useEffect(() => {
