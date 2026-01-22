@@ -109,6 +109,12 @@ export default function MainContent() {
     const currentUrl = window.location.href;
     const referrer = document.referrer;
     
+    console.log('🔍 URL Debug:', {
+      currentUrl,
+      referrer,
+      searchParams: Object.fromEntries(searchParams.entries())
+    });
+    
     const isGHLUrl = (url) => url.includes('app.gohighlevel.com') && url.includes('/location/');
     
     let locationId = null;
@@ -116,13 +122,19 @@ export default function MainContent() {
     // Try current URL first
     if (isGHLUrl(currentUrl)) {
       const match = currentUrl.match(/\/location\/([^\/\?&#]+)/);
-      if (match) locationId = match[1];
+      if (match) {
+        locationId = match[1];
+        console.log('✅ LocationId from current URL:', locationId);
+      }
     }
     
     // Try referrer
     if (!locationId && isGHLUrl(referrer)) {
       const match = referrer.match(/\/location\/([^\/\?&#]+)/);
-      if (match) locationId = match[1];
+      if (match) {
+        locationId = match[1];
+        console.log('✅ LocationId from referrer:', locationId);
+      }
     }
     
     // Check URL params as fallback
@@ -130,8 +142,32 @@ export default function MainContent() {
       locationId = searchParams.get('locationId') || 
                    searchParams.get('location') || 
                    searchParams.get('subaccount');
+      if (locationId) {
+        console.log('✅ LocationId from params:', locationId);
+      }
     }
     
+    // 🔥 NEW: Try to extract from the full GHL URL structure
+    // Sometimes GHL URLs look like: https://app.gohighlevel.com/v2/location/LOCATION_ID/...
+    if (!locationId && referrer.includes('gohighlevel.com')) {
+      const patterns = [
+        /\/location\/([a-zA-Z0-9_-]+)/,  // Standard pattern
+        /\/v2\/location\/([a-zA-Z0-9_-]+)/, // V2 pattern
+        /location=([a-zA-Z0-9_-]+)/, // Query param
+        /locationId=([a-zA-Z0-9_-]+)/ // Query param variant
+      ];
+      
+      for (const pattern of patterns) {
+        const match = referrer.match(pattern);
+        if (match && match[1]) {
+          locationId = match[1];
+          console.log('✅ LocationId from pattern match:', locationId);
+          break;
+        }
+      }
+    }
+    
+    console.log('🎯 Final locationId:', locationId);
     return locationId;
   };
 
@@ -162,8 +198,42 @@ export default function MainContent() {
         console.log('🔍 GHL detected, locationId:', locationId);
         
         if (!locationId) {
-          console.warn('⚠️ No locationId found in GHL URL');
-          return;
+          console.warn('⚠️ No locationId found in GHL URL, trying fallback...');
+          
+          // 🔥 FALLBACK: Fetch subaccounts and use first one if only one exists
+          try {
+            isProcessing.current = true;
+            const result = await dispatch(fetchImportedSubAccounts());
+            const fetchedSubAccounts = result.payload?.data || [];
+            
+            if (fetchedSubAccounts.length === 1) {
+              console.log('✅ Only one subaccount found, using it automatically');
+              const account = fetchedSubAccounts[0];
+              const fetchedAgencyId = result.payload?.agencyId || null;
+              const finalAgencyId = account.companyId || fetchedAgencyId || companyDetails?.id || agencyId;
+              
+              const params = new URLSearchParams({
+                agencyid: finalAgencyId,
+                subaccount: account.id,
+                allow: "yes",
+                myname: encodeURIComponent(account.name || "NoName"),
+                myemail: encodeURIComponent(account.email || "noemail@example.com"),
+                route: "/assistants",
+              });
+              
+              hasRedirected.current = true;
+              navigate(`/app?${params.toString()}`, { replace: true });
+              return;
+            } else {
+              console.warn('⚠️ Multiple subaccounts found, cannot auto-select');
+              isProcessing.current = false;
+              return;
+            }
+          } catch (error) {
+            console.error('❌ Fallback error:', error);
+            isProcessing.current = false;
+            return;
+          }
         }
 
         try {
