@@ -121,40 +121,45 @@ export default function MainContent() {
     }
   }, [searchParams]);
 
-// 🔥 2. AUTO-NAVIGATION with 5-Second Failsafe Refresh
+// 🔥 2. AUTO-NAVIGATION with Mandatory 5-Second Refresh
 useEffect(() => {
   let refreshTimer;
 
   const handleGhlNavigation = async () => {
     const pendingId = localStorage.getItem('ghl_pending_locationId');
     
-    // 1. Basic checks to see if we should run
+    // Only proceed if logged in and we have a GHL ID to find
     if (!isAuthenticated || !pendingId || hasRedirected.current) return;
-    if (searchParams.get("subaccount")) {
-      localStorage.removeItem('ghl_pending_locationId');
-      return;
-    }
+    
+    // Prevent double-processing
     if (isProcessing.current) return;
+    isProcessing.current = true;
+    setIsNavigatingToGhl(true);
+
+    // --- START THE 5-SECOND REFRESH TIMER IMMEDIATELY ---
+    console.log("⏱️ Refresh timer started. Page will reload in 5 seconds...");
+    refreshTimer = setTimeout(() => {
+      console.log("🚀 5 seconds reached. Refreshing page...");
+      window.location.reload();
+    }, 5000);
 
     try {
-      isProcessing.current = true;
-      setIsNavigatingToGhl(true);
       console.log('🔄 Checking GHL Match for:', pendingId);
 
-      // 2. Fetch the latest subaccounts from the DB
       const result = await dispatch(fetchImportedSubAccounts());
       const subAccountList = Array.isArray(result.payload?.data) ? result.payload.data : [];
       
-      // 3. Try to find the match
       const match = subAccountList.find(acc => String(acc.id) === String(pendingId));
 
       if (match) {
-        console.log('🎯 Match found! Redirecting to Assistant Page...');
+        console.log('🎯 Match found! Navigating...');
         hasRedirected.current = true;
         
-        const finalAgencyId = result.payload?.agencyId || match.companyId || agencyId;
+        // Clear the refresh timer because we succeeded!
+        clearTimeout(refreshTimer);
+
         const params = new URLSearchParams({
-          agencyid: finalAgencyId,
+          agencyid: match.companyId || agencyId,
           subaccount: match.id,
           allow: "yes",
           myname: encodeURIComponent(match.name || "User"),
@@ -166,31 +171,21 @@ useEffect(() => {
         setIsNavigatingToGhl(false);
         navigate(`/app?${params.toString()}`, { replace: true });
       } else {
-        // 4. FAILSAFE: If we haven't navigated yet, wait 5 seconds and refresh
-        console.warn('⚠️ Match not found. DB might be slow. Refreshing in 5s...');
-        
-        refreshTimer = setTimeout(() => {
-          if (!hasRedirected.current) {
-            console.log('🚀 Triggering failsafe refresh...');
-            window.location.reload();
-          }
-        }, 5000);
+        console.warn('⚠️ ID not in list yet. Waiting for the auto-refresh...');
       }
     } catch (error) {
-      console.error('❌ GHL Sync Error:', error);
-      isProcessing.current = false;
-      // Also trigger refresh on error to try and recover
-      refreshTimer = setTimeout(() => window.location.reload(), 5000);
+      console.error('❌ Sync Error:', error);
+      // We don't need to do anything else; the refreshTimer will handle the recovery
     }
   };
 
   handleGhlNavigation();
 
-  // Cleanup timer if the user leaves the page or navigates successfully
+  // Cleanup: clear timer if the user manually leaves the page
   return () => {
     if (refreshTimer) clearTimeout(refreshTimer);
   };
-}, [isAuthenticated, location.pathname, dispatch, navigate, agencyId, searchParams]);
+}, [isAuthenticated, location.pathname, dispatch, navigate, agencyId]);
 
   const pageTitles = useMemo(
     () => ({
