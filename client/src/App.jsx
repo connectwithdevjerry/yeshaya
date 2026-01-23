@@ -22,7 +22,7 @@ import { verifyToken } from "./store/slices/authSlice";
 import { useCurrentAccount } from "./hooks/useCurrentAccount";
 import { Toaster } from "react-hot-toast";
 import { GHLLocationCapture } from "./GHLLocationCapture.jsx";
-import apiClient from "./store/api/config.js";
+import apiClient from "./api/apiClient";
 
 // Auth pages
 import Login from "./pages/pages-ui/Login";
@@ -45,6 +45,7 @@ function Layout() {
 
   const hasRedirected = useRef(false);
   const isProcessing = useRef(false);
+  const previousAuthState = useRef(isAuthenticated);
 
   // Token verification
   useEffect(() => {
@@ -53,9 +54,22 @@ function Layout() {
     }
   }, [dispatch, token, isAuthenticated]);
 
-  // 🔥 GHL REDIRECT LOGIC - Runs 3 seconds after login
+  // 🔥 GHL REDIRECT LOGIC - Runs every time user logs in
   useEffect(() => {
     const handleGhlRedirect = async () => {
+      // Detect fresh login (auth state changed from false to true)
+      const justLoggedIn = !previousAuthState.current && isAuthenticated;
+      
+      // Reset redirect flag on fresh login
+      if (justLoggedIn) {
+        console.log("🆕 Fresh login detected! Resetting redirect flag...");
+        hasRedirected.current = false;
+        isProcessing.current = false;
+      }
+      
+      // Update previous auth state
+      previousAuthState.current = isAuthenticated;
+
       // Skip if not authenticated or already redirected
       if (!isAuthenticated || hasRedirected.current || isProcessing.current) {
         return;
