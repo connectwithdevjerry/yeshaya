@@ -46,7 +46,7 @@ export const AssistantBuilderPage = () => {
           subaccountId,
           assistantId,
           updateData: {
-            firstMessage: promptContent,
+            systemPrompt: promptContent,
           },
         })
       ).unwrap();

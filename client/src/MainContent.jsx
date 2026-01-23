@@ -1,16 +1,14 @@
 // src/MainContent.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   Routes,
   Route,
   useLocation,
   useSearchParams,
-  useNavigate,
   Navigate,
 } from "react-router-dom";
 import { Header } from "./components/components-ui/Header";
-import { useDispatch, useSelector } from "react-redux";
-import { fetchImportedSubAccounts } from "./store/slices/integrationSlice";
+import { useSelector } from "react-redux";
 
 // ---- Pages from Agency section ----
 import Agency from "./pages/pages-ui/Agency";
@@ -89,83 +87,8 @@ const AppRouter = () => {
 
 export default function MainContent() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
-
-  const hasRedirected = useRef(false);
-  const isProcessing = useRef(false);
-
-  const { agencyId } = useSelector((state) => state.integrations || {});
   const { isAuthenticated } = useSelector((state) => state.auth || {});
-
-  // 🔥 1. IMMEDIATE CAPTURE
-  useEffect(() => {
-    let detectedId = searchParams.get("subaccount") || searchParams.get("locationId");
-
-    if (!detectedId || detectedId.includes("{{")) {
-      const currentUrl = window.location.href;
-      const referrer = document.referrer;
-      const ghlPattern = /\/location\/([a-zA-Z0-9_-]{15,30})/;
-      const extractId = (url) => (url.match(ghlPattern) || [])[1];
-      detectedId = extractId(referrer) || extractId(currentUrl);
-    }
-
-    if (detectedId && !detectedId.includes("{{")) {
-      console.log("✅ Captured GHL Location ID:", detectedId);
-      localStorage.setItem("ghl_pending_locationId", detectedId);
-    }
-  }, [searchParams]);
-
-  // 🔥 2. SILENT AUTO-NAVIGATION (No Refresh)
-  useEffect(() => {
-    const handleGhlNavigation = async () => {
-      const pendingId = localStorage.getItem("ghl_pending_locationId");
-
-      if (!isAuthenticated || !pendingId || hasRedirected.current) return;
-      if (isProcessing.current) return;
-
-      isProcessing.current = true;
-
-      try {
-        console.log("🔄 Background check for match:", pendingId);
-
-        const result = await dispatch(fetchImportedSubAccounts());
-        const subAccountList = Array.isArray(result.payload?.data)
-          ? result.payload.data
-          : [];
-
-        const match = subAccountList.find(
-          (acc) => String(acc.id) === String(pendingId)
-        );
-
-        if (match) {
-          console.log("🎯 Match found! Redirecting...");
-          hasRedirected.current = true;
-
-          const params = new URLSearchParams({
-            agencyid: match.companyId || agencyId,
-            subaccount: match.id,
-            allow: "yes",
-            myname: encodeURIComponent(match.name || "User"),
-            myemail: encodeURIComponent(match.email || ""),
-            route: "/assistants",
-          });
-
-          localStorage.removeItem("ghl_pending_locationId");
-          navigate(`/app?${params.toString()}`, { replace: true });
-        } else {
-          console.warn("⚠️ Match not found yet. Navigation skipped.");
-          isProcessing.current = false; // Allow it to try again on next render
-        }
-      } catch (error) {
-        console.error("❌ GHL Sync Error:", error);
-        isProcessing.current = false;
-      }
-    };
-
-    handleGhlNavigation();
-  }, [isAuthenticated, location.pathname, dispatch, navigate, agencyId]);
 
   const pageTitles = useMemo(
     () => ({
