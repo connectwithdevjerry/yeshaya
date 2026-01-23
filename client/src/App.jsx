@@ -60,31 +60,44 @@ function Layout() {
       // Detect fresh login (auth state changed from false to true)
       const justLoggedIn = !previousAuthState.current && isAuthenticated;
       
-      // Reset redirect flag on fresh login
       if (justLoggedIn) {
-        console.log("🆕 Fresh login detected! Resetting redirect flag...");
+        console.log("🆕 Fresh login detected! Resetting redirect flags...");
         hasRedirected.current = false;
         isProcessing.current = false;
       }
       
-      // Update previous auth state
+      // Update previous auth state for next render
       previousAuthState.current = isAuthenticated;
 
-      // Skip if not authenticated or already redirected
-      if (!isAuthenticated || hasRedirected.current || isProcessing.current) {
+      // Now check if we should proceed
+      if (!isAuthenticated) {
+        console.log("⏸️ Not authenticated, skipping redirect");
+        return;
+      }
+
+      if (hasRedirected.current) {
+        console.log("⏸️ Already redirected in this session");
+        return;
+      }
+
+      if (isProcessing.current) {
+        console.log("⏸️ Already processing redirect");
         return;
       }
 
       // Skip if already on a GHL page
       if (location.pathname === "/app" || location.pathname.startsWith("/app")) {
+        console.log("⏸️ Already on /app page");
         return;
       }
 
       const pendingId = localStorage.getItem("ghl_pending_locationId");
       if (!pendingId || pendingId.includes("{{")) {
+        console.log("⏸️ No valid pending locationId");
         return;
       }
 
+      console.log("✅ All checks passed! Starting redirect process...");
       isProcessing.current = true;
 
       // ⏰ Wait 3 seconds for subaccounts to load
