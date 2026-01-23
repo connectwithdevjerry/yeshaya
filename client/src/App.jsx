@@ -19,10 +19,10 @@ import { navigationGHLItems } from "./data/accountsData-ghl";
 import MainContent from "./MainContent";
 import ProtectedRoute from "./ProtectedRoutes";
 import { verifyToken } from "./store/slices/authSlice";
-import { fetchSubAccounts } from "./store/slices/integrationSlice";
 import { useCurrentAccount } from "./hooks/useCurrentAccount";
 import { Toaster } from "react-hot-toast";
 import { GHLLocationCapture } from "./GHLLocationCapture.jsx";
+import apiClient from "./api/apiClient";
 
 // Auth pages
 import Login from "./pages/pages-ui/Login";
@@ -40,7 +40,7 @@ function Layout() {
   
   // Get all state values first
   const { token, isAuthenticated, user } = useSelector((state) => state.auth);
-  const { agencyId, subAccounts } = useSelector((state) => state.integrations || {});
+  const { agencyId } = useSelector((state) => state.integrations || {});
   const account = useCurrentAccount();
 
   const hasRedirected = useRef(false);
@@ -80,11 +80,9 @@ function Layout() {
       try {
         console.log("🔄 Checking GHL location match:", pendingId);
 
-        // Fetch subaccounts into Redux state
-        await dispatch(fetchSubAccounts());
-        
-        // Get subaccounts from Redux state (not from result.payload)
-        const subAccountList = Array.isArray(subAccounts) ? subAccounts : [];
+        // Fetch subaccounts directly from API
+        const response = await apiClient.get("/integrations/get-subaccounts?userType=anon");
+        const subAccountList = response.data?.data?.locations || [];
         
         console.log("📋 Fetched Subaccounts:", subAccountList);
 
@@ -109,16 +107,17 @@ function Layout() {
           navigate(`/app?${params.toString()}`, { replace: true });
         } else {
           console.warn("⚠️ No matching GHL location found");
+          console.warn("⚠️ Available IDs:", subAccountList.map(acc => acc.id));
           isProcessing.current = false;
         }
       } catch (error) {
-        console.error("❌ GHL redirect error:", error);
+        console.error("❌ GHL redirect error:", error.response?.data || error.message);
         isProcessing.current = false;
       }
     };
 
     handleGhlRedirect();
-  }, [isAuthenticated, dispatch, navigate, agencyId, location.pathname, subAccounts]);
+  }, [isAuthenticated, navigate, agencyId, location.pathname]);
 
   // Define userInfo
   const userInfo = {
