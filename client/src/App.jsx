@@ -19,7 +19,7 @@ import { navigationGHLItems } from "./data/accountsData-ghl";
 import MainContent from "./MainContent";
 import ProtectedRoute from "./ProtectedRoutes";
 import { verifyToken } from "./store/slices/authSlice";
-import { fetchImportedSubAccounts } from "./store/slices/integrationSlice";
+import { fetchSubAccounts } from "./store/slices/integrationSlice";
 import { useCurrentAccount } from "./hooks/useCurrentAccount";
 import { Toaster } from "react-hot-toast";
 import { GHLLocationCapture } from "./GHLLocationCapture.jsx";
@@ -78,12 +78,11 @@ function Layout() {
       try {
         console.log("🔄 Checking GHL location match:", pendingId);
 
-        const result = await dispatch(fetchImportedSubAccounts());
+        const result = await dispatch(fetchSubAccounts());
         const subAccountList = Array.isArray(result.payload?.data)
           ? result.payload.data
           : [];
 
-        console.log("📋 Fetched Subaccounts:", subAccountList);
         const match = subAccountList.find(
           (acc) => String(acc.id) === String(pendingId)
         );
