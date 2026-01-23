@@ -78,11 +78,12 @@ function Layout() {
       try {
         console.log("🔄 Checking GHL location match:", pendingId);
 
-        const result = await dispatch(fetchSubAccounts());
-        const subAccountList = Array.isArray(result.payload?.data)
-          ? result.payload.data
-          : [];
-
+        // Fetch subaccounts into Redux state
+        await dispatch(fetchSubAccounts());
+        
+        // Get subaccounts from Redux state (not from result.payload)
+        const subAccountList = Array.isArray(subAccounts) ? subAccounts : [];
+        
         console.log("📋 Fetched Subaccounts:", subAccountList);
 
         const match = subAccountList.find(
@@ -115,7 +116,7 @@ function Layout() {
     };
 
     handleGhlRedirect();
-  }, [isAuthenticated, dispatch, navigate, agencyId, location.pathname]);
+  }, [isAuthenticated, dispatch, navigate, agencyId, location.pathname, subAccounts]);
 
   // Define userInfo
   const userInfo = {
