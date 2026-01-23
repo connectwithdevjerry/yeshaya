@@ -54,97 +54,82 @@ function Layout() {
     }
   }, [dispatch, token, isAuthenticated]);
 
-  // 🔥 GHL REDIRECT LOGIC - Runs every time user logs in
-  useEffect(() => {
-    const handleGhlRedirect = async () => {
-      // Detect fresh login (auth state changed from false to true)
-      const justLoggedIn = !previousAuthState.current && isAuthenticated;
+// 🔥 GHL REDIRECT LOGIC - Now with strict Referrer/Origin checks
+useEffect(() => {
+  const handleGhlRedirect = async () => {
+    const justLoggedIn = !previousAuthState.current && isAuthenticated;
+    
+    if (justLoggedIn) {
+      hasRedirected.current = false;
+      isProcessing.current = false;
+    }
+    
+    previousAuthState.current = isAuthenticated;
+
+    if (!isAuthenticated || hasRedirected.current || isProcessing.current) return;
+
+    // 1. Check if we are already in an app session
+    if (location.pathname === "/app" || location.pathname.startsWith("/app")) return;
+
+    // 2. STRICT CHECK: Should we even be looking for a GHL redirect?
+    const referrer = document.referrer;
+    const currentUrl = window.location.href;
+    const hasGhlParams = currentUrl.includes("locationId=") || currentUrl.includes("subaccount=");
+    const isFromGhl = referrer.includes('gohighlevel.com') || referrer.includes('app.msgsndr.com') || hasGhlParams;
+
+    // If we aren't coming from GHL and don't have GHL params in the URL, stop here.
+    if (!isFromGhl) {
+      console.log("🏠 Standard web login detected. Skipping GHL redirect.");
+      return;
+    }
+
+    const pendingId = localStorage.getItem("ghl_pending_locationId");
+    if (!pendingId || pendingId.includes("{{")) {
+      return;
+    }
+
+    console.log("✅ GHL Context detected! Starting redirect...");
+    isProcessing.current = true;
+    // If you have the setIsRedirecting state from the previous step, set it here:
+    // setIsRedirecting(true);
+
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    try {
+      const response = await apiClient.get("/integrations/get-subaccounts?userType=anon");
+      const subAccountList = response.data?.data?.locations || [];
       
-      if (justLoggedIn) {
-        console.log("🆕 Fresh login detected! Resetting redirect flags...");
-        hasRedirected.current = false;
+      const match = subAccountList.find(
+        (acc) => String(acc.id) === String(pendingId)
+      );
+
+      if (match) {
+        hasRedirected.current = true;
+        const params = new URLSearchParams({
+          agencyid: match.companyId || agencyId || "",
+          subaccount: match.id,
+          allow: "yes",
+          myname: encodeURIComponent(match.name || "User"),
+          myemail: encodeURIComponent(match.email || ""),
+          route: "/assistants",
+        });
+
+        localStorage.removeItem("ghl_pending_locationId");
+        navigate(`/app?${params.toString()}`, { replace: true });
+      } else {
+        console.warn("⚠️ No matching subaccount found for ID:", pendingId);
         isProcessing.current = false;
       }
-      
-      // Update previous auth state for next render
-      previousAuthState.current = isAuthenticated;
+    } catch (error) {
+      console.error("❌ GHL redirect error:", error);
+      isProcessing.current = false;
+    } finally {
+      // setIsRedirecting(false);
+    }
+  };
 
-      // Now check if we should proceed
-      if (!isAuthenticated) {
-        console.log("⏸️ Not authenticated, skipping redirect");
-        return;
-      }
-
-      if (hasRedirected.current) {
-        console.log("⏸️ Already redirected in this session");
-        return;
-      }
-
-      if (isProcessing.current) {
-        console.log("⏸️ Already processing redirect");
-        return;
-      }
-
-      // Skip if already on a GHL page
-      if (location.pathname === "/app" || location.pathname.startsWith("/app")) {
-        console.log("⏸️ Already on /app page");
-        return;
-      }
-
-      const pendingId = localStorage.getItem("ghl_pending_locationId");
-      if (!pendingId || pendingId.includes("{{")) {
-        console.log("⏸️ No valid pending locationId");
-        return;
-      }
-
-      console.log("✅ All checks passed! Starting redirect process...");
-      isProcessing.current = true;
-
-      // ⏰ Wait 3 seconds for subaccounts to load
-      console.log("⏳ Waiting 3 seconds before checking GHL location...");
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      try {
-        console.log("🔄 Checking GHL location match:", pendingId);
-
-        // Fetch subaccounts directly from API
-        const response = await apiClient.get("/integrations/get-subaccounts?userType=anon");
-        const subAccountList = response.data?.data?.locations || [];
-        
-        console.log("📋 Fetched Subaccounts:", subAccountList);
-
-        const match = subAccountList.find(
-          (acc) => String(acc.id) === String(pendingId)
-        );
-
-        if (match) {
-          console.log("🎯 GHL Match found! Redirecting to /app...");
-          hasRedirected.current = true;
-
-          const params = new URLSearchParams({
-            agencyid: match.companyId || agencyId || "",
-            subaccount: match.id,
-            allow: "yes",
-            myname: encodeURIComponent(match.name || "User"),
-            myemail: encodeURIComponent(match.email || ""),
-            route: "/assistants",
-          });
-
-          localStorage.removeItem("ghl_pending_locationId");
-          navigate(`/app?${params.toString()}`, { replace: true });
-        } else {
-          console.warn("⚠️ No matching GHL location found");
-          console.warn("⚠️ Available IDs:", subAccountList.map(acc => acc.id));
-          isProcessing.current = false;
-        }
-      } catch (error) {
-        console.error("❌ GHL redirect error:", error.response?.data || error.message);
-        isProcessing.current = false;
-      }
-    };
-
-    handleGhlRedirect();
-  }, [isAuthenticated, navigate, agencyId, location.pathname]);
+  handleGhlRedirect();
+}, [isAuthenticated, navigate, agencyId, location.pathname]);
 
   // Define userInfo
   const userInfo = {

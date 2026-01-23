@@ -5,8 +5,6 @@ import { useSearchParams, useLocation } from 'react-router-dom';
 /**
  * This component captures the GHL locationId early in the app lifecycle
  * and stores it in localStorage before any OAuth redirects happen.
- * 
- * Place this at the TOP of your App component hierarchy.
  */
 export const GHLLocationCapture = () => {
   const [searchParams] = useSearchParams();
@@ -19,16 +17,15 @@ export const GHLLocationCapture = () => {
       
       console.log('🔍 GHL Capture - Referrer:', referrer);
       console.log('🔍 GHL Capture - Current URL:', currentUrl);
-      console.log('🔍 GHL Capture - Location pathname:', location.pathname);
       
       // Extract locationId from various sources
       const extractLocationId = (url) => {
         const patterns = [
-          /\/location\/([a-zA-Z0-9_-]{15,30})/, // Standard: /location/ID (15-30 chars)
-          /\/v2\/location\/([a-zA-Z0-9_-]{15,30})/, // V2: /v2/location/ID
-          /locationId=([a-zA-Z0-9_-]{15,30})/, // Query: ?locationId=ID
-          /location=([a-zA-Z0-9_-]{15,30})/, // Query: ?location=ID
-          /subaccount=([a-zA-Z0-9_-]{15,30})/, // Query: ?subaccount=ID
+          /\/location\/([a-zA-Z0-9_-]{15,40})/, 
+          /\/v2\/location\/([a-zA-Z0-9_-]{15,40})/, 
+          /locationId=([a-zA-Z0-9_-]{15,40})/, 
+          /location=([a-zA-Z0-9_-]{15,40})/, 
+          /subaccount=([a-zA-Z0-9_-]{15,40})/, 
         ];
         
         for (const pattern of patterns) {
@@ -39,6 +36,9 @@ export const GHLLocationCapture = () => {
         }
         return null;
       };
+
+      // Helper to validate the ID (Not null, not a merge tag, not "undefined")
+      const isValid = (id) => id && !id.includes("{{") && id !== "undefined" && id !== "null";
       
       let locationId = null;
 
@@ -47,58 +47,49 @@ export const GHLLocationCapture = () => {
                    searchParams.get('location') || 
                    searchParams.get('subaccount');
       
-      if (locationId && !locationId.includes("{{")) {
-        console.log('✅ GHL Capture - Found in URL params:', locationId);
-        localStorage.setItem('ghl_pending_locationId', locationId);
-        sessionStorage.setItem('ghl_locationId', locationId);
-        sessionStorage.setItem('ghl_captureTime', Date.now().toString());
-        return;
-      }
-
-      // 2. Try to extract from referrer (when redirected from GHL)
-      if (referrer.includes('gohighlevel.com') || referrer.includes('app.msgsndr.com')) {
-        locationId = extractLocationId(referrer);
-        if (locationId && !locationId.includes("{{")) {
-          console.log('✅ GHL Capture - Captured from referrer:', locationId);
-          localStorage.setItem('ghl_pending_locationId', locationId);
-          sessionStorage.setItem('ghl_locationId', locationId);
-          sessionStorage.setItem('ghl_captureTime', Date.now().toString());
-          return;
+      // 2. 🔥 Check Referrer if URL params are missing
+      if (!isValid(locationId)) {
+        if (referrer.includes('gohighlevel.com') || referrer.includes('app.msgsndr.com')) {
+          console.log('🔗 GHL Capture - Analyzing Referrer domain...');
+          locationId = extractLocationId(referrer);
         }
       }
-      
-      // 3. Try current URL
-      locationId = extractLocationId(currentUrl);
-      if (locationId && !locationId.includes("{{")) {
-        console.log('✅ GHL Capture - Captured from current URL:', locationId);
+
+      // 3. Try extracting from current URL string directly
+      if (!isValid(locationId)) {
+        locationId = extractLocationId(currentUrl);
+      }
+
+      // Final Storage Logic
+      if (isValid(locationId)) {
+        console.log('✅ GHL Capture - Successfully stored ID:', locationId);
         localStorage.setItem('ghl_pending_locationId', locationId);
         sessionStorage.setItem('ghl_locationId', locationId);
         sessionStorage.setItem('ghl_captureTime', Date.now().toString());
-        return;
-      }
-      
-      console.log('⚠️ GHL Capture - No locationId found in any source');
-      
-      // Log what we have in storage
-      const stored = localStorage.getItem('ghl_pending_locationId');
-      if (stored) {
-        console.log('📦 GHL Capture - Already have locationId in storage:', stored);
+      } else {
+        const stored = localStorage.getItem('ghl_pending_locationId');
+        if (stored) {
+          console.log('📦 GHL Capture - No new ID found, using existing:', stored);
+        } else {
+          console.log('⚠️ GHL Capture - No locationId found in any source');
+        }
       }
     };
 
     captureLocationId();
-  }, [searchParams, location.pathname]);
+  }, [searchParams, location.pathname, location.search]); // Added location.search for better tracking
 
-  return null; // This component doesn't render anything
+  return null; 
 };
 
-// Helper function to use in your app
+// --- Helper Functions ---
+
 export const getStoredLocationId = () => {
   const locationId = localStorage.getItem('ghl_pending_locationId') || 
                      sessionStorage.getItem('ghl_locationId');
   const captureTime = sessionStorage.getItem('ghl_captureTime');
   
-  // Clear if older than 5 minutes (to prevent stale data)
+  // Clear if older than 5 minutes (prevents stale data across different GHL subaccounts)
   if (captureTime && Date.now() - parseInt(captureTime) > 5 * 60 * 1000) {
     localStorage.removeItem('ghl_pending_locationId');
     sessionStorage.removeItem('ghl_locationId');
@@ -115,10 +106,8 @@ export const clearStoredLocationId = () => {
   sessionStorage.removeItem('ghl_captureTime');
 };
 
-// Helper to manually set locationId (useful for testing)
 export const setLocationId = (locationId) => {
   if (locationId && !locationId.includes("{{")) {
-    console.log('✅ Manually setting locationId:', locationId);
     localStorage.setItem('ghl_pending_locationId', locationId);
     sessionStorage.setItem('ghl_locationId', locationId);
     sessionStorage.setItem('ghl_captureTime', Date.now().toString());

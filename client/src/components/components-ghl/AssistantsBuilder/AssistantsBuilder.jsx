@@ -5,8 +5,8 @@ import { AssistantHeader } from "./components/AssistantHeader";
 import { GlobalPromptEditor } from "./components/PromptEditor";
 import { getSubaccountIdFromUrl } from "../../../utils/urlUtils";
 import { updateAssistant } from "../../../store/slices/assistantsSlice";
-import { useDispatch } from "react-redux";
-import toast, { Toaster } from "react-hot-toast"; 
+import { useDispatch, useSelector } from "react-redux"; // Added useSelector
+import toast, { Toaster } from "react-hot-toast";
 
 export const AssistantBuilderPage = () => {
   const [isToolkitOpen, setIsToolkitOpen] = useState(false);
@@ -20,9 +20,16 @@ export const AssistantBuilderPage = () => {
     ? route.split("/assistants/")[1]
     : null;
 
+  // ✅ Get the specific assistant from the Redux store to access current model/provider
+  const { assistants } = useSelector((state) => state.assistants);
+  const currentAssistant = assistants?.find((a) => a.id === assistantId);
+
   useEffect(() => {
+    if (currentAssistant?.model?.systemPrompt) {
+      setPromptContent(currentAssistant.model.systemPrompt);
+    }
     console.log("🎯 Assistant Builder loaded with ID:", assistantId);
-  }, [assistantId]);
+  }, [assistantId, currentAssistant]);
 
   const toggleToolkit = (value) => {
     if (typeof value === "boolean") {
@@ -32,21 +39,28 @@ export const AssistantBuilderPage = () => {
     }
   };
 
-  // ✅ Updated handleSave with Toast logic
   const handleSave = async () => {
     if (!assistantId || !subaccountId) {
       toast.error("Missing Assistant ID or Subaccount ID");
       return;
     }
 
+
+    const modelSettings = currentAssistant?.model || {
+      model: "gpt-3.5-turbo",
+      provider: "openai"
+    };
+
     try {
-      // .unwrap() allows us to catch errors or proceed on success
       await dispatch(
         updateAssistant({
           subaccountId,
           assistantId,
           updateData: {
-            systemPrompt: promptContent,
+            model: {
+              ...modelSettings,     
+              systemPrompt: promptContent, 
+            },
           },
         })
       ).unwrap();
@@ -54,14 +68,15 @@ export const AssistantBuilderPage = () => {
       toast.success("Saved successfully!");
     } catch (error) {
       console.error("Save failed:", error);
-      toast.error(error?.message || "Failed to update assistant");
+      // Try to extract the backend's specific error message if it's a 400
+      const errorDetail = error?.response?.data?.message || error?.message || "Failed to update assistant";
+      toast.error(errorDetail);
     }
   };
 
   return (
     <div className="flex relative flex-col h-full">
-      {/* ✅ Add Toaster here so notifications can render */}
-      <Toaster position="top-right" /> 
+      <Toaster position="top-right" />
       
       <AssistantHeader assistantId={assistantId} onSave={handleSave} />
       <div className="flex flex-1 overflow-hidden">
