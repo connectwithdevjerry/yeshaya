@@ -22,7 +22,7 @@ import { verifyToken } from "./store/slices/authSlice";
 import { useCurrentAccount } from "./hooks/useCurrentAccount";
 import { Toaster } from "react-hot-toast";
 import { GHLLocationCapture } from "./GHLLocationCapture.jsx";
-import apiClient from "./api/apiClient";
+import apiClient from "./store/api/config.js";
 
 // Auth pages
 import Login from "./pages/pages-ui/Login";
