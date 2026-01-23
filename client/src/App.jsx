@@ -51,7 +51,7 @@ function Layout() {
     }
   }, [dispatch, token, isAuthenticated]);
 
-  // 🔥 GHL REDIRECT LOGIC - Runs immediately after login
+  // 🔥 GHL REDIRECT LOGIC - Runs 3 seconds after login
   useEffect(() => {
     const handleGhlRedirect = async () => {
       // Skip if not authenticated or already redirected
@@ -70,6 +70,10 @@ function Layout() {
       }
 
       isProcessing.current = true;
+
+      // ⏰ Wait 3 seconds for subaccounts to load
+      console.log("⏳ Waiting 3 seconds before checking GHL location...");
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       try {
         console.log("🔄 Checking GHL location match:", pendingId);
