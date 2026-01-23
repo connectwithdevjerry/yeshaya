@@ -83,6 +83,7 @@ function Layout() {
           ? result.payload.data
           : [];
 
+        console.log("📋 Fetched Subaccounts:", subAccountList);
         const match = subAccountList.find(
           (acc) => String(acc.id) === String(pendingId)
         );
