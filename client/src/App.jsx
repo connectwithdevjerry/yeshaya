@@ -37,8 +37,10 @@ function Layout() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
+  
+  // Get all state values first
   const { token, isAuthenticated, user } = useSelector((state) => state.auth);
-  const { agencyId } = useSelector((state) => state.integrations || {});
+  const { agencyId, subAccounts } = useSelector((state) => state.integrations || {});
   const account = useCurrentAccount();
 
   const hasRedirected = useRef(false);
