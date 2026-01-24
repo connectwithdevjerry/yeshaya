@@ -112,7 +112,7 @@ const toolData = (toolName, userId) => ({
     },
   },
   server: {
-    url: `${process.env.SERVER_URL}/vapi-tool-webhook/${userId}`,
+    url: `${process.env.SERVER_URL}/assistants/vapi-tool-webhook/${userId}`,
   },
 });
 
