@@ -142,26 +142,26 @@ const platformToolsData = [
     category: "Extraction",
     title: "Data Extraction",
     icon: Layers,
-    tools: [
-      {
-        title: "Extract PDF",
-        description: "Pull specific data points from uploaded PDF documents using AI-powered extraction.",
-        icon: Layers,
-      },
-    ],
+    // tools: [
+    //   {
+    //     title: "Extract PDF",
+    //     description: "Pull specific data points from uploaded PDF documents using AI-powered extraction.",
+    //     icon: Layers,
+    //   },
+    // ],
   },
   {
     category: "Transfer call",
     title: "Telephony Tools",
     icon: ArrowRight,
-    tools: [
-      {
-        title: "Live Transfer",
-        description:
-          "Transfer the current call to a human agent or another department, ensuring seamless customer support.",
-        icon: ArrowRight,
-      },
-    ],
+    // tools: [
+    //   {
+    //     title: "Live Transfer",
+    //     description:
+    //       "Transfer the current call to a human agent or another department, ensuring seamless customer support.",
+    //     icon: ArrowRight,
+    //   },
+    // ],
   },
   // Add more items for "Add tag", "Remove tag", etc.
 ];
@@ -191,6 +191,8 @@ export const ToolsAndAPIsModal = ({ isOpen, onClose }) => {
       "Get Availability": "check_availability",
       "Book Appointment": "book_appointment",
       "Get User Calendar Events": "get_user_calendar_events",
+      "Live Transfer": "live_transfer",
+      "Extract PDF": "extract_pdf",
     };
 
     const toolName = toolMapping[toolTitle];
