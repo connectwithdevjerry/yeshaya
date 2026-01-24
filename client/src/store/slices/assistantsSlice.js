@@ -968,27 +968,6 @@ const assistantsSlice = createSlice({
         state.updateError = action.payload;
       })
 
-      // 🔹 Delete
-      .addCase(deleteAssistant.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(deleteAssistant.fulfilled, (state, action) => {
-        state.loading = false;
-        state.data = state.data.filter(
-          (a) => a.id !== action.payload && a.assistantId !== action.payload,
-        );
-        if (
-          state.selectedAssistant?.id === action.payload ||
-          state.selectedAssistant?.assistantId === action.payload
-        ) {
-          state.selectedAssistant = null;
-        }
-      })
-      .addCase(deleteAssistant.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-
       // 🔹 Add Dynamic Message
       .addCase(addDynamicMessage.pending, (state) => {
         state.savingMessage = true;
@@ -1335,7 +1314,36 @@ const assistantsSlice = createSlice({
       })
       .addCase(deleteContact.rejected, (state) => {
         state.contactActionLoading = false;
-      });
+      })
+
+      // 🔹 Delete Assistant
+      .addCase(deleteAssistant.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(deleteAssistant.fulfilled, (state, action) => {
+        state.loading = false;
+        const deletedId = action.payload;
+
+        // Remove from the main list
+        state.data = state.data.filter(
+          (assistant) => 
+            assistant.id !== deletedId && 
+            assistant.assistantId !== deletedId
+        );
+
+        // If the deleted assistant was the one selected, clear it
+        if (
+          state.selectedAssistant?.id === deletedId || 
+          state.selectedAssistant?.assistantId === deletedId
+        ) {
+          state.selectedAssistant = null;
+        }
+      })
+      .addCase(deleteAssistant.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
   },
 });
 

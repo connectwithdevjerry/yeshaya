@@ -1,4 +1,3 @@
-// src/pages/pages-ghl/Assistants.jsx
 import React, { useState, useEffect } from "react";
 import {
   Search,
@@ -12,10 +11,12 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchAssistants } from "../../store/slices/assistantsSlice";
+// ✅ 1. Import deleteAssistant thunk
+import { fetchAssistants, deleteAssistant } from "../../store/slices/assistantsSlice";
 import TabButton from "../../components/components-ghl/TabButton";
 import CreateFolderModal from "../../components/components-ghl/Assistants/CreateFolderModal";
 import CreateAssistantModal from "../../components/components-ghl/Assistants/CreateAssistantModal";
+import ConfirmDeleteModal from "../../components/components-ghl/ConfirmDeleteModal";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useCurrentAccount } from "../../hooks/useCurrentAccount";
 import { importSubAccounts } from "../../store/slices/integrationSlice";
@@ -26,13 +27,15 @@ const Assistants = () => {
   const [isAssistantModalOpen, setIsAssistantModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
 
+  // ✅ 3. Add state for the Delete Modal
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, assistant: null });
+
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const account = useCurrentAccount();
 
-  // ✅ Get subaccountId from URL or current account
   const subaccountId = searchParams.get("subaccount") || account?.subaccount;
 
   const {
@@ -43,38 +46,49 @@ const Assistants = () => {
 
   useEffect(() => {
     if (subaccountId) {
-      console.log("📍 Fetching assistants for subaccount:", subaccountId);
       dispatch(fetchAssistants(subaccountId));
-    } else {
-      console.warn("⚠️ No subaccountId found");
     }
   }, [dispatch, subaccountId]);
 
-  // ✅ Run import in background silently
   useEffect(() => {
     if (!subaccountId) return;
-    
-    console.log("📥 Running background import for subaccountId:", subaccountId);
-    
     dispatch(importSubAccounts([subaccountId]))
       .unwrap()
       .then((response) => {
-        if (response.alreadyInstalled) {
-          console.log("ℹ️ Background check: Subaccount already installed");
-        } else {
+        if (!response.alreadyInstalled) {
           toast.success("✅ Background import: Subaccount imported successfully");
         }
       })
-      .catch((err) => {
-        // Silent failure - don't show error to user
-        console.log("📥 Background import check completed (error ignored):", err);
-      });
+      .catch((err) => console.log("📥 Background import check completed:", err));
   }, [dispatch, subaccountId]);
 
-  // ✅ Handle assistant click with account context
+  // ✅ 4. Open Delete Modal Handler
+  const openDeleteModal = (e, assistant) => {
+    e.stopPropagation(); // Stop navigation click
+    setDeleteModal({ isOpen: true, assistant });
+  };
+
+  // ✅ 5. Confirm Delete Handler
+  const handleConfirmDelete = async () => {
+    if (deleteModal.assistant) {
+      try {
+        await dispatch(
+          deleteAssistant({ 
+            subaccountId, 
+            assistantId: deleteModal.assistant.id 
+          })
+        ).unwrap();
+        
+        setDeleteModal({ isOpen: false, assistant: null });
+        toast.success("Assistant deleted successfully");
+      } catch (err) {
+        toast.error(err || "Failed to delete assistant");
+      }
+    }
+  };
+
   const handleAssistantClick = (assistant) => {
     if (location.pathname === "/app" && account) {
-      // Navigate with account context
       const params = new URLSearchParams({
         agencyid: account.agencyid,
         subaccount: account.subaccount,
@@ -83,13 +97,8 @@ const Assistants = () => {
         myemail: account.myemail,
         route: `/assistants/${assistant.id}`,
       });
-      console.log(
-        "📍 Navigating to assistant with account context:",
-        `/app?${params.toString()}`
-      );
       navigate(`/app?${params.toString()}`);
     } else {
-      // Regular navigation
       navigate(`/assistants/${assistant.id}`);
     }
   };
@@ -102,13 +111,6 @@ const Assistants = () => {
         {/* 🔍 Top Bar */}
         <div className="flex justify-end items-center mb-6">
           <div className="flex items-center space-x-3">
-            {/* <button
-              onClick={() => setIsFolderModalOpen(true)}
-              className="px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors"
-            >
-              + Create Folder
-            </button> */}
-
             <button
               onClick={() => setIsAssistantModalOpen(true)}
               className="px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors"
@@ -120,28 +122,16 @@ const Assistants = () => {
 
         {/* 🗂 Tabs */}
         <div className="flex border-b border-gray-200 mb-6 bg-white rounded-t-lg shadow-sm">
-          <TabButton
-            isActive={activeTab === "all"}
-            onClick={() => setActiveTab("all")}
-          >
+          <TabButton isActive={activeTab === "all"} onClick={() => setActiveTab("all")}>
             All {assistants.length}
           </TabButton>
-          <TabButton
-            isActive={activeTab === "favorites"}
-            onClick={() => setActiveTab("favorites")}
-          >
+          <TabButton isActive={activeTab === "favorites"} onClick={() => setActiveTab("favorites")}>
             Favorites 0
           </TabButton>
-          <TabButton
-            isActive={activeTab === "imported"}
-            onClick={() => setActiveTab("imported")}
-          >
+          <TabButton isActive={activeTab === "imported"} onClick={() => setActiveTab("imported")}>
             Imported 0
           </TabButton>
-          <TabButton
-            isActive={activeTab === "archived"}
-            onClick={() => setActiveTab("archived")}
-          >
+          <TabButton isActive={activeTab === "archived"} onClick={() => setActiveTab("archived")}>
             Archived 0
           </TabButton>
         </div>
@@ -158,98 +148,40 @@ const Assistants = () => {
             <thead className="bg-gray-50">
               <tr>
                 {headers.map((header) => (
-                  <th
-                    key={header}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
+                  <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     {header}
                   </th>
                 ))}
-                <th className=" px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
+                <th className="px-6 py-3"></th>
               </tr>
             </thead>
 
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
-                <tr>
-                  <td
-                    colSpan={headers.length + 1}
-                    className="px-6 py-8 text-center text-gray-500"
-                  >
-                    Loading assistants...
-                  </td>
-                </tr>
-              ) : error ? (
-                <tr>
-                  <td
-                    colSpan={headers.length + 1}
-                    className="px-6 py-8 text-center text-red-500"
-                  >
-                    {error}
-                  </td>
-                </tr>
+                <tr><td colSpan={6} className="px-6 py-8 text-center">Loading...</td></tr>
               ) : assistants.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={headers.length + 1}
-                    className="px-6 py-12 text-center text-gray-500 text-sm"
-                  >
-                    <div className="flex flex-col items-center justify-center">
-                      <Ban className="w-8 h-8 text-gray-400 mb-2" />
-                      No assistants to display
-                    </div>
-                  </td>
-                </tr>
+                <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500"><Ban className="mx-auto mb-2"/> No assistants found</td></tr>
               ) : (
                 assistants.map((assistant) => (
-                  <tr
-                    key={assistant.id}
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => handleAssistantClick(assistant)}
-                  >
-                    <td className="px-1 py-1 whitespace-nowrap text-sm font-medium text-gray-900">
-                      <div className="flex items-center space-x-1">
-                        <img
-                          src="https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg"
-                          alt="OpenAi"
-                          className="w-[25px]"
-                        />
+                  <tr key={assistant.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleAssistantClick(assistant)}>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      <div className="flex items-center space-x-2">
+                        <img src="https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg" alt="OpenAi" className="w-6 h-6 rounded" />
                         <span>{assistant.name}</span>
                       </div>
                     </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {assistant.model?.model || "N/A"}
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(assistant.updatedAt).toLocaleString()}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(assistant.createdAt).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                      {assistant.id.slice(0, 6)}...{assistant.id.slice(-4)}
-                    </td>
-                    <td className="px-6 py-2 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        {/* <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Handle more options
-                          }}
-                          className="p-1 text-gray-400 hover:text-gray-100 rounded-md bg-gray-100 hover:bg-gray-300"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button> */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Handle delete
-                          }}
-                          className="p-1 text-red-400 bg-red-100 rounded-md hover:bg-red-400 hover:text-red-50 duration-75"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                    <td className="px-4 py-3 text-sm text-gray-500">{assistant.model?.model || "N/A"}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{new Date(assistant.updatedAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{new Date(assistant.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 font-mono">{assistant.id.slice(0, 6)}...</td>
+                    <td className="px-6 py-3 text-right">
+                      {/* ✅ 6. Update Button to trigger Modal */}
+                      <button
+                        onClick={(e) => openDeleteModal(e, assistant)}
+                        className="p-1 text-red-400 bg-red-100 rounded-md hover:bg-red-400 hover:text-red-50 duration-75"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -259,15 +191,16 @@ const Assistants = () => {
         </div>
       </div>
 
-      {/* Modals */}
-      <CreateFolderModal
-        isOpen={isFolderModalOpen}
-        onClose={() => setIsFolderModalOpen(false)}
+      {/* ✅ 7. Add ConfirmDeleteModal to the UI */}
+      <ConfirmDeleteModal
+        isOpen={deleteModal.isOpen}
+        title={deleteModal.assistant?.name}
+        onClose={() => setDeleteModal({ isOpen: false, assistant: null })}
+        onConfirm={handleConfirmDelete}
       />
-      <CreateAssistantModal
-        isOpen={isAssistantModalOpen}
-        onClose={() => setIsAssistantModalOpen(false)}
-      />
+
+      <CreateFolderModal isOpen={isFolderModalOpen} onClose={() => setIsFolderModalOpen(false)} />
+      <CreateAssistantModal isOpen={isAssistantModalOpen} onClose={() => setIsAssistantModalOpen(false)} />
     </div>
   );
 };
