@@ -1,9 +1,14 @@
 // src/MainContent.jsx
 import React, { useEffect, useMemo } from "react";
-import { Routes, Route, useLocation, useSearchParams, useNavigate } from "react-router-dom";
+import {
+  Routes,
+  Route,
+  useLocation,
+  useSearchParams,
+  Navigate,
+} from "react-router-dom";
 import { Header } from "./components/components-ui/Header";
-import { useDispatch, useSelector } from "react-redux";
-import { fetchImportedSubAccounts } from "./store/slices/integrationSlice";
+import { useSelector } from "react-redux";
 
 // ---- Pages from Agency section ----
 import Agency from "./pages/pages-ui/Agency";
@@ -34,12 +39,11 @@ import GHLSettings from "./pages/pages-ghl/Settings";
 import { AssistantBuilderPage } from "./components/components-ghl/AssistantsBuilder/AssistantsBuilder";
 import KnowledgeDetailPage from "./components/components-ghl/Knowledge/BlogEdit";
 
-// ✅ Component to render based on route parameter
+// ✅ Component to render based on route parameters
 const AppRouter = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const route = searchParams.get("route") || "/assistants";
 
-  // Store account data in sessionStorage
   useEffect(() => {
     const agencyid = searchParams.get("agencyid");
     const subaccount = searchParams.get("subaccount");
@@ -48,15 +52,8 @@ const AppRouter = () => {
     const myemail = searchParams.get("myemail");
 
     if (agencyid && subaccount) {
-      const accountData = {
-        agencyid,
-        subaccount,
-        allow,
-        myname,
-        myemail,
-      };
+      const accountData = { agencyid, subaccount, allow, myname, myemail };
       sessionStorage.setItem("currentAccount", JSON.stringify(accountData));
-      console.log("✅ Account stored:", accountData);
 
       if (!searchParams.get("route")) {
         const newParams = new URLSearchParams(searchParams);
@@ -66,7 +63,6 @@ const AppRouter = () => {
     }
   }, [searchParams, setSearchParams]);
 
-  // Route mapping
   const routeComponents = {
     "/assistants": <Assistants />,
     "/inbox": <Inbox />,
@@ -83,131 +79,16 @@ const AppRouter = () => {
     "/dashboard": <DashboardPage />,
   };
 
-  if (route.startsWith("/assistants/")) {
-    return <AssistantBuilderPage />;
-  }
-
-  if (route.startsWith("/knowledge/")) {
-    return <KnowledgeDetailPage />;
-  }
+  if (route.startsWith("/assistants/")) return <AssistantBuilderPage />;
+  if (route.startsWith("/knowledge/")) return <KnowledgeDetailPage />;
 
   return routeComponents[route] || <Assistants />;
 };
 
 export default function MainContent() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
-
-  // Get subAccounts and agencyId from Redux store
-  const { subAccounts, agencyId } = useSelector(
-    (state) => state.integrations || {}
-  );
-
-  // First useEffect: Handle basic GHL context redirect
-  useEffect(() => {
-    const subaccount = searchParams.get("subaccount");
-    const agencyid = searchParams.get("agencyid");
-    
-    const isGHLReferrer = document.referrer.includes("app.gohighlevel.com");
-    const hasGHLParams = subaccount && agencyid;
-
-    // Only redirect if we have params or GHL referrer, but NOT if it's a custom menu link
-    const isCustomMenuLink = document.referrer.includes('/custom-menu-link/');
-    
-    if (location.pathname === "/" && (hasGHLParams || isGHLReferrer) && !isCustomMenuLink) {
-      console.log("🚀 GHL context detected. Redirecting to Assistants context...");
-
-      const params = new URLSearchParams(searchParams);
-
-      if (!params.get("route")) {
-        params.set("route", "/assistants");
-      }
-
-      if (!params.has("allow")) {
-        params.set("allow", "yes");
-      }
-
-      navigate(`/app?${params.toString()}`, { replace: true });
-    }
-  }, [location.pathname, searchParams, navigate]);
-
-  // Second useEffect: Auto-navigation from GHL Custom Menu Link
-  useEffect(() => {
-    const handleGHLCustomMenuLink = async () => {
-      if (location.pathname !== '/') return;
-      
-      const referrer = document.referrer;
-      const isGHLCustomMenuLink = referrer.includes('app.gohighlevel.com') && referrer.includes('/custom-menu-link/');
-      
-      if (!isGHLCustomMenuLink) {
-        console.log('ℹ️ Not from GHL custom menu link');
-        return;
-      }
-      
-      console.log('🔗 Detected GHL custom menu link referrer:', referrer);
-      
-      // Format: https://app.gohighlevel.com/v2/location/{LOCATION_ID}/custom-menu-link/{LINK_ID}
-      const locationMatch = referrer.match(/\/location\/([^\/]+)\//);
-      if (!locationMatch) {
-        console.log('❌ Could not extract location ID from referrer');
-        return;
-      }
-      
-      const locationId = locationMatch[1];
-      console.log('🔍 Extracted GHL location ID:', locationId);
-      
-      // Fetch subaccounts if not already loaded
-      if (!subAccounts || subAccounts.length === 0) {
-        console.log('📥 Fetching subaccounts...');
-        await dispatch(fetchImportedSubAccounts());
-      }
-      
-      setTimeout(() => {
-        // Re-read from selector after dispatch
-        const store = dispatch((_, getState) => getState());
-        const currentSubAccounts = store.integrations?.subAccounts || subAccounts;
-        
-        if (!currentSubAccounts || currentSubAccounts.length === 0) {
-          console.log('❌ No subaccounts available');
-          return;
-        }
-        
-        // Find matching subaccount by location ID
-        const matchingAccount = currentSubAccounts.find(
-          acc => acc.id === locationId
-        );
-        
-        if (!matchingAccount) {
-          console.log('❌ No matching subaccount found for location:', locationId);
-          console.log('📋 Available subaccounts:', currentSubAccounts.map(a => a.id));
-          return;
-        }
-        
-        console.log('✅ Found matching account:', matchingAccount.name);
-        
-        // Build navigation URL with all required params
-        const params = new URLSearchParams({
-          agencyid: agencyId || matchingAccount.companyId || 'UNKNOWN_COMPANY',
-          subaccount: matchingAccount.id,
-          allow: 'yes',
-          myname: encodeURIComponent(matchingAccount.name || 'NoName'),
-          myemail: encodeURIComponent(matchingAccount.email || 'noemail@example.com'),
-          route: '/assistants'
-        });
-        
-        const targetUrl = `/app?${params.toString()}`;
-        console.log('🚀 Auto-navigating to:', targetUrl);
-        
-        // Navigate to assistants page
-        navigate(targetUrl, { replace: true });
-        
-      }, 500);
-    };
-    
-    handleGHLCustomMenuLink();
-  }, [location.pathname, subAccounts, agencyId, dispatch, navigate]);
+  const { isAuthenticated } = useSelector((state) => state.auth || {});
 
   const pageTitles = useMemo(
     () => ({
@@ -222,7 +103,6 @@ export default function MainContent() {
       "/contacts": "Contacts",
       "/knowledge": "Knowledge",
       "/assistants": "Assistants",
-      "/blog": "Knowledge",
       "/activetags": "Active Tags",
       "/numbers": "Numbers",
       "/pools": "Number Pools",
@@ -247,11 +127,9 @@ export default function MainContent() {
     return pageTitles[location.pathname] || "Dashboard";
   };
 
-  const currentTitle = getCurrentTitle();
-
   return (
-    <div className="flex flex-col flex-1">
-      <Header title={currentTitle} />
+    <div className="flex flex-col flex-1 relative">
+      <Header title={getCurrentTitle()} />
       <main className="flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<SubAccounts />} />
@@ -260,11 +138,31 @@ export default function MainContent() {
           <Route path="/rebilling" element={<Rebilling />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/app" element={<AppRouter />} />
-          <Route path="/connection-success/:message" element={<GHLConnectionSuccess />} />
+
+          <Route
+            path="/app"
+            element={
+              !isAuthenticated ? (
+                <Navigate to="/login" replace />
+              ) : (
+                <AppRouter />
+              )
+            }
+          />
+
+          <Route
+            path="/connection-success/:message"
+            element={<GHLConnectionSuccess />}
+          />
           <Route path="/connection-failed" element={<GHLConnectionFailed />} />
-          <Route path="/payment/connection-success" element={<StripeConnectionSuccess />} />
-          <Route path="/payment/connection-failed" element={<StripeConnectionFailed />} />
+          <Route
+            path="/payment/connection-success"
+            element={<StripeConnectionSuccess />}
+          />
+          <Route
+            path="/payment/connection-failed"
+            element={<StripeConnectionFailed />}
+          />
         </Routes>
       </main>
     </div>

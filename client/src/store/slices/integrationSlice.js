@@ -180,7 +180,7 @@ export const chargeConnectedAccount = createAsyncThunk(
       // Construction of the POST request with 'amount' in the body
       const response = await apiClient.post(
         "/integrations/charge-connected-account",
-        { amount }
+        { amount },
       );
 
       if (response.data?.status === false) {
@@ -192,10 +192,10 @@ export const chargeConnectedAccount = createAsyncThunk(
     } catch (error) {
       console.error("❌ Charge Error:", error.response?.data);
       return rejectWithValue(
-        error.response?.data?.message || "Error processing charge"
+        error.response?.data?.message || "Error processing charge",
       );
     }
-  }
+  },
 );
 
 // 🔹 GoHighLevel Authorization
@@ -207,7 +207,7 @@ export const authorizeGoHighLevel = createAsyncThunk(
       accountType = "Company",
       installationType = "directInstallation",
     },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       // Execute GET request with all data in the query string
@@ -231,7 +231,64 @@ export const authorizeGoHighLevel = createAsyncThunk(
       console.error("❌ GHL Error:", error.response?.data || error.message);
       return rejectWithValue(error.response?.data || error.message);
     }
-  }
+  },
+);
+
+// Fetch Charging Details
+export const getChargingDetails = createAsyncThunk(
+  "integrations/getChargingDetails",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(
+        "/integrations/get-charging-details",
+      );
+      const data = response.data;
+
+      if (data.status === false) {
+        return rejectWithValue(
+          data.message || "Failed to fetch charging details",
+        );
+      }
+
+      return data.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Network error");
+    }
+  },
+);
+
+// Update Charging Details (x-www-form-urlencoded)
+export const updateChargingDetails = createAsyncThunk(
+  "integrations/updateChargingDetails",
+  async ({ status, least, refillAmount }, { rejectWithValue }) => {
+    try {
+      const params = new URLSearchParams();
+      params.append("status", status);
+      params.append("least", least);
+      params.append("refillAmount", refillAmount);
+
+      const response = await apiClient.put(
+        "/integrations/update-charging-details",
+        params,
+        {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        },
+      );
+
+      const data = response.data;
+      if (data.status === false) {
+        return rejectWithValue(data.message || "Update failed");
+      }
+
+      return data.data;
+    } catch (error) {
+      const msg =
+        error.response?.data?.message || error.message || "Update failed";
+      return rejectWithValue(msg);
+    }
+  },
 );
 
 // 🔹 Slice
@@ -250,6 +307,10 @@ const integrationSlice = createSlice({
     isCharging: false,
     chargeError: null,
     lastChargeResult: null,
+    chargingDetails: null,
+    chargingLoading: false,
+    chargingError: null,
+    updateLoading: false,
   },
   reducers: {
     setIntegrationStatus: (state, action) => {
@@ -445,6 +506,33 @@ const integrationSlice = createSlice({
       .addCase(chargeConnectedAccount.rejected, (state, action) => {
         state.isCharging = false;
         state.chargeError = action.payload;
+      })
+
+      .addCase(getChargingDetails.pending, (state) => {
+        state.chargingLoading = true;
+        state.chargingError = null;
+      })
+      .addCase(getChargingDetails.fulfilled, (state, action) => {
+        state.chargingLoading = false;
+        state.chargingDetails = action.payload;
+      })
+      .addCase(getChargingDetails.rejected, (state, action) => {
+        state.chargingLoading = false;
+        state.chargingError = action.payload;
+      })
+
+      /* --- UPDATE CHARGING DETAILS --- */
+      .addCase(updateChargingDetails.pending, (state) => {
+        state.updateLoading = true;
+        state.chargingError = null;
+      })
+      .addCase(updateChargingDetails.fulfilled, (state, action) => {
+        state.updateLoading = false;
+        state.chargingDetails = action.payload; // Update state with confirmed values
+      })
+      .addCase(updateChargingDetails.rejected, (state, action) => {
+        state.updateLoading = false;
+        state.chargingError = action.payload;
       });
   },
 });
