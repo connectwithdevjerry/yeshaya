@@ -187,10 +187,10 @@ export const ToolsAndAPIsModal = ({ isOpen, onClose }) => {
     const toolMapping = {
       "Scrape Website": "scrape_website",
       "Update User Details": "update_user_details",
-      "Search The Web": "web_search",
-      "Get Availability": "get_availability",
+      "Search The Web": "search_the_web",
+      "Get Availability": "check_availability",
       "Book Appointment": "book_appointment",
-      "Get User Calendar Events": "get_calendar_events",
+      "Get User Calendar Events": "get_user_calendar_events",
     };
 
     const toolName = toolMapping[toolTitle];
