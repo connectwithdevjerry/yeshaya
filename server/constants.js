@@ -77,6 +77,7 @@ const GET_CHARGING_DETAILS = "/get-charging-details";
 const UPDATE_CHARGING_DETAILS = "/update-charging-details";
 const GET_USER_DETAILS = "/get-user-details";
 const AUTO_CARD_PAY_WEBHOOK = "/autopay/webhook";
+const GET_ANALYTICS = "/get-analytics";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -160,4 +161,5 @@ module.exports = {
   UPDATE_CHARGING_DETAILS,
   GET_USER_DETAILS,
   AUTO_CARD_PAY_WEBHOOK,
+  GET_ANALYTICS,
 };
