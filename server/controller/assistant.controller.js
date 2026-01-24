@@ -596,7 +596,7 @@ const updateAssistant = async (req, res) => {
   }
 };
 
-const deleteAssistant = async () => {
+const deleteAssistant = async (req, res) => {
   const userId = req.user;
   const { subaccountId, assistantId } = req.query;
 
