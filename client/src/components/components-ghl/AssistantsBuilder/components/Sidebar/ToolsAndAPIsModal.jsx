@@ -143,25 +143,30 @@ const platformToolsData = [
     title: "Data Extraction",
     icon: Layers,
     tools: [
+      // {
+      //   title: "Extract PDF",
+      //   description: "Pull specific data points from uploaded PDF documents using AI-powered extraction.",
+      //   icon: Layers,
+      // },
       {
-        title: "Extract PDF",
-        description: "Pull specific data points from uploaded PDF documents using AI-powered extraction.",
-        icon: Layers,
-      },
+        title: "Search The Web",
+        description: "Searches the web and returns search engine answers to a query. Use this tool to search the web. ",
+        icon: Search,
+      }
     ],
   },
   {
     category: "Transfer call",
     title: "Telephony Tools",
     icon: ArrowRight,
-    tools: [
-      {
-        title: "Live Transfer",
-        description:
-          "Transfer the current call to a human agent or another department, ensuring seamless customer support.",
-        icon: ArrowRight,
-      },
-    ],
+    // tools: [
+    //   {
+    //     title: "Live Transfer",
+    //     description:
+    //       "Transfer the current call to a human agent or another department, ensuring seamless customer support.",
+    //     icon: ArrowRight,
+    //   },
+    // ],
   },
   // Add more items for "Add tag", "Remove tag", etc.
 ];
@@ -187,10 +192,12 @@ export const ToolsAndAPIsModal = ({ isOpen, onClose }) => {
     const toolMapping = {
       "Scrape Website": "scrape_website",
       "Update User Details": "update_user_details",
-      "Search The Web": "web_search",
-      "Get Availability": "get_availability",
+      "Search The Web": "search_the_web",
+      "Get Availability": "check_availability",
       "Book Appointment": "book_appointment",
-      "Get User Calendar Events": "get_calendar_events",
+      "Get User Calendar Events": "get_user_calendar_events",
+      "Live Transfer": "live_transfer",
+      "Extract PDF": "extract_pdf",
     };
 
     const toolName = toolMapping[toolTitle];
