@@ -142,13 +142,18 @@ const platformToolsData = [
     category: "Extraction",
     title: "Data Extraction",
     icon: Layers,
-    // tools: [
-    //   {
-    //     title: "Extract PDF",
-    //     description: "Pull specific data points from uploaded PDF documents using AI-powered extraction.",
-    //     icon: Layers,
-    //   },
-    // ],
+    tools: [
+      // {
+      //   title: "Extract PDF",
+      //   description: "Pull specific data points from uploaded PDF documents using AI-powered extraction.",
+      //   icon: Layers,
+      // },
+      {
+        title: "Search The Web",
+        description: "Searches the web and returns search engine answers to a query. Use this tool to search the web. ",
+        icon: Search,
+      }
+    ],
   },
   {
     category: "Transfer call",
