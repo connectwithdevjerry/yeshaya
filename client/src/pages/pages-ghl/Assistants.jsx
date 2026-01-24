@@ -231,7 +231,7 @@ const Assistants = () => {
                     </td>
                     <td className="px-6 py-2 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
-                        <button
+                        {/* <button
                           onClick={(e) => {
                             e.stopPropagation();
                             // Handle more options
@@ -239,7 +239,7 @@ const Assistants = () => {
                           className="p-1 text-gray-400 hover:text-gray-100 rounded-md bg-gray-100 hover:bg-gray-300"
                         >
                           <MoreHorizontal className="w-4 h-4" />
-                        </button>
+                        </button> */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
