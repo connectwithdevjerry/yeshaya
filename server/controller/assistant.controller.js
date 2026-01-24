@@ -112,7 +112,7 @@ const toolData = (toolName, userId) => ({
     },
   },
   server: {
-    url: `${process.env.SERVER_URL}/vapi-tool-webhook/${userId}`,
+    url: `${process.env.SERVER_URL}/assistants/vapi-tool-webhook/${userId}`,
   },
 });
 
@@ -2585,7 +2585,7 @@ const sendChatMessage = async (req, res) => {
   const { userText, assistantId } = req.body;
   const userId = req.user;
 
-  const user = await userModel.findOne(userId);
+  const user = await userModel.findById(userId);
 
   content = "Wallet balance is too low. Please top up to continue.";
 
