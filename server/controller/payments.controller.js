@@ -507,6 +507,74 @@ const updateAutoChargingSettings = async (req, res) => {
   }
 };
 
+const handleVapiSmsBilling = async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    // 1. Only process if this is a tool call for sending SMS
+    if (message.type === "tool-calls") {
+      const smsTool = message.toolCalls.find(
+        (tool) => tool.function.name === "send_sms",
+      );
+
+      if (smsTool) {
+        // Find user via metadata passed from Vapi call
+        // (Ensure you pass 'userId' in the assistant's customer metadata)
+        const userId = message.call.customer.extension;
+        const user = await userModel.findById(userId);
+
+        if (!user) return res.status(404).send("User not found");
+
+        const smsCost = 0.05; // Set your price per SMS
+
+        // 2. Deduct from Wallet
+        user.walletBalance -= smsCost;
+
+        // 3. Log the Billing Event
+        user.billingEvents.push({
+          type: "SMS_CHARGE",
+          amount: smsCost,
+          timestamp: new Date(),
+        });
+
+        await user.save();
+
+        // 4. Check for Auto-Refill Logic
+        if (
+          user.autoCardCharging?.status &&
+          user.walletBalance <= user.autoCardCharging.least
+        ) {
+          console.log(
+            `Low balance (${user.walletBalance}). Triggering auto-refill...`,
+          );
+
+          await stripe.paymentIntents.create({
+            amount: user.autoCardCharging.refillAmount * 100, // convert $ to cents
+            currency: "usd",
+            customer: user.stripeCustomerId,
+            off_session: true,
+            confirm: true,
+            payment_method: user.defaultPaymentMethodId, // You should save this during the first charge
+            metadata: { userId: user._id.toString(), type: "USAGE_CHARGE" },
+          });
+        }
+
+        // 5. Respond to Vapi to allow the assistant to continue
+        return res.status(200).json({
+          results: [
+            { toolCallId: smsTool.id, result: "SMS processed and billed." },
+          ],
+        });
+      }
+    }
+
+    res.status(200).send("OK");
+  } catch (error) {
+    console.error("Billing Error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   callBillingWebhook,
   getLatestConnectedBalance,

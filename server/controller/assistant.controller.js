@@ -2585,7 +2585,7 @@ const sendChatMessage = async (req, res) => {
   const { userText, assistantId } = req.body;
   const userId = req.user;
 
-  const user = await userModel.findOne(userId);
+  const user = await userModel.findById(userId);
 
   content = "Wallet balance is too low. Please top up to continue.";
 
