@@ -794,6 +794,32 @@ export const deleteContact = createAsyncThunk(
   },
 );
 
+// ✅ 23. Get Assistant Analytics
+export const getAssistantAnalytics = createAsyncThunk(
+  "assistants/getAnalytics",
+  async (_, { rejectWithValue }) => {
+    try {
+      // Simple GET request without query params or body
+      const response = await apiClient.get("/assistants/get-analytics");
+
+      if (!response.data.status) {
+        return rejectWithValue(
+          response.data.message || "Failed to fetch analytics",
+        );
+      }
+
+      console.log("Analytics Data:", response.data);
+      return response.data;
+    } catch (error) {
+      // Extract specific server error message
+      const message =
+        error.response?.data?.message || "Failed to fetch analytics";
+      console.error("Analytics Error:", message);
+      return rejectWithValue(message);
+    }
+  },
+);
+
 const assistantsSlice = createSlice({
   name: "assistants",
   initialState: {
@@ -846,6 +872,9 @@ const assistantsSlice = createSlice({
     contacts: [],
     fetchingContacts: false,
     contactActionLoading: false,
+    analytics: null,
+    fetchingAnalytics: false,
+    analyticsError: null,
   },
   reducers: {
     clearSelectedAssistant: (state) => {
@@ -1327,14 +1356,13 @@ const assistantsSlice = createSlice({
 
         // Remove from the main list
         state.data = state.data.filter(
-          (assistant) => 
-            assistant.id !== deletedId && 
-            assistant.assistantId !== deletedId
+          (assistant) =>
+            assistant.id !== deletedId && assistant.assistantId !== deletedId,
         );
 
         // If the deleted assistant was the one selected, clear it
         if (
-          state.selectedAssistant?.id === deletedId || 
+          state.selectedAssistant?.id === deletedId ||
           state.selectedAssistant?.assistantId === deletedId
         ) {
           state.selectedAssistant = null;
@@ -1344,6 +1372,21 @@ const assistantsSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
+
+      // Get Assistant Analytics
+      .addCase(getAssistantAnalytics.pending, (state) => {
+        state.fetchingAnalytics = true;
+        state.analyticsError = null;
+      })
+      .addCase(getAssistantAnalytics.fulfilled, (state, action) => {
+        state.fetchingAnalytics = false;
+        // Make sure to access the correct property if your API returns { status: true, data: [...] }
+        state.analytics = action.payload.data || action.payload;
+      })
+      .addCase(getAssistantAnalytics.rejected, (state, action) => {
+        state.fetchingAnalytics = false;
+        state.analyticsError = action.payload;
+      });
   },
 });
 

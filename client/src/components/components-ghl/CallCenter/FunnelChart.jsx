@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect } from "react";
 import {
   ResponsiveContainer,
   FunnelChart,
@@ -7,22 +7,33 @@ import {
   LabelList,
 } from "recharts";
 import { FilterIcon } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import { getAssistantAnalytics } from "../../../store/slices/assistantsSlice";
 
 const FunnelVisual = () => {
-  // Dynamically generate random dummy data
+  const dispatch = useDispatch();
+
+  const analytics = useSelector(
+    (state) => state.assistants.analytics?.data
+  );
+
+  useEffect(() => {
+    dispatch(getAssistantAnalytics());
+  }, [dispatch]);
+
+  // ✅ Use real backend data
   const data = useMemo(() => {
-    const totalDials = Math.floor(Math.random() * 10) + 10; // 10–20
-    const answers = Math.floor(totalDials * (0.8 + Math.random() * 0.2));
-    const conversations = Math.floor(answers * (0.6 + Math.random() * 0.3));
-    const appointments = Math.floor(conversations * (0.05 + Math.random() * 0.3));
+    if (!analytics) return [];
 
     return [
-      { name: "Dials", value: totalDials },
-      { name: "Answers", value: answers },
-      { name: "Conversations", value: conversations },
-      { name: "Appointments", value: appointments },
+      { name: "Dials", value: analytics.outboundCalls },
+      { name: "Answered", value: analytics.contactEnds },
+      { name: "AI Ends", value: analytics.aiEnds },
+      { name: "Appointments", value: analytics.appointments },
     ];
-  }, []);
+  }, [analytics]);
+
+  if (!data.length) return <div>Loading funnel...</div>;
 
   return (
     <div className="bg-white border rounded-lg p-6 shadow-sm">
@@ -31,34 +42,30 @@ const FunnelVisual = () => {
           <div className="bg-purple-500 text-white rounded-lg w-8 h-8 flex items-center justify-center text-lg">
             <FilterIcon size={20} />
           </div>
-          <h2 className="text-lg font-semibold text-gray-800">Sales Funnel</h2>
+          <h2 className="text-lg font-semibold text-gray-800">
+            Sales Funnel
+          </h2>
         </div>
-        <div className="text-gray-500 text-sm">Last {Math.floor(Math.random() * 30)} days</div>
       </div>
 
       <ResponsiveContainer width="100%" height={250}>
         <FunnelChart>
           <Tooltip />
+
           <Funnel
             dataKey="value"
             data={data}
             isAnimationActive
             fill="url(#colorGradient)"
           >
-            <LabelList
-              position="right"
-              fill="#000"
-              stroke="none"
-              dataKey="name"
-              formatter={(name) => name}
-            />
+            <LabelList dataKey="name" position="right" fill="#000" />
           </Funnel>
 
           <defs>
             <linearGradient id="colorGradient" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#6366f1" />  {/* Indigo */}
-              <stop offset="50%" stopColor="#ec4899" /> {/* Pink */}
-              <stop offset="100%" stopColor="#f59e0b" /> {/* Amber */}
+              <stop offset="0%" stopColor="#6366f1" />
+              <stop offset="50%" stopColor="#ec4899" />
+              <stop offset="100%" stopColor="#f59e0b" />
             </linearGradient>
           </defs>
         </FunnelChart>
@@ -66,12 +73,20 @@ const FunnelVisual = () => {
 
       <div className="flex justify-around mt-4 text-center">
         {data.map((stage, idx) => {
-          const percentage = ((stage.value / data[0].value) * 100).toFixed(1);
+          const percentage = (
+            (stage.value / data[0].value) *
+            100
+          ).toFixed(1);
+
           return (
             <div key={idx}>
               <div className="text-lg font-bold">{stage.value}</div>
-              <div className="text-yellow-600 font-semibold text-sm">{stage.name}</div>
-              <div className="text-indigo-500 text-xs">{percentage}%</div>
+              <div className="text-yellow-600 font-semibold text-sm">
+                {stage.name}
+              </div>
+              <div className="text-indigo-500 text-xs">
+                {percentage}%
+              </div>
             </div>
           );
         })}
