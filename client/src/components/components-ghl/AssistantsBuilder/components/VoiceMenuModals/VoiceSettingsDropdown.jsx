@@ -17,52 +17,42 @@ export const VoiceSettingsDropdown = ({ isOpen, onClose }) => {
   const assistantId = getAssistantIdFromUrl(searchParams);
 
   const [settings, setSettings] = useState({
-    engine: "default",
-    responseSpeed: 1,
-    interruptionSensitivity: 1,
-    talkSpeed: 0.92,
+    model: "tts-1", // OpenAI default
+    speed: 1,
+    fillerInjectionEnabled: true,
   });
 
-  const [saveStatus, setSaveStatus] = useState(""); // 'saving', 'success', 'error'
+  const [saveStatus, setSaveStatus] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const saveTimeoutRef = useRef(null);
   const debounceTimerRef = useRef(null);
 
-  // Sync state with selected assistant data
   useEffect(() => {
-    if (selectedAssistant?.voice?.settings) {
-      const s = selectedAssistant.voice.settings;
+    if (selectedAssistant?.voice) {
+      const v = selectedAssistant.voice;
       setSettings({
-        engine: s.engine || "default",
-        responseSpeed: s.responseSpeed ?? 1,
-        interruptionSensitivity: s.interruptionSensitivity ?? 1,
-        talkSpeed: s.talkSpeed ?? 0.92,
+        model: v.model || "tts-1",
+        speed: v.speed ?? 1,
+        fillerInjectionEnabled: v.fillerInjectionEnabled ?? true,
       });
     }
   }, [selectedAssistant]);
 
   const autoSave = useCallback(
     async (updatedSettings) => {
-      if (!subaccountId || !assistantId || !selectedAssistant?.voice) {
-        console.warn("Auto-save aborted: Missing IDs or Voice object.", {
-          subaccountId,
-          assistantId,
-        });
-        return;
-      }
+      if (!subaccountId || !assistantId || !selectedAssistant?.voice) return;
 
       setSaveStatus("saving");
       setSaveMessage("Saving...");
 
+      // OpenAI-specific structure for Vapi
       const updateData = {
         voice: {
-          provider: selectedAssistant.voice.provider,
-          voiceId: selectedAssistant.voice.voiceId,
-          // Move settings up one level
-          engine: updatedSettings.engine,
-          responseSpeed: updatedSettings.responseSpeed,
-          interruptionSensitivity: updatedSettings.interruptionSensitivity,
-          talkSpeed: updatedSettings.talkSpeed,
+          provider: "openai",
+          voiceId: selectedAssistant.voice.voiceId || "shimmer",
+          model: updatedSettings.model,
+          speed: updatedSettings.speed,
+          fillerInjectionEnabled: updatedSettings.fillerInjectionEnabled,
         },
       };
 
@@ -80,24 +70,9 @@ export const VoiceSettingsDropdown = ({ isOpen, onClose }) => {
           setSaveMessage("");
         }, 2000);
       } catch (error) {
-        // Improved error extraction: tries to get the specific message from the server response
-        const errorMessage =
-          error?.response?.data?.message || error?.message || "Unknown error";
-
-        console.error("❌ Voice Update Failed:", {
-          serverMessage: errorMessage,
-          errorObject: error,
-          payloadSent: updateData,
-        });
-
+        const errorMessage = error?.response?.data?.message || "Save failed";
         setSaveStatus("error");
-        setSaveMessage(errorMessage.length > 20 ? "Save failed" : errorMessage);
-
-        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = setTimeout(() => {
-          setSaveStatus("");
-          setSaveMessage("");
-        }, 4000);
+        setSaveMessage(typeof errorMessage === 'string' ? errorMessage : "Error");
       }
     },
     [dispatch, subaccountId, assistantId, selectedAssistant],
@@ -113,10 +88,10 @@ export const VoiceSettingsDropdown = ({ isOpen, onClose }) => {
     debounceTimerRef.current = setTimeout(() => autoSave(updatedSettings), 800);
   };
 
-  const handleEngineChange = (e) => {
-    const updatedSettings = { ...settings, engine: e.target.value };
+  const handleToggleChange = (e) => {
+    const updatedSettings = { ...settings, fillerInjectionEnabled: e.target.checked };
     setSettings(updatedSettings);
-    autoSave(updatedSettings); // Engine changes save immediately
+    autoSave(updatedSettings);
   };
 
   if (!isOpen) return null;
@@ -127,112 +102,69 @@ export const VoiceSettingsDropdown = ({ isOpen, onClose }) => {
         <div className="flex items-center gap-2">
           <h3 className="font-bold text-gray-800">Voice Settings</h3>
           {saveStatus && (
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded transition-all duration-300 ${
-                saveStatus === "success"
-                  ? "bg-green-100 text-green-700"
-                  : saveStatus === "error"
-                    ? "bg-red-100 text-red-700"
-                    : "bg-blue-100 text-blue-700"
-              }`}
-            >
+            <span className={`text-[10px] px-1.5 py-0.5 rounded transition-all duration-300 ${
+              saveStatus === "success" ? "bg-green-100 text-green-700" : 
+              saveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
+            }`}>
               {saveMessage}
             </span>
           )}
         </div>
-        <X
-          size={18}
-          className="text-gray-400 cursor-pointer hover:text-gray-600"
-          onClick={onClose}
-        />
+        <X size={18} className="text-gray-400 cursor-pointer hover:text-gray-600" onClick={onClose} />
       </div>
 
       <div className="space-y-6">
-        {/* Voice Engine Select */}
+        {/* Voice Model Select */}
         <div className="space-y-2">
           <label className="text-xs font-bold text-gray-600 uppercase flex items-center gap-1">
-            Voice Engine <Info size={12} className="text-gray-400" />
+            Voice Model <Info size={12} title="TTS-1 is optimized for speed/latency." className="text-gray-400" />
           </label>
           <select
-            value={settings.engine}
-            onChange={handleEngineChange}
+            name="model"
+            value={settings.model}
+            onChange={(e) => {
+              const updated = { ...settings, model: e.target.value };
+              setSettings(updated);
+              autoSave(updated);
+            }}
             className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="default">Default</option>
-            {selectedAssistant?.voice?.provider === "elevenlabs" && (
-              <>
-                <option value="eleven_turbo_v2">ElevenLabs Turbo v2</option>
-                <option value="eleven_multilingual_v2">
-                  ElevenLabs Multilingual v2
-                </option>
-              </>
-            )}
+            <option value="tts-1">OpenAI TTS 1 (Fast)</option>
+            <option value="tts-1-hd">OpenAI TTS 1 HD (High Quality)</option>
           </select>
-        </div>
-
-        {/* Response Speed */}
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <label className="text-xs font-bold text-gray-600 uppercase">
-              Response Speed
-            </label>
-            <span className="text-xs font-mono text-blue-600">
-              {settings.responseSpeed.toFixed(1)}
-            </span>
-          </div>
-          <input
-            type="range"
-            name="responseSpeed"
-            min="0"
-            max="1"
-            step="0.1"
-            value={settings.responseSpeed}
-            onChange={handleSliderChange}
-            className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none accent-blue-600 cursor-pointer"
-          />
-        </div>
-
-        {/* Interruption Sensitivity */}
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <label className="text-xs font-bold text-gray-600 uppercase">
-              Interruption Sensitivity
-            </label>
-            <span className="text-xs font-mono text-blue-600">
-              {settings.interruptionSensitivity.toFixed(1)}
-            </span>
-          </div>
-          <input
-            type="range"
-            name="interruptionSensitivity"
-            min="0"
-            max="1"
-            step="0.1"
-            value={settings.interruptionSensitivity}
-            onChange={handleSliderChange}
-            className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none accent-blue-600 cursor-pointer"
-          />
+          <p className="text-[10px] text-gray-500 italic">Determines the synthesis quality and response latency.</p>
         </div>
 
         {/* Talk Speed */}
         <div className="space-y-2">
           <div className="flex justify-between">
-            <label className="text-xs font-bold text-gray-600 uppercase">
-              Talk Speed
-            </label>
-            <span className="text-xs font-mono text-blue-600">
-              {settings.talkSpeed.toFixed(2)}x
-            </span>
+            <label className="text-xs font-bold text-gray-600 uppercase">Talk Speed</label>
+            <span className="text-xs font-mono text-blue-600">{settings.speed.toFixed(2)}x</span>
           </div>
           <input
             type="range"
-            name="talkSpeed"
-            min="0.5"
-            max="2"
-            step="0.01"
-            value={settings.talkSpeed}
+            name="speed"
+            min="0.25"
+            max="4.0"
+            step="0.05"
+            value={settings.speed}
             onChange={handleSliderChange}
             className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none accent-blue-600 cursor-pointer"
+          />
+          <p className="text-[10px] text-gray-500 italic">Adjusts how fast Mercy speaks. 1.0 is standard human speed.</p>
+        </div>
+
+        {/* Filler Injection */}
+        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div>
+            <label className="text-xs font-bold text-gray-600 uppercase block">Inject Fillers</label>
+            <p className="text-[10px] text-gray-500 italic max-w-[180px]">Adds natural "ums" and "uhs" to sound more human.</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={settings.fillerInjectionEnabled}
+            onChange={handleToggleChange}
+            className="w-4 h-4 accent-blue-600 cursor-pointer"
           />
         </div>
       </div>
