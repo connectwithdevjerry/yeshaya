@@ -43,12 +43,11 @@ const ChartCard = ({ title, value, unit, color, dataKey, data }) => (
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
           <XAxis 
-            dataKey="date" 
+            dataKey="displayDate" 
             stroke="#94a3b8" 
             fontSize={11}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(str) => str.split('/')[0] + '/' + str.split('/')[1]} 
           />
           <YAxis 
             stroke="#94a3b8" 
@@ -58,6 +57,10 @@ const ChartCard = ({ title, value, unit, color, dataKey, data }) => (
           />
           <Tooltip 
             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+            formatter={(val, name) => [
+              name === "minutes" ? `${val.toFixed(2)} mins` : val,
+              name === "minutes" ? "Total Time" : "Total Calls"
+            ]}
           />
           <Line
             type="monotone"
@@ -83,42 +86,52 @@ const CallCharts = () => {
     const fetchFreshLogs = async () => {
       setLoading(true);
       try {
-        // We use .unwrap() to get the callLogsData directly from the thunk return
         const result = await dispatch(getAssistantCallLogs()).unwrap();
-        setLogs(result);
+        setLogs(result || []);
       } catch (err) {
         setError(err || "Failed to load logs");
       } finally {
         setLoading(false);
       }
     };
-
     fetchFreshLogs();
   }, [dispatch]);
 
-  // Transform raw API logs into daily aggregated chart data
   const chartData = useMemo(() => {
-    if (!logs || logs.length === 0) return [];
+    if (!logs || !Array.isArray(logs) || logs.length === 0) return [];
 
     const grouped = logs.reduce((acc, call) => {
-      // Use startedAt for the timeline
-      const date = new Date(call.startedAt).toLocaleDateString("en-GB");
-      // Use vapi cost breakdown for duration as per your JSON example
-      const duration = call.costBreakdown?.vapi || 0;
+      // --- THE FIX: Guard against null or invalid dates ---
+      if (!call.startedAt) return acc;
+      
+      const dateObj = new Date(call.startedAt);
+      
+      // If the date is invalid (NaN), skip this entry to prevent RangeError
+      if (isNaN(dateObj.getTime())) return acc;
 
-      if (!acc[date]) {
-        acc[date] = { date, calls: 0, minutes: 0 };
+      // Now it's safe to call toISOString()
+      const dateKey = dateObj.toISOString().split('T')[0]; 
+
+      // Extract vapi minutes safely
+      const vapiUsage = call.costs?.find((c) => c.type === "vapi");
+      const callMinutes = vapiUsage ? vapiUsage.minutes : 0;
+
+      if (!acc[dateKey]) {
+        acc[dateKey] = { 
+          dateKey, 
+          displayDate: dateObj.toLocaleDateString("en-GB", { day: '2-digit', month: '2-digit' }), 
+          calls: 0, 
+          minutes: 0 
+        };
       }
-      acc[date].calls += 1;
-      acc[date].minutes += duration;
+      
+      acc[dateKey].calls += 1;
+      acc[dateKey].minutes += callMinutes;
+      
       return acc;
     }, {});
 
-    // Sort chronologically
-    return Object.values(grouped).sort((a, b) => 
-      new Date(a.date.split('/').reverse().join('-')) - 
-      new Date(b.date.split('/').reverse().join('-'))
-    );
+    return Object.values(grouped).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
   }, [logs]);
 
   const totals = useMemo(() => {
