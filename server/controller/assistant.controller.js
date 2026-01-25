@@ -818,6 +818,107 @@ const createTool = async (toolName, userId) => {
   }
 };
 
+const getUserAnalytics = async (req, res) => {
+  try {
+    const userId = req.user;
+    const user = await userModel.findById(userId);
+
+    if (!user) return res.send({ message: "User not found" });
+
+    // 1. Gather distinct Assistant IDs and Phone counts
+    let assistantIds = [];
+    let phoneNumbersCount = 0;
+
+    user.ghlSubAccountIds.forEach((sub) => {
+      sub.vapiAssistants.forEach((ast) => {
+        assistantIds.push(ast.assistantId);
+        phoneNumbersCount += ast.numberDetails.length;
+      });
+    });
+
+    // Remove duplicates to avoid redundant API calls
+    const uniqueAssistantIds = [...new Set(assistantIds)];
+
+    // 2. Fetch Call Logs in Parallel
+    // Each ID gets its own dedicated request
+    const callRequests = uniqueAssistantIds.map((id) =>
+      axios.get(`https://api.vapi.ai/call`, {
+        params: { assistantId: id },
+        headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}` },
+      }),
+    );
+
+    const responses = await Promise.all(callRequests);
+
+    // Flatten the array of arrays into a single list of calls
+    const calls = responses.flatMap((r) => r.data);
+
+    // 3. Aggregate Metrics
+    const stats = {
+      phoneNumbersBought: phoneNumbersCount,
+      numberOfAssistants: uniqueAssistantIds.length,
+      totalCalls: calls.length,
+      inboundCalls: calls.filter((c) => c.type === "inboundPhoneCall").length,
+      outboundCalls: calls.filter((c) => c.type === "outboundPhoneCall").length,
+      webCalls: calls.filter((c) => c.type === "webCall").length,
+
+      // End Reasons
+      contactEnds: calls.filter((c) => c.endedReason === "customer-ended-call")
+        .length,
+      aiEnds: calls.filter((c) => c.endedReason === "assistant-ended-call")
+        .length,
+      voicemails: calls.filter((c) => c.endedReason === "voicemail").length,
+
+      // Transfers & Appointments
+      transfers: calls.filter(
+        (c) =>
+          c.status === "transferred" ||
+          c.artifact?.messages?.some(
+            (m) => m.role === "tool" && m.name === "transferCall",
+          ),
+      ).length,
+      appointments: calls.filter(
+        (c) =>
+          c.analysis?.successEvaluation === "true" ||
+          c.analysis?.successEvaluation === true,
+      ).length,
+
+      // Time & Cost
+      totalCallTimeSeconds: calls.reduce(
+        (acc, c) => acc + (c.durationSeconds || 0),
+        0,
+      ),
+      totalSpend: calls.reduce((acc, c) => acc + (c.cost || 0), 0),
+    };
+
+    // 4. Derived Calculations
+    const avgCallTime =
+      stats.totalCalls > 0 ? stats.totalCallTimeSeconds / stats.totalCalls : 0;
+    const costPerDial =
+      stats.totalCalls > 0 ? stats.totalSpend / stats.totalCalls : 0;
+    const costPerTransfer =
+      stats.transfers > 0 ? stats.totalSpend / stats.transfers : 0;
+    const costPerAppointment =
+      stats.appointments > 0 ? stats.totalSpend / stats.appointments : 0;
+
+    return res.send({
+      status: true,
+      data: {
+        ...stats,
+        avgCallTimeMinutes: (avgCallTime / 60).toFixed(2),
+        costPerDial: costPerDial.toFixed(2),
+        costPerTransfer: costPerTransfer.toFixed(2),
+        costPerAppointment: costPerAppointment.toFixed(2),
+        totalSpendFormatted: `$${stats.totalSpend.toFixed(2)}`,
+        totalCallTimeFormatted: `${Math.floor(stats.totalCallTimeSeconds / 60)}m ${Math.round(stats.totalCallTimeSeconds % 60)}s`,
+      },
+    });
+  } catch (error) {
+    console.error("Analytics Error:", error.response?.data || error.message);
+    return res.send({ status: false, message: "Failed to fetch analytics" });
+  }
+};
+
 const linkToolToAssistant = async (assistantId, toolId, userId) => {
   try {
     const vapi = new VapiClient({
@@ -917,7 +1018,7 @@ const executeToolFromVapi = async (req, res) => {
   const { message } = req.body;
   const { userId } = req.params;
 
-  if (message.type !== "tool-calls") return res.status(200).send();
+  if (message.type !== "tool-calls") return res.send();
 
   console.log("Received tool call from Vapi:", message);
 
@@ -2866,6 +2967,7 @@ module.exports = {
   deleteContact,
   updateContact,
   getContact,
+  getUserAnalytics,
 };
 
 // what's left

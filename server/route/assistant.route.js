@@ -37,6 +37,7 @@ const {
   createContact,
   updateContact,
   deleteContact,
+  getUserAnalytics,
 } = require("../controller/assistant.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
 
@@ -75,7 +76,7 @@ const {
   GET_CONTACT,
   CREATE_CONTACT,
   UPDATE_CONTACT,
-  DELETE_CONTACT,
+  DELETE_CONTACT,GET_ANALYTICS
 } = require("../constants");
 
 const upload = multer({
@@ -89,6 +90,7 @@ router.get(GET_ASSISTANT, verifyAccessToken, getAssistant);
 router.get(GET_ASSISTANTS, verifyAccessToken, getAssistants);
 router.get(GET_CONTACTS, verifyAccessToken, getContacts);
 router.get(GET_CONTACT, verifyAccessToken, getContact);
+router.get(GET_ANALYTICS, verifyAccessToken, getUserAnalytics);
 router.post(CREATE_CONTACT, verifyAccessToken, createContact);
 router.put(UPDATE_CONTACT, verifyAccessToken, updateContact);
 router.delete(DELETE_CONTACT, verifyAccessToken, deleteContact);
