@@ -457,34 +457,23 @@ const createAssistantAndSave = async (req, res) => {
     const assistantId = data.id;
     console.log(`Assistant created successfully! ID: ${assistantId}`);
 
-    // // Automatically add default tools: send_message and self_schedule
-    // try {
-    //   const defaultTools = ["send_message", "self_schedule"];
-    //   const toolIds = [];
+    // Automatically add default tools: send_message and self_schedule
+    const defaultTools = ["send_message", "self_schedule"];
+    const toolIds = [];
 
-    //   for (const toolName of defaultTools) {
-    //     try {
-    //       const toolId = await createTool(toolName, userId);
-    //       toolIds.push(toolId);
-    //       console.log(`Created default tool ${toolName} with ID: ${toolId}`);
-    //     } catch (toolError) {
-    //       console.error(`Error creating tool ${toolName}:`, toolError.message);
-    //     }
-    //   }
+    for (const toolName of defaultTools) {
+      // try {
+      const toolId = await createTool(toolName, userId);
+      toolIds.push(toolId);
+      console.log(`Created default tool ${toolName} with ID: ${toolId}`);
+    }
 
-    //   // Link all tools to the assistant
-    //   for (const toolId of toolIds) {
-    //     try {
-    //       await linkToolToAssistant(assistantId, toolId, userId);
-    //       console.log(`Linked tool ${toolId} to assistant ${assistantId}`);
-    //     } catch (linkError) {
-    //       console.error(`Error linking tool ${toolId}:`, linkError.message);
-    //     }
-    //   }
-    // } catch (defaultToolsError) {
-    //   console.error("Error adding default tools:", defaultToolsError.message);
-    //   // Continue even if tools fail - assistant is still created
-    // }
+    // Link all tools to the assistant
+    for (const toolId of toolIds) {
+      // try {
+      await linkToolToAssistant(assistantId, toolId, userId);
+      console.log(`Linked tool ${toolId} to assistant ${assistantId}`);
+    }
 
     // save data inside database
 
