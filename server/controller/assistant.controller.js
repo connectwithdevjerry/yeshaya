@@ -429,8 +429,10 @@ const createAssistantAndSave = async (req, res) => {
 
   const user = await userModel.findById(userId);
 
+  console.log({ subaccountId });
+
   const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === subaccountId && sub.connected,
+    (sub) => sub.accountId == subaccountId && sub.connected
   );
 
   if (!targetSubaccount)
@@ -1791,7 +1793,10 @@ const getAvailableCalendars = async (req, res) => {
   );
 
   if (!targetSubaccount)
-    return res.send({ status: false, message: "This subaccount does not exist!" });
+    return res.send({
+      status: false,
+      message: "This subaccount does not exist!",
+    });
 
   try {
     const tkns = await getSubGhlTokens(userId, accountId);
