@@ -1791,7 +1791,7 @@ const getAvailableCalendars = async (req, res) => {
   );
 
   if (!targetSubaccount)
-    return { status: false, message: "This subaccount does not exist!" };
+    return res.send({ status: false, message: "This subaccount does not exist!" });
 
   try {
     const tkns = await getSubGhlTokens(userId, accountId);
@@ -2115,8 +2115,8 @@ const linkKnowledgeBaseToAssistant = async (req, res) => {
       `https://api.vapi.ai/assistant/${assistantId}`,
       {
         model: {
-          // provider: massistant.model.provider || "openai",
-          // model: massistant.model.model || "gpt-4o",
+          provider: massistant.model.provider || "openai",
+          model: massistant.model.model || "gpt-4o",
           ...massistant.model,
           toolIds: [...(updatedTools || [])],
         },
@@ -2281,8 +2281,8 @@ const removeToolFromAllAssistants = async (TARGET_TOOL_ID) => {
           `https://api.vapi.ai/assistant/${assistant.id}`,
           {
             model: {
-              // provider: assistant.model.provider,
-              // model: assistant.model.model,
+              provider: assistant.model.provider,
+              model: assistant.model.model,
               ...assistant.model,
               toolIds: updatedToolIds,
             },
@@ -2398,8 +2398,8 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
       `https://api.vapi.ai/assistant/${assistantId}`,
       {
         model: {
-          // provider: massistant.model.provider || "openai",
-          // model: massistant.model.model || "gpt-4o",
+          provider: massistant.model.provider || "openai",
+          model: massistant.model.model || "gpt-4o",
           ...massistant.model,
           toolIds: [...remainingTools],
         },
