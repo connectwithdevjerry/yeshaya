@@ -173,12 +173,15 @@ export const VoiceMenuDrawer = ({ isOpen, onClose }) => {
 
     try {
       const updateData = {
-        voice: {
-          provider: voice.provider,
-          voiceId: voice.voiceId,
-        },
-      };
-
+      voice: {
+        ...selectedAssistant.voice, 
+        provider: voice.provider,
+        voiceId: voice.voiceId,
+        fillerInjectionEnabled: true,
+        model: "tts-1",
+        speed: 1.7,
+      }
+    };
       await dispatch(
         updateAssistant({ subaccountId, assistantId, updateData })
       ).unwrap();

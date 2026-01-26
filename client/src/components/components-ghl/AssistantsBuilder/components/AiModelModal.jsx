@@ -141,11 +141,12 @@ export const AIModelModal = ({ isOpen, onClose }) => {
     try {
       // ✅ Build updateData - always include both provider and model
       const updateData = {
-        model: {
-          provider: newProvider,
-          model: newModel
-        }
-      };
+      model: {
+        ...selectedAssistant.model, // ✅ Keep systemPrompt, toolIds, etc.
+        provider: modelInfo.provider,
+        model: modelInfo.api,
+      }
+    };
 
       console.log('📤 Updating assistant model:', {
         subaccountId,

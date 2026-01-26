@@ -67,8 +67,7 @@ const NumbersActionsMenu = ({
 
   // Get Vapi connection status from Redux
   const { vapiStatuses } = useSelector((state) => state.numbers || {});
-  const vapiInfo = vapiStatuses?.[account?.id]; // account.id is the phoneSid (may be undefined)
-  // NEW: decide connection solely on isConnected === true
+  const vapiInfo = vapiStatuses?.[account?.id]; 
   const isConnectedToVapi = vapiInfo?.isConnected === true;
   const isChecking = Boolean(vapiInfo?.checking);
 
@@ -106,7 +105,7 @@ const NumbersActionsMenu = ({
             phoneNumber: account.phoneNumber,
             id: account.id
           });
-          alert("Missing required information to connect to Vapi");
+          alert("Missing required information to connect");
           setIsConnecting(false);
           return;
         }
@@ -127,9 +126,9 @@ const NumbersActionsMenu = ({
           })
         ).unwrap();
 
-        console.log("✅ Successfully connected to Vapi:", result);
+        console.log("✅ Successfully connected :", result);
         
-        alert("Successfully connected to Vapi!");
+        alert("Number Connected Successfully");
         onClose();
       } catch (error) {
         console.error("❌ Failed to connect to Vapi:", error);
@@ -140,7 +139,7 @@ const NumbersActionsMenu = ({
           ? error 
           : error?.message || error?.error || "Unknown error occurred";
         
-        alert(`Failed to connect to Vapi: ${errorMessage}`);
+        alert(`Failed to connect: ${errorMessage}`);
       } finally {
         setIsConnecting(false);
       }
@@ -150,7 +149,7 @@ const NumbersActionsMenu = ({
     if (action === "DisconnectVapi") {
       try {
         const confirmDisconnect = window.confirm(
-          `Are you sure you want to disconnect ${account.phoneNumber} from Vapi?`
+          `Are you sure you want to disconnect ${account.phoneNumber}?`
         );
 
         if (!confirmDisconnect) return;
@@ -158,7 +157,7 @@ const NumbersActionsMenu = ({
         setIsDisconnecting(true);
 
         if (!vapiInfo || !vapiInfo.vapiPhoneNumId) {
-          alert("No Vapi connection found for this number");
+          alert("No connection found for this number");
           setIsDisconnecting(false);
           return;
         }
@@ -175,8 +174,8 @@ const NumbersActionsMenu = ({
           })
         ).unwrap();
 
-        console.log("✅ Successfully disconnected from Vapi");
-        alert("Successfully disconnected from Vapi!");
+        console.log("✅ Successfully disconnected");
+        alert("Successfully disconnected");
         onClose();
       } catch (error) {
         console.error("❌ Failed to disconnect from Vapi:", error);
@@ -185,7 +184,7 @@ const NumbersActionsMenu = ({
           ? error 
           : error?.message || error?.error || "Unknown error occurred";
         
-        alert(`Failed to disconnect from Vapi: ${errorMessage}`);
+        alert(`Failed to disconnect: ${errorMessage}`);
       } finally {
         setIsDisconnecting(false);
       }
@@ -268,7 +267,7 @@ const NumbersActionsMenu = ({
         {!isChecking && (isConnectedToVapi ? (
           <MenuItem 
             icon={XCircle} 
-            text="Disconnect from Vapi"
+            text="Disconnect"
             onClick={() => handleAction("DisconnectVapi")}
             loading={isDisconnecting}
             disabled={isDisconnecting}
@@ -277,7 +276,7 @@ const NumbersActionsMenu = ({
         ) : (
           <MenuItem
             icon={ExternalLink}
-            text="Connect to Vapi"
+            text="Connect"
             onClick={() => handleAction("ConnectVapi")}
             loading={isConnecting}
             disabled={isConnecting}
@@ -296,11 +295,11 @@ const NumbersActionsMenu = ({
         {/* Footer connection message based on isConnected boolean */}
         {isConnectedToVapi && (
           <p className="text-green-600 font-medium mt-1">
-            ✓ Connected to Vapi
+            ✓ Connect Number
           </p>
         )}
         {!isConnectedToVapi && !isChecking && (
-          <p className="text-gray-500 mt-1">Not connected to Vapi</p>
+          <p className="text-gray-500 mt-1">Not connected</p>
         )}
       </div>
     </div>
