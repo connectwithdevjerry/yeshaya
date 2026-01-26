@@ -38,6 +38,8 @@ const {
   updateContact,
   deleteContact,
   getUserAnalytics,
+  getTeamNotes,
+  updateTeamNotes,
 } = require("../controller/assistant.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
 
@@ -78,6 +80,8 @@ const {
   UPDATE_CONTACT,
   DELETE_CONTACT,
   GET_ANALYTICS,
+  GET_TEAM_NOTES,
+  UPDATE_TEAM_NOTES,
 } = require("../constants");
 
 const upload = multer({
@@ -152,5 +156,7 @@ router.get(
 );
 router.get(GET_CONNECTED_CALENDARS, verifyAccessToken, getConnectedCalendar);
 router.get(GET_WALLET_BALANCE, verifyAccessToken, checkWalletBalance);
+router.get(GET_TEAM_NOTES, verifyAccessToken, getTeamNotes);
+router.put(UPDATE_TEAM_NOTES, verifyAccessToken, updateTeamNotes);
 
 module.exports = router;

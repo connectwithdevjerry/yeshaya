@@ -3311,6 +3311,104 @@ const getContact = async (req, res) => {
   }
 };
 
+const getTeamNotes = async (req, res) => {
+  const userId = req.user;
+  const { subaccountId, assistantId } = req.query;
+
+  try {
+    const user = await userModel.findById(userId);
+
+    const targetSubaccount = user.ghlSubAccountIds.find(
+      (sub) => sub.accountId === subaccountId && sub.connected,
+    );
+
+    if (!targetSubaccount)
+      return res.send({
+        status: false,
+        message: "This subaccount does not exist!",
+      });
+
+    const targetAssistant = targetSubaccount.vapiAssistants.find(
+      (target) => target.assistantId === assistantId,
+    );
+
+    if (!targetAssistant)
+      return res.send({
+        status: false,
+        message: "This assistant does not exist!",
+      });
+
+    return res.send({
+      status: true,
+      data: {
+        teamNotes: targetAssistant.teamNotes || "",
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching team notes:", error);
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
+const updateTeamNotes = async (req, res) => {
+  const userId = req.user;
+  const { subaccountId, assistantId, teamNotes } = req.body;
+
+  if (!teamNotes && teamNotes !== "") {
+    return res.send({
+      status: false,
+      message: "teamNotes field is required",
+    });
+  }
+
+  try {
+    const user = await userModel.findById(userId);
+
+    const targetSubaccount = user.ghlSubAccountIds.find(
+      (sub) => sub.accountId === subaccountId && sub.connected,
+    );
+
+    if (!targetSubaccount)
+      return res.send({
+        status: false,
+        message: "This subaccount does not exist!",
+      });
+
+    const targetAssistant = targetSubaccount.vapiAssistants.find(
+      (target) => target.assistantId === assistantId,
+    );
+
+    if (!targetAssistant)
+      return res.send({
+        status: false,
+        message: "This assistant does not exist!",
+      });
+
+    // Update team notes
+    targetAssistant.teamNotes = teamNotes;
+
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    return res.send({
+      status: true,
+      message: "Team notes updated successfully.",
+      data: {
+        teamNotes: targetAssistant.teamNotes,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating team notes:", error);
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
 // Execute the main function
 module.exports = {
   createAssistantAndSave,
@@ -3350,6 +3448,8 @@ module.exports = {
   updateContact,
   getContact,
   getUserAnalytics,
+  getTeamNotes,
+  updateTeamNotes,
 };
 
 // what's left

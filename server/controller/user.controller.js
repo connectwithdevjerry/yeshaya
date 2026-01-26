@@ -57,7 +57,7 @@ const signup = async (req, res, next) => {
     // };
 
     // result.email,
-    emailHelper(
+    await emailHelper(
       result.email,
       "Password Activation Link",
       `Your activation link: <a href="${reset_link}">Click Here...</a>`,
@@ -92,7 +92,7 @@ const signup = async (req, res, next) => {
       console.log(error.message);
       return res.send({ status: false, message: error.message });
     }
-    next(error);
+    return res.send({ status: false, message: error.message });
   }
 };
 
@@ -199,7 +199,7 @@ const forgotPassword = async (req, res) => {
     //   res.send({ status: true, message: "Email sent successfully" });
     // });
 
-    emailHelper(
+    await emailHelper(
       email,
       "Password Reset Link",
       `Your reset link: <a href="${reset_link}">Click Here...</a>`,
@@ -210,13 +210,13 @@ const forgotPassword = async (req, res) => {
       message: "Reset Link successfully sent to your mail!",
     });
   } catch (error) {
-    if (error.isJoi === true)
-      return res.send({
-        status: false,
-        message: "Kindly provide a valid email/password",
-      });
+    // if (error.isJoi === true)
+    return res.send({
+      status: false,
+      message: error.message || "Kindly provide a valid email/password",
+    });
 
-    console.log(error);
+    // console.log(error.message);
   }
 };
 

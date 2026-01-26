@@ -78,6 +78,8 @@ const UPDATE_CHARGING_DETAILS = "/update-charging-details";
 const GET_USER_DETAILS = "/get-user-details";
 const AUTO_CARD_PAY_WEBHOOK = "/autopay/webhook";
 const GET_ANALYTICS = "/get-analytics";
+const GET_TEAM_NOTES = "/get-team-notes";
+const UPDATE_TEAM_NOTES = "/update-team-notes";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -162,4 +164,6 @@ module.exports = {
   GET_USER_DETAILS,
   AUTO_CARD_PAY_WEBHOOK,
   GET_ANALYTICS,
+  GET_TEAM_NOTES,
+  UPDATE_TEAM_NOTES,
 };
