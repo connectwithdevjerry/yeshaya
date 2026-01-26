@@ -7,6 +7,7 @@ const FormData = require("form-data");
 const fs = require("fs");
 const { fillTemplate, extractText } = require("../helperFunctions");
 const { MAKE_OUTBOUND_CALL } = require("../constants");
+const emailHelper = require("../resendObject");
 
 const toolsProperties = {
   scrape_website: {
@@ -98,6 +99,87 @@ const toolsProperties = {
     },
     required: ["startDate"],
   },
+  send_message: {
+    description:
+      "Sends an email message to the user. Use this tool to send important information, confirmations, or follow-up details via email.",
+    properties: {
+      recipientEmail: {
+        type: "string",
+        description: "The email address of the recipient",
+      },
+      subject: {
+        type: "string",
+        description: "The subject line of the email",
+      },
+      message: {
+        type: "string",
+        description: "The body content of the email message",
+      },
+    },
+    required: ["recipientEmail", "subject", "message"],
+  },
+  self_schedule: {
+    description:
+      "Automatically creates a schedule or appointment in GoHighLevel calendar. Use this tool to schedule meetings, follow-ups, or appointments based on user preferences.",
+    properties: {
+      customerName: {
+        type: "string",
+        description: "The name of the customer to schedule",
+      },
+      customerEmail: {
+        type: "string",
+        description: "The email address of the customer",
+      },
+      startTime: {
+        type: "string",
+        description: "The ISO 8601 timestamp for the appointment start time",
+      },
+      title: {
+        type: "string",
+        description: "The title or description of the scheduled appointment",
+      },
+    },
+    required: ["customerName", "customerEmail", "startTime"],
+  },
+  create_task: {
+    description:
+      "Creates a task in GoHighLevel for a contact. Use this tool to create reminders, follow-up tasks, or action items related to a customer.",
+    properties: {
+      customerEmail: {
+        type: "string",
+        description: "The email address of the customer to create the task for",
+      },
+      customerName: {
+        type: "string",
+        description: "The name of the customer",
+      },
+      title: {
+        type: "string",
+        description: "The title or description of the task",
+      },
+      dueDate: {
+        type: "string",
+        description:
+          "The ISO 8601 timestamp for when the task is due (optional)",
+      },
+      body: {
+        type: "string",
+        description: "Additional details or notes about the task (optional)",
+      },
+    },
+    required: ["customerEmail", "title"],
+  },
+  add_note: {
+    description:
+      "Adds a team note to the assistant's configuration. Use this tool to save important information, context, or instructions that should be remembered for future conversations.",
+    properties: {
+      note: {
+        type: "string",
+        description: "The team note content to add to the assistant",
+      },
+    },
+    required: ["note"],
+  },
 };
 
 const toolData = (toolName, userId) => ({
@@ -108,7 +190,10 @@ const toolData = (toolName, userId) => ({
     parameters: {
       type: "object",
       properties: toolsProperties[toolName].properties,
-      required: toolsProperties[toolName].required,
+      required:
+        toolsProperties[toolName].required ||
+        toolsProperties[toolName].requiredValues ||
+        [],
     },
   },
   server: {
@@ -157,7 +242,7 @@ If you do not know something for certain, it is fine to say you don't know. Avoi
 
 3. For appointment booking:
    - Ask if they prefer an in-office appointment at 695 Truman Parkway, Boston or a virtual consultation.
-   - Use get_availability to check available appointment times.
+   - Use check_availability and get_user_calendar_events to check available appointment times.
    - Present options to the user and confirm their preference.
    - Collect necessary contact information (name, email, phone) using update_user_details.
    - Use book_appointment to schedule the confirmed time.
@@ -165,18 +250,20 @@ If you do not know something for certain, it is fine to say you don't know. Avoi
 
 4. For general inquiries:
    - Answer questions about tax deadlines, document requirements, and general tax processes.
-   - If the question requires specialized knowledge, offer to create a note for a tax professional to follow up using create_note.
+   - If the question requires specialized knowledge, offer to create a note for a tax professional to follow up using add_note.
    - For complex situations, suggest booking a consultation for personalized advice.
+   - If you need to search the web at anytime use search_the_web, if the user gives a particular website use scrape_website
 
 5. For follow-up needs:
-   - If the user needs additional information that requires research, offer to send an email with details using send_email.
+   - If the user needs additional information that requires research, offer to send an email with details using send_message.
    - If the user needs a reminder about tax deadlines or appointments, offer to create a task using create_task.
    - If appropriate, suggest self_schedule to arrange a follow-up conversation.
 
 6. Before ending the conversation:
    - Confirm that all the user's questions have been answered.
-   - Provide contact information (phone: (401) 429-9948, email: James@upscalebos.com) for future reference.
+   - Provide contact information (phone: ‪+1 (857) 285‑0915‬, email: Yashayah617@gmail.com) for future reference.
    - Thank them for choosing Upscale BOS for their tax needs.
+
 `;
 
 const VAPI_ASSISTANT_CONFIG = ({
@@ -342,8 +429,10 @@ const createAssistantAndSave = async (req, res) => {
 
   const user = await userModel.findById(userId);
 
+  console.log({ subaccountId });
+
   const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === subaccountId && sub.connected,
+    (sub) => sub.accountId == subaccountId && sub.connected
   );
 
   if (!targetSubaccount)
@@ -369,6 +458,24 @@ const createAssistantAndSave = async (req, res) => {
 
     const assistantId = data.id;
     console.log(`Assistant created successfully! ID: ${assistantId}`);
+
+    // Automatically add default tools: send_message and self_schedule
+    const defaultTools = ["send_message", "self_schedule"];
+    const toolIds = [];
+
+    for (const toolName of defaultTools) {
+      // try {
+      const toolId = await createTool(toolName, userId);
+      toolIds.push(toolId);
+      console.log(`Created default tool ${toolName} with ID: ${toolId}`);
+    }
+
+    // Link all tools to the assistant
+    for (const toolId of toolIds) {
+      // try {
+      await linkToolToAssistant(assistantId, toolId, userId);
+      console.log(`Linked tool ${toolId} to assistant ${assistantId}`);
+    }
 
     // save data inside database
 
@@ -939,6 +1046,7 @@ const linkToolToAssistant = async (assistantId, toolId, userId) => {
         model: {
           provider: massistant.model.provider || "openai",
           model: massistant.model.model || "gpt-4o",
+          ...massistant.model,
           toolIds: updatedTools,
         },
       },
@@ -1017,6 +1125,8 @@ const addATool = async (req, res) => {
 const executeToolFromVapi = async (req, res) => {
   const { message } = req.body;
   const { userId } = req.params;
+
+  console.log("Received Vapi Tool Webhook:", message);
 
   if (message.type !== "tool-calls") return res.send();
 
@@ -1139,8 +1249,7 @@ const executeToolFromVapi = async (req, res) => {
       const { firstName, lastName, email } = args;
       // phone,address,timezone,website
 
-      // Use the accessToken from your helper function
-      const accessToken = await getFreshAccessToken(user);
+      // Use the accessToken (already retrieved above)
 
       const payload = {
         locationId: locationId, // Extracted from your ghlSubAccountIds array
@@ -1308,6 +1417,271 @@ const executeToolFromVapi = async (req, res) => {
         ],
       });
     }
+
+    // 7 --- TOOL: SEND MESSAGE (EMAIL) ---
+    if (name === "send_message") {
+      const { recipientEmail, subject, message } = args;
+
+      if (!recipientEmail || !subject || !message) {
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error:
+                "Missing required fields: recipientEmail, subject, or message.",
+            },
+          ],
+        });
+      }
+
+      try {
+        // Send email using Resend
+        await emailHelper(recipientEmail, subject, message);
+
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              result: `Email sent successfully to ${recipientEmail}.`,
+            },
+          ],
+        });
+      } catch (error) {
+        console.error("Error sending email:", error.message);
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error: `Failed to send email: ${error.message}`,
+            },
+          ],
+        });
+      }
+    }
+
+    // 8 --- TOOL: SELF SCHEDULE (GOHIGHLEVEL) ---
+    if (name === "self_schedule") {
+      const { customerName, customerEmail, startTime, title } = args;
+
+      if (!customerName || !customerEmail || !startTime) {
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error:
+                "Missing required fields: customerName, customerEmail, or startTime.",
+            },
+          ],
+        });
+      }
+
+      try {
+        // Get fresh access token
+        const tkns = await getSubGhlTokens(userId, locationId);
+        const accessToken = tkns.data.access_token;
+
+        // Step A: Upsert Contact
+        const contactRes = await axios.post(
+          "https://services.leadconnectorhq.com/contacts/upsert",
+          {
+            email: customerEmail,
+            firstName: customerName,
+            locationId,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-07-28",
+            },
+          },
+        );
+
+        // Step B: Create Event/Appointment
+        await axios.post(
+          "https://services.leadconnectorhq.com/calendars/events",
+          {
+            calendarId,
+            locationId,
+            contactId: contactRes.data.contact.id,
+            startTime,
+            title: title || `Scheduled: ${customerName}`,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-07-28",
+            },
+          },
+        );
+
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              result: `Successfully scheduled appointment for ${customerName} at ${new Date(startTime).toLocaleString()}.`,
+            },
+          ],
+        });
+      } catch (error) {
+        console.error(
+          "Error creating schedule:",
+          error.response?.data || error.message,
+        );
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error: `Failed to create schedule: ${error.response?.data?.message || error.message}`,
+            },
+          ],
+        });
+      }
+    }
+
+    // 9 --- TOOL: CREATE TASK (GOHIGHLEVEL) ---
+    if (name === "create_task") {
+      const { customerEmail, customerName, title, dueDate, body } = args;
+
+      if (!customerEmail || !title) {
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error: "Missing required fields: customerEmail and title.",
+            },
+          ],
+        });
+      }
+
+      try {
+        // Get fresh access token
+        const tkns = await getSubGhlTokens(userId, locationId);
+        const accessToken = tkns.data.access_token;
+
+        // Step A: Upsert Contact to get contactId
+        const contactRes = await axios.post(
+          "https://services.leadconnectorhq.com/contacts/upsert",
+          {
+            email: customerEmail,
+            firstName: customerName,
+            locationId,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-07-28",
+            },
+          },
+        );
+
+        const contactId = contactRes.data.contact.id;
+
+        // Step B: Create Task
+        const taskPayload = {
+          title,
+          ...(body && { body }),
+          ...(dueDate && { dueDate }),
+        };
+
+        await axios.post(
+          `https://services.leadconnectorhq.com/contacts/${contactId}/tasks`,
+          taskPayload,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-07-28",
+            },
+          },
+        );
+
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              result: `Successfully created task "${title}" for ${customerName || customerEmail}.`,
+            },
+          ],
+        });
+      } catch (error) {
+        console.error(
+          "Error creating task:",
+          error.response?.data || error.message,
+        );
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error: `Failed to create task: ${error.response?.data?.message || error.message}`,
+            },
+          ],
+        });
+      }
+    }
+
+    // 10 --- TOOL: ADD NOTE (TEAM NOTES) ---
+    if (name === "add_note") {
+      const { note } = args;
+
+      if (!note) {
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error: "Missing required field: note.",
+            },
+          ],
+        });
+      }
+
+      try {
+        // Use the user object already retrieved at the beginning of the function
+        // Find the specific assistant and update teamNotes
+        // Note: targetAssistant is already found at the beginning of the function
+        if (targetAssistant) {
+          // Append to existing notes or create new
+          const existingNotes = targetAssistant.teamNotes || "";
+          const timestamp = new Date().toISOString();
+          const newNote = existingNotes
+            ? `${existingNotes}\n\n[${timestamp}] ${note}`
+            : `[${timestamp}] ${note}`;
+          targetAssistant.teamNotes = newNote;
+
+          user.markModified("ghlSubAccountIds");
+          await user.save();
+
+          return res.status(200).json({
+            results: [
+              {
+                toolCallId: toolCall.id,
+                result: "Team note added successfully to the assistant.",
+              },
+            ],
+          });
+        } else {
+          return res.status(200).json({
+            results: [
+              {
+                toolCallId: toolCall.id,
+                error: "Could not find assistant to update.",
+              },
+            ],
+          });
+        }
+      } catch (error) {
+        console.error(
+          "Error adding team note:",
+          error.response?.data || error.message,
+        );
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error: `Failed to add team note: ${error.response?.data?.message || error.message}`,
+            },
+          ],
+        });
+      }
+    }
   } catch (error) {
     console.error("GHL Error:", error.response?.data || error.message);
     res.status(200).json({
@@ -1419,7 +1793,10 @@ const getAvailableCalendars = async (req, res) => {
   );
 
   if (!targetSubaccount)
-    return { status: false, message: "This subaccount does not exist!" };
+    return res.send({
+      status: false,
+      message: "This subaccount does not exist!",
+    });
 
   try {
     const tkns = await getSubGhlTokens(userId, accountId);
@@ -1745,6 +2122,7 @@ const linkKnowledgeBaseToAssistant = async (req, res) => {
         model: {
           provider: massistant.model.provider || "openai",
           model: massistant.model.model || "gpt-4o",
+          ...massistant.model,
           toolIds: [...(updatedTools || [])],
         },
       },
@@ -1910,6 +2288,7 @@ const removeToolFromAllAssistants = async (TARGET_TOOL_ID) => {
             model: {
               provider: assistant.model.provider,
               model: assistant.model.model,
+              ...assistant.model,
               toolIds: updatedToolIds,
             },
           },
@@ -2026,6 +2405,7 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
         model: {
           provider: massistant.model.provider || "openai",
           model: massistant.model.model || "gpt-4o",
+          ...massistant.model,
           toolIds: [...remainingTools],
         },
       },
@@ -2929,6 +3309,104 @@ const getContact = async (req, res) => {
   }
 };
 
+const getTeamNotes = async (req, res) => {
+  const userId = req.user;
+  const { subaccountId, assistantId } = req.query;
+
+  try {
+    const user = await userModel.findById(userId);
+
+    const targetSubaccount = user.ghlSubAccountIds.find(
+      (sub) => sub.accountId === subaccountId && sub.connected,
+    );
+
+    if (!targetSubaccount)
+      return res.send({
+        status: false,
+        message: "This subaccount does not exist!",
+      });
+
+    const targetAssistant = targetSubaccount.vapiAssistants.find(
+      (target) => target.assistantId === assistantId,
+    );
+
+    if (!targetAssistant)
+      return res.send({
+        status: false,
+        message: "This assistant does not exist!",
+      });
+
+    return res.send({
+      status: true,
+      data: {
+        teamNotes: targetAssistant.teamNotes || "",
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching team notes:", error);
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
+const updateTeamNotes = async (req, res) => {
+  const userId = req.user;
+  const { subaccountId, assistantId, teamNotes } = req.body;
+
+  if (!teamNotes && teamNotes !== "") {
+    return res.send({
+      status: false,
+      message: "teamNotes field is required",
+    });
+  }
+
+  try {
+    const user = await userModel.findById(userId);
+
+    const targetSubaccount = user.ghlSubAccountIds.find(
+      (sub) => sub.accountId === subaccountId && sub.connected,
+    );
+
+    if (!targetSubaccount)
+      return res.send({
+        status: false,
+        message: "This subaccount does not exist!",
+      });
+
+    const targetAssistant = targetSubaccount.vapiAssistants.find(
+      (target) => target.assistantId === assistantId,
+    );
+
+    if (!targetAssistant)
+      return res.send({
+        status: false,
+        message: "This assistant does not exist!",
+      });
+
+    // Update team notes
+    targetAssistant.teamNotes = teamNotes;
+
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    return res.send({
+      status: true,
+      message: "Team notes updated successfully.",
+      data: {
+        teamNotes: targetAssistant.teamNotes,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating team notes:", error);
+    return res.send({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
 // Execute the main function
 module.exports = {
   createAssistantAndSave,
@@ -2968,6 +3446,8 @@ module.exports = {
   updateContact,
   getContact,
   getUserAnalytics,
+  getTeamNotes,
+  updateTeamNotes,
 };
 
 // what's left
