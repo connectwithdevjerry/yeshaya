@@ -7,6 +7,7 @@ const FormData = require("form-data");
 const fs = require("fs");
 const { fillTemplate, extractText } = require("../helperFunctions");
 const { MAKE_OUTBOUND_CALL } = require("../constants");
+const emailHelper = require("../resendObject");
 
 const toolsProperties = {
   scrape_website: {
@@ -98,6 +99,48 @@ const toolsProperties = {
     },
     required: ["startDate"],
   },
+  send_message: {
+    description:
+      "Sends an email message to the user. Use this tool to send important information, confirmations, or follow-up details via email.",
+    properties: {
+      recipientEmail: {
+        type: "string",
+        description: "The email address of the recipient",
+      },
+      subject: {
+        type: "string",
+        description: "The subject line of the email",
+      },
+      message: {
+        type: "string",
+        description: "The body content of the email message",
+      },
+    },
+    required: ["recipientEmail", "subject", "message"],
+  },
+  self_schedule: {
+    description:
+      "Automatically creates a schedule or appointment in GoHighLevel calendar. Use this tool to schedule meetings, follow-ups, or appointments based on user preferences.",
+    properties: {
+      customerName: {
+        type: "string",
+        description: "The name of the customer to schedule",
+      },
+      customerEmail: {
+        type: "string",
+        description: "The email address of the customer",
+      },
+      startTime: {
+        type: "string",
+        description: "The ISO 8601 timestamp for the appointment start time",
+      },
+      title: {
+        type: "string",
+        description: "The title or description of the scheduled appointment",
+      },
+    },
+    required: ["customerName", "customerEmail", "startTime"],
+  },
 };
 
 const toolData = (toolName, userId) => ({
@@ -108,7 +151,7 @@ const toolData = (toolName, userId) => ({
     parameters: {
       type: "object",
       properties: toolsProperties[toolName].properties,
-      required: toolsProperties[toolName].required,
+      required: toolsProperties[toolName].required || toolsProperties[toolName].requiredValues || [],
     },
   },
   server: {
@@ -369,6 +412,35 @@ const createAssistantAndSave = async (req, res) => {
 
     const assistantId = data.id;
     console.log(`Assistant created successfully! ID: ${assistantId}`);
+
+    // Automatically add default tools: send_message and self_schedule
+    try {
+      const defaultTools = ["send_message", "self_schedule"];
+      const toolIds = [];
+
+      for (const toolName of defaultTools) {
+        try {
+          const toolId = await createTool(toolName, userId);
+          toolIds.push(toolId);
+          console.log(`Created default tool ${toolName} with ID: ${toolId}`);
+        } catch (toolError) {
+          console.error(`Error creating tool ${toolName}:`, toolError.message);
+        }
+      }
+
+      // Link all tools to the assistant
+      for (const toolId of toolIds) {
+        try {
+          await linkToolToAssistant(assistantId, toolId, userId);
+          console.log(`Linked tool ${toolId} to assistant ${assistantId}`);
+        } catch (linkError) {
+          console.error(`Error linking tool ${toolId}:`, linkError.message);
+        }
+      }
+    } catch (defaultToolsError) {
+      console.error("Error adding default tools:", defaultToolsError.message);
+      // Continue even if tools fail - assistant is still created
+    }
 
     // save data inside database
 
@@ -1141,8 +1213,7 @@ const executeToolFromVapi = async (req, res) => {
       const { firstName, lastName, email } = args;
       // phone,address,timezone,website
 
-      // Use the accessToken from your helper function
-      const accessToken = await getFreshAccessToken(user);
+      // Use the accessToken (already retrieved above)
 
       const payload = {
         locationId: locationId, // Extracted from your ghlSubAccountIds array
@@ -1309,6 +1380,121 @@ const executeToolFromVapi = async (req, res) => {
           },
         ],
       });
+    }
+
+    // 7 --- TOOL: SEND MESSAGE (EMAIL) ---
+    if (name === "send_message") {
+      const { recipientEmail, subject, message } = args;
+
+      if (!recipientEmail || !subject || !message) {
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error: "Missing required fields: recipientEmail, subject, or message.",
+            },
+          ],
+        });
+      }
+
+      try {
+        // Send email using Resend
+        await emailHelper(recipientEmail, subject, message);
+
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              result: `Email sent successfully to ${recipientEmail}.`,
+            },
+          ],
+        });
+      } catch (error) {
+        console.error("Error sending email:", error.message);
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error: `Failed to send email: ${error.message}`,
+            },
+          ],
+        });
+      }
+    }
+
+    // 8 --- TOOL: SELF SCHEDULE (GOHIGHLEVEL) ---
+    if (name === "self_schedule") {
+      const { customerName, customerEmail, startTime, title } = args;
+
+      if (!customerName || !customerEmail || !startTime) {
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error: "Missing required fields: customerName, customerEmail, or startTime.",
+            },
+          ],
+        });
+      }
+
+      try {
+        // Get fresh access token
+        const tkns = await getSubGhlTokens(userId, locationId);
+        const accessToken = tkns.data.access_token;
+
+        // Step A: Upsert Contact
+        const contactRes = await axios.post(
+          "https://services.leadconnectorhq.com/contacts/upsert",
+          {
+            email: customerEmail,
+            firstName: customerName,
+            locationId,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-07-28",
+            },
+          },
+        );
+
+        // Step B: Create Event/Appointment
+        await axios.post(
+          "https://services.leadconnectorhq.com/calendars/events",
+          {
+            calendarId,
+            locationId,
+            contactId: contactRes.data.contact.id,
+            startTime,
+            title: title || `Scheduled: ${customerName}`,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-07-28",
+            },
+          },
+        );
+
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              result: `Successfully scheduled appointment for ${customerName} at ${new Date(startTime).toLocaleString()}.`,
+            },
+          ],
+        });
+      } catch (error) {
+        console.error("Error creating schedule:", error.response?.data || error.message);
+        return res.status(200).json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              error: `Failed to create schedule: ${error.response?.data?.message || error.message}`,
+            },
+          ],
+        });
+      }
     }
   } catch (error) {
     console.error("GHL Error:", error.response?.data || error.message);
