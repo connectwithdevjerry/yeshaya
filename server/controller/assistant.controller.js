@@ -1018,6 +1018,8 @@ const executeToolFromVapi = async (req, res) => {
   const { message } = req.body;
   const { userId } = req.params;
 
+  console.log("Received Vapi Tool Webhook:", message);
+
   if (message.type !== "tool-calls") return res.send();
 
   console.log("Received tool call from Vapi:", message);

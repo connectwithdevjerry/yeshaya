@@ -76,7 +76,8 @@ const {
   GET_CONTACT,
   CREATE_CONTACT,
   UPDATE_CONTACT,
-  DELETE_CONTACT,GET_ANALYTICS
+  DELETE_CONTACT,
+  GET_ANALYTICS,
 } = require("../constants");
 
 const upload = multer({
@@ -105,7 +106,7 @@ router.delete(
 // new routers
 router.post(ADD_TOOL, verifyAccessToken, addATool);
 router.post(SEND_CHAT_MESSAGE, verifyAccessToken, sendChatMessage);
-router.post(EXECUTE_TOOL, verifyAccessToken, executeToolFromVapi);
+router.post(EXECUTE_TOOL, executeToolFromVapi);
 router.delete(DELETE_TOOL, verifyAccessToken, deleteAssistantTool);
 router.post(ADD_CALENDAR, verifyAccessToken, addCalendarId);
 router.get(GET_TOOLS, verifyAccessToken, getAssistantTools);
