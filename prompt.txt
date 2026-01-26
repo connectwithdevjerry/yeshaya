@@ -1,0 +1,1 @@
+okay, in yashayah/server add a tool to create task in gohighlevel too with the name create_task, and also another tool to add team notes to my assistants as indicated in the vapiAssistants the name of the tool should be add_note
