@@ -14,6 +14,7 @@ import {
   HelpCircle,
   ChevronDown,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const iconMap = {
   inbox: Inbox,
@@ -40,7 +41,6 @@ export function NavigationItem({ name, icon, link, children }) {
     console.warn(`⚠️ Unknown icon: "${icon}"`);
   }
 
-  // ✅ Check if current route matches (for /app format)
   const isActiveRoute = () => {
     if (location.pathname === '/app') {
       const currentRoute = searchParams.get('route');
@@ -49,7 +49,6 @@ export function NavigationItem({ name, icon, link, children }) {
     return location.pathname === link;
   };
 
-  // Check if any child link is the currently active route
   const isChildActive = children && children.some((child) => {
     if (location.pathname === '/app') {
       const currentRoute = searchParams.get('route');
@@ -58,16 +57,13 @@ export function NavigationItem({ name, icon, link, children }) {
     return location.pathname === child.link;
   });
 
-  // If a child is active, keep the dropdown open by default
   useEffect(() => {
     if (isChildActive) {
       setIsOpen(true);
     }
   }, [isChildActive]);
 
-  // ✅ Handle navigation with account context
   const handleNavigation = (targetRoute) => {
-    // If we're on /app (account context), navigate with params
     if (location.pathname === '/app') {
       const agencyid = searchParams.get('agencyid');
       const subaccount = searchParams.get('subaccount');
@@ -88,73 +84,85 @@ export function NavigationItem({ name, icon, link, children }) {
         return;
       }
     }
-    
-    // Otherwise, navigate normally
     navigate(targetRoute);
   };
 
-  // Case 1: This item IS a dropdown (it has children)
+  // Case 1: Dropdown parent (has children)
   if (children && children.length > 0) {
     return (
       <div>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className={`flex items-center justify-between w-full px-3 py-2 rounded-lg transition-colors duration-200 ${
+          className={`flex items-center justify-between w-full px-3 py-2 rounded-lg transition-all duration-200 ${
             isChildActive
-              ? "text-blue-600 bg-blue-50"
-              : "text-gray-700 hover:bg-gray-100"
+              ? "text-indigo-400 bg-slate-800"
+              : "text-slate-300 hover:bg-slate-800 hover:text-white"
           }`}
         >
           <div className="flex items-center space-x-2">
             <Icon className="w-4 h-4" />
             <span className="text-xs font-medium">{name}</span>
           </div>
-          <ChevronDown
-            className={`w-4 h-4 transition-transform ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
+          <motion.div
+            animate={{ rotate: isOpen ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ChevronDown className="w-4 h-4" />
+          </motion.div>
         </button>
 
-        {isOpen && (
-          <div className="pl-5 pt-1 space-y-2 pb-2">
-            {children.map((child) => {
-              const isChildActiveNow = location.pathname === '/app' 
-                ? searchParams.get('route') === child.link
-                : location.pathname === child.link;
+        <AnimatePresence initial={false}>
+          {isOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div className="pl-5 pt-1 space-y-1 pb-2">
+                {children.map((child) => {
+                  const isChildActiveNow = location.pathname === '/app'
+                    ? searchParams.get('route') === child.link
+                    : location.pathname === child.link;
 
-              return (
-                <button
-                  key={child.name}
-                  onClick={() => handleNavigation(child.link)}
-                  className={`flex items-center w-full rounded-lg transition-colors duration-200 text-sm ${
-                    isChildActiveNow
-                      ? "text-blue-600"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <span className="font-medium text-xs">{child.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+                  return (
+                    <button
+                      key={child.name}
+                      onClick={() => handleNavigation(child.link)}
+                      className={`flex items-center w-full rounded-lg px-2 py-1.5 transition-colors duration-200 text-sm ${
+                        isChildActiveNow
+                          ? "text-indigo-400 font-semibold"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      <span className="font-medium text-xs">{child.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
 
-  // Case 2: This item is a simple link (no children)
+  // Case 2: Simple link
+  const active = isActiveRoute();
   return (
-    <button
+    <motion.button
       onClick={() => handleNavigation(link)}
-      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors duration-200 w-full ${
-        isActiveRoute()
-          ? "text-blue-600 bg-blue-50"
-          : "text-gray-700 hover:bg-gray-100"
+      whileHover={!active ? { x: 2 } : {}}
+      transition={{ duration: 0.15 }}
+      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 w-full ${
+        active
+          ? "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/20"
+          : "text-slate-300 hover:bg-slate-800 hover:text-white"
       }`}
     >
-      <Icon className="w-4 h-4" />
+      <Icon className="w-4 h-4 flex-shrink-0" />
       <span className="text-xs font-medium">{name}</span>
-    </button>
+    </motion.button>
   );
 }

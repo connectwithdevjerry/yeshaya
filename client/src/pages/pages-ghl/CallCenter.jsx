@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { motion } from "framer-motion";
 import HeaderFilters from "../../components/components-ghl/CallCenter/HeadFilters";
 import MetricCard from "../../components/components-ghl/CallCenter/MetricCard";
 import {
@@ -148,54 +149,54 @@ const CallDashboard = () => {
   ];
 
   return (
-    <div className="bg-gray-50 min-h-screen">
-      {/* Top Buttons */}
-      <div className="flex bg-white p-3 gap-4 border-b">
-        <button
-          className={`px-3 border py-2 text-sm font-medium rounded-md transition ${
-            activeModal === "dataCenter"
-              ? "bg-blue-500 text-white"
-              : "bg-white hover:bg-gray-100"
-          }`}
-          onClick={() =>
-            setActiveModal(activeModal === "dataCenter" ? null : "dataCenter")
-          }
-        >
-          Data Center
-        </button>
-        <button
-          className={`px-3 border py-2 text-sm font-medium rounded-md transition ${
-            activeModal === "callList"
-              ? "bg-blue-500 text-white"
-              : "bg-white hover:bg-gray-100"
-          }`}
-          onClick={() =>
-            setActiveModal(activeModal === "callList" ? null : "callList")
-          }
-        >
-          Call List
-        </button>
+    <div className="bg-gray-50/60 min-h-screen">
+      {/* ── Top tab strip ── */}
+      <div className="bg-white border-b border-gray-100 px-6 py-0">
+        <div className="flex gap-1 pt-2">
+          {[
+            { id: "dataCenter", label: "Data Center" },
+            { id: "callList",   label: "Call List"   },
+          ].map(({ id, label }) => {
+            const isActive = activeModal === id;
+            return (
+              <motion.button
+                key={id}
+                whileHover={{ y: -1 }}
+                transition={{ duration: 0.12 }}
+                onClick={() => setActiveModal(activeModal === id ? null : id)}
+                className={`relative px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors duration-150
+                  ${isActive ? "text-indigo-600" : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"}`}
+              >
+                {label}
+                {isActive && (
+                  <motion.span
+                    layoutId="callCenterTabUnderline"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t bg-gradient-to-r from-indigo-500 to-violet-600"
+                  />
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Loading State */}
       {fetchingAnalytics && (
-        <div className="flex items-center justify-center p-8">
-          <div className="flex items-center gap-2">
-            <Loader2 className="animate-spin" size={24} />
-            <span className="text-gray-600">Loading analytics...</span>
+        <div className="flex items-center justify-center p-12">
+          <div className="flex items-center gap-3">
+            <Loader2 className="animate-spin text-indigo-500" size={22} />
+            <span className="text-gray-500 text-sm">Loading analytics…</span>
           </div>
         </div>
       )}
 
       {/* Error State */}
       {analyticsError && (
-        <div className="mx-6 mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-700 text-sm">
-            Error loading analytics: {analyticsError}
-          </p>
+        <div className="mx-6 mt-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+          <p className="text-red-700 text-sm">Error loading analytics: {analyticsError}</p>
           <button
             onClick={() => dispatch(getAssistantAnalytics())}
-            className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+            className="mt-2 text-sm text-red-500 hover:text-red-700 underline"
           >
             Retry
           </button>

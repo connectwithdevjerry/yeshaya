@@ -38,7 +38,7 @@ export function Sidebar({ userInfo, navigationItems }) {
       : (userInfo?.balance || "$0.00");
 
   return (
-    <div className=" overflow-visible w-56 h-screen left-0 top-0 bg-white border-r border-gray-200 flex flex-col">
+    <div className="overflow-visible w-56 h-screen left-0 top-0 bg-[#0f172a] border-r border-slate-800 flex flex-col">
       <UserProfile
         name={safeUserInfo.name}
         users={safeUserInfo.users}

@@ -1,215 +1,234 @@
+// src/pages/pages-ghl/Contacts.jsx
 import React, { useState, useEffect, useMemo } from "react";
-import { Search, Loader2, Trash2, Edit3, Ban, Users } from "lucide-react"; // Added Users icon
+import { Search, Loader2, Trash2, Edit3, Users, UserPlus } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import {
-  fetchContacts,
-  deleteContact,
-} from "../../store/slices/assistantsSlice";
+import { fetchContacts, deleteContact } from "../../store/slices/assistantsSlice";
 import { getSubaccountIdFromUrl } from "../../utils/urlUtils";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
+import { motion, AnimatePresence } from "framer-motion";
 import { NewContactFormPanel } from "../../components/components-ghl/Contact/NewContactFormPanel";
 import ConfirmDeleteModal from "../../components/components-ghl/ConfirmDeleteModal";
 
+/* ── Avatar initials ── */
+const COLORS = [
+  "from-indigo-500 to-violet-600",
+  "from-blue-500 to-cyan-500",
+  "from-emerald-500 to-teal-500",
+  "from-orange-500 to-amber-500",
+  "from-pink-500 to-rose-500",
+];
+const getColor = (name = "") => COLORS[name.charCodeAt(0) % COLORS.length];
+
+const ContactAvatar = ({ first = "", last = "" }) => (
+  <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${getColor(first)} flex items-center justify-center flex-shrink-0`}>
+    <span className="text-white text-xs font-bold">
+      {(first[0] || "").toUpperCase()}{(last[0] || "").toUpperCase()}
+    </span>
+  </div>
+);
+
+/* ── Skeleton row ── */
+const SkeletonRow = () => (
+  <tr className="animate-pulse">
+    {[1, 2, 3, 4, 5, 6].map(i => (
+      <td key={i} className="px-5 py-4">
+        <div className="h-3.5 bg-gray-100 rounded-full w-3/4" />
+      </td>
+    ))}
+  </tr>
+);
+
+/* ── Empty state ── */
+const EmptyState = ({ onAdd }) => (
+  <tr>
+    <td colSpan={6} className="px-6 py-16 text-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center">
+          <Users className="w-7 h-7 text-indigo-400" />
+        </div>
+        <p className="text-gray-500 font-medium">No contacts found</p>
+        <p className="text-gray-400 text-sm">Add your first contact to get started.</p>
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={onAdd}
+          className="mt-1 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all duration-200"
+        >
+          <UserPlus className="w-4 h-4" /> New Contact
+        </motion.button>
+      </div>
+    </td>
+  </tr>
+);
+
 const Contacts = () => {
   const dispatch = useDispatch();
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [isPanelOpen,     setIsPanelOpen]     = useState(false);
+  const [searchTerm,      setSearchTerm]      = useState("");
   const [selectedContact, setSelectedContact] = useState(null);
-  const [searchParams] = useSearchParams();
-
-  // State for Delete Modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [contactToDelete, setContactToDelete] = useState(null);
+  const [searchParams]    = useSearchParams();
 
-  const { contacts = [], fetchingContacts } = useSelector(
-    (state) => state.assistants,
-  );
+  const { contacts = [], fetchingContacts } = useSelector(s => s.assistants);
   const subaccountId = getSubaccountIdFromUrl(searchParams);
 
   useEffect(() => {
-    if (subaccountId) {
-      dispatch(fetchContacts({ subaccountId }));
-    }
+    if (subaccountId) dispatch(fetchContacts({ subaccountId }));
   }, [dispatch, subaccountId]);
 
-  // --- Handlers ---
-
-  const handleEditClick = (contact) => {
-    setSelectedContact(contact);
-    setIsPanelOpen(true);
-  };
-
-  const handleAddNewClick = () => {
-    setSelectedContact(null);
-    setIsPanelOpen(true);
-  };
-
-  const handleClosePanel = () => {
-    setIsPanelOpen(false);
-    setSelectedContact(null);
-  };
-
-  const openDeleteModal = (contact) => {
-    setContactToDelete(contact);
-    setShowDeleteModal(true);
-  };
+  const handleEditClick    = c => { setSelectedContact(c); setIsPanelOpen(true); };
+  const handleAddNewClick  = () => { setSelectedContact(null); setIsPanelOpen(true); };
+  const handleClosePanel   = () => { setIsPanelOpen(false); setSelectedContact(null); };
+  const openDeleteModal    = c => { setContactToDelete(c); setShowDeleteModal(true); };
 
   const handleConfirmDelete = async () => {
     if (!contactToDelete) return;
-
     const contactId = contactToDelete._id || contactToDelete.id;
-
     try {
       await dispatch(deleteContact({ subaccountId, contactId })).unwrap();
       toast.success("Contact deleted");
       setShowDeleteModal(false);
       setContactToDelete(null);
-      // Re-fetch to ensure sync
       dispatch(fetchContacts({ subaccountId }));
-    } catch (error) {
-      toast.error(error || "Failed to delete contact");
-    }
+    } catch (err) { toast.error(err || "Failed to delete contact"); }
   };
 
   const filteredContacts = useMemo(() => {
-    const baseContacts = Array.isArray(contacts) ? [...contacts] : [];
-    baseContacts.sort(
-      (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+    const base = Array.isArray(contacts) ? [...contacts] : [];
+    base.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    const q = searchTerm.toLowerCase();
+    return base.filter(c =>
+      !c ? false : (
+        (c.firstName || "").toLowerCase().includes(q) ||
+        (c.lastName  || "").toLowerCase().includes(q) ||
+        (c.email     || "").toLowerCase().includes(q) ||
+        (c.company   || "").toLowerCase().includes(q)
+      )
     );
-
-    return baseContacts.filter((contact) => {
-      if (!contact) return false;
-      const searchStr = searchTerm.toLowerCase();
-      return (
-        (contact.firstName || "").toLowerCase().includes(searchStr) ||
-        (contact.lastName || "").toLowerCase().includes(searchStr) ||
-        (contact.email || "").toLowerCase().includes(searchStr) ||
-        (contact.company || "").toLowerCase().includes(searchStr)
-      );
-    });
   }, [contacts, searchTerm]);
 
   return (
-    <div className="flex-grow bg-gray-50 p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Title with Contact Count */}
-        <div className="flex items-center space-x-3 mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Contacts</h1>
-          <span className="bg-gray-200 text-gray-700 px-2.5 py-0.5 rounded-full text-sm font-semibold">
-            {filteredContacts.length}
-          </span>
-        </div>
+    <div className="flex-grow bg-gray-50/60 p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Header Section */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="relative flex-grow max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search contacts..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 text-sm"
-            />
+        {/* ── Top bar ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="flex items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-gray-900">Contacts</h1>
+            <span className="bg-indigo-100 text-indigo-600 px-2.5 py-0.5 rounded-full text-xs font-semibold">
+              {filteredContacts.length}
+            </span>
           </div>
-          <button
-            onClick={handleAddNewClick}
-            className="ml-4 px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 flex items-center transition-colors"
-          >
-            + New Contact
-          </button>
-        </div>
 
-        {/* Table Section */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
-                  #
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Email
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Phone
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Company
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {fetchingContacts ? (
-                <tr>
-                  <td colSpan="5" className="px-6 py-12 text-center">
-                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-indigo-500" />
-                  </td>
+          <div className="flex items-center gap-3">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Search contacts…"
+                className="w-56 pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200"
+              />
+            </div>
+
+            {/* Add button */}
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={handleAddNewClick}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all duration-200 flex-shrink-0"
+            >
+              <UserPlus className="w-4 h-4" /> New Contact
+            </motion.button>
+          </div>
+        </motion.div>
+
+        {/* ── Table card ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.06 }}
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+        >
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="bg-gray-50/80">
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide w-10">#</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Name</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Email</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Phone</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">Company</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wide">Actions</th>
                 </tr>
-              ) : filteredContacts.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan="5"
-                    className="px-6 py-12 text-center text-gray-500"
-                  >
-                    <Ban className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                    No contacts found
-                  </td>
-                </tr>
-              ) : (
-                filteredContacts.map((contact, index) => (
-                  <tr
-                    key={contact?._id || contact?.id || index}
-                    className="hover:bg-gray-50 transition-colors group"
-                  >
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-400 font-mono">
-                      {index + 1}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {contact?.firstName} {contact?.lastName}
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {contact?.email}
-                    </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {contact?.phone || "N/A"}
-                    </td>
-                    <td className="px-8 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {contact?.company || "N/A"}
-                    </td>
-                    <td className="px-2 py-3 text-right">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => handleEditClick(contact)}
-                          className="flex items-center space-x-1 px-3 py-1 border rounded-md text-xs hover:bg-gray-100 text-gray-600 transition-all"
-                        >
-                          <Edit3 className="w-3 h-3" />
-                          <span>Edit</span>
-                        </button>
-                        <button
-                          onClick={() => openDeleteModal(contact)} // Changed to open the modal
-                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {fetchingContacts ? (
+                  Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
+                ) : filteredContacts.length === 0 ? (
+                  <EmptyState onAdd={handleAddNewClick} />
+                ) : (
+                  filteredContacts.map((contact, idx) => (
+                    <motion.tr
+                      key={contact?._id || contact?.id || idx}
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.18, delay: idx * 0.03 }}
+                      className="hover:bg-indigo-50/30 transition-colors duration-150 group"
+                    >
+                      <td className="px-5 py-3.5 text-xs text-gray-400 font-mono">{idx + 1}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <ContactAvatar first={contact?.firstName} last={contact?.lastName} />
+                          <span className="text-sm font-semibold text-gray-900">
+                            {contact?.firstName} {contact?.lastName}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-500">{contact?.email || "—"}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-500">{contact?.phone || "—"}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-500">{contact?.company || "—"}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                          <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleEditClick(contact)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all"
+                          >
+                            <Edit3 className="w-3 h-3" /> Edit
+                          </motion.button>
+                          <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => openDeleteModal(contact)}
+                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </motion.button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footer */}
+          {!fetchingContacts && filteredContacts.length > 0 && (
+            <div className="px-5 py-3 border-t border-gray-50 text-xs text-gray-400">
+              Showing {filteredContacts.length} contact{filteredContacts.length !== 1 ? "s" : ""}
+            </div>
+          )}
+        </motion.div>
       </div>
 
-      {/* RENDER PANEL */}
+      {/* Side panel */}
       {isPanelOpen && (
         <NewContactFormPanel
           onClose={handleClosePanel}
@@ -218,13 +237,10 @@ const Contacts = () => {
         />
       )}
 
-      {/* CONFIRM DELETE MODAL */}
+      {/* Delete modal */}
       <ConfirmDeleteModal
         isOpen={showDeleteModal}
-        onClose={() => {
-          setShowDeleteModal(false);
-          setContactToDelete(null);
-        }}
+        onClose={() => { setShowDeleteModal(false); setContactToDelete(null); }}
         onConfirm={handleConfirmDelete}
         title="Delete Contact"
         message={`Are you sure you want to delete ${contactToDelete?.firstName || "this contact"}? This action cannot be undone.`}
