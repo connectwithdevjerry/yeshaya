@@ -18,10 +18,7 @@ const Login = () => {
   // ✅ Navigate after successful login
   useEffect(() => {
     if (isAuthenticated && accessToken) {
-      // Save token to sessionStorage (optional)
-      sessionStorage.setItem("token", accessToken);
-      sessionStorage.setItem("user", JSON.stringify(user));
-      localStorage.setItem("acces", accessToken);
+      // Tokens are correctly managed by the Redux authSlice
 
       // Redirect to dashboard or home page
       navigate("/dashboard", { replace: true });
@@ -64,7 +61,7 @@ const Login = () => {
     e.preventDefault();
     dispatch(clearError());
     await dispatch(login(formData));
-  };  
+  };
   const renderAlert = () => {
     if (!error) return null;
 

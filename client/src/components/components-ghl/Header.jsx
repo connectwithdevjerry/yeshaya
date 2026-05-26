@@ -8,6 +8,8 @@ import OauthConnectionPopup from "./OauthConnection";
 export function Header({ title }) {
   const [isOpen, setIsOpen] = useState(false);
   const [activePopup, setActivePopup] = useState();
+  
+  // TODO: Connect this to global notifications state
   const hasNotifications = false;
 
   const togglePopup = (popupName) => {

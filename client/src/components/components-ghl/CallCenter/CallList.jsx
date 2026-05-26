@@ -14,8 +14,9 @@ import {
 } from "lucide-react";
 
 import { getAssistantCallLogs } from "../../../store/slices/assistantsSlice";
+import { RefreshCw } from "lucide-react";
 
-const DownloadContact = () => {
+const CallList = () => {
   const dispatch = useDispatch();
   const [currentPage, setCurrentPage] = useState(1);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -34,22 +35,17 @@ const DownloadContact = () => {
     };
   });
 
-  const [hasFetched, setHasFetched] = useState(false);
-
   useEffect(() => {
-    if (!hasFetched) {
-      console.log("🔍 Component mounted - Fetching call logs...");
-      setHasFetched(true);
-      dispatch(getAssistantCallLogs())
-        .unwrap()
-        .then((data) => {
-          console.log("✅ Dispatch successful, data received:", data);
-        })
-        .catch((error) => {
-          console.error("❌ Dispatch failed:", error);
-        });
+    // Prevent bombardment of API: Only fetch if empty, relying on Redux cache
+    if (callLogs.length === 0 && !fetchingLogs) {
+      console.log("🔍 CallList mounted - Cache empty, fetching call logs...");
+      dispatch(getAssistantCallLogs());
     }
-  }, [dispatch, hasFetched]);
+  }, [dispatch, callLogs.length, fetchingLogs]);
+
+  const handleRefreshData = () => {
+    dispatch(getAssistantCallLogs());
+  };
 
   const tableHeaders = [
     { label: "Timestamp (start)", width: "w-[15%]" },
@@ -207,7 +203,7 @@ const DownloadContact = () => {
     (dateRange.start || dateRange.end ? 1 : 0);
 
   return (
-    <div className="bg-[#f9fafb] h-screen flex flex-col overflow-hidden no-scrollbar">
+    <div className="bg-[#f9fafb] h-[calc(100vh-60px)] flex flex-col overflow-hidden no-scrollbar">
       {/* Fixed Header Section */}
       <div className="flex-shrink-0 py-2 px-4 bg-[#f9fafb]">
         {/* Title and Download Button */}
@@ -221,6 +217,7 @@ const DownloadContact = () => {
             disabled={isDownloading || filteredData.length === 0}
             className="bg-[#0f172a] text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-slate-800 transition-all text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
+
             {isDownloading ? (
               <>
                 <Loader2 className="animate-spin" size={16} />
@@ -480,4 +477,4 @@ const DownloadContact = () => {
   );
 };
 
-export default DownloadContact;
+export default CallList;

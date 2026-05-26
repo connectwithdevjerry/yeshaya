@@ -1,5 +1,5 @@
 // src/components/components-ghl/AssistantsBuilder/AssistantsBuilder.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AssistantHeader } from "./components/AssistantHeader";
 import { GlobalPromptEditor } from "./components/PromptEditor";
@@ -29,6 +29,8 @@ export const AssistantBuilderPage = () => {
   const currentAssistant = assistants?.find((a) => a.id === assistantId);
 
 
+  const initializedAssistantId = useRef(null);
+
   useEffect(() => {
     if (subaccountId) {
       dispatch(fetchAssistants(subaccountId));
@@ -36,8 +38,11 @@ export const AssistantBuilderPage = () => {
   }, [dispatch, subaccountId]);
 
   useEffect(() => {
-    if (currentAssistant?.model?.systemPrompt) {
-      setPromptContent(currentAssistant.model.systemPrompt);
+    if (currentAssistant && currentAssistant.id !== initializedAssistantId.current) {
+      if (currentAssistant.model?.systemPrompt !== undefined) {
+        setPromptContent(currentAssistant.model.systemPrompt || "");
+      }
+      initializedAssistantId.current = currentAssistant.id;
     }
 
     console.log("🎯 Assistant Builder loaded with ID:", assistantId);

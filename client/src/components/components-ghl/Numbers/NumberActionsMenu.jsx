@@ -17,6 +17,8 @@ import {
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { vapiConnect, deleteNumberFromVapi } from "../../../store/slices/numberSlice";
+import toast from "react-hot-toast";
+import ConfirmDeleteModal from "../ConfirmDeleteModal";
 
 const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false, disabled = false, loading = false, variant = "default" }) => {
   if (isSeparator) return <li className="my-1 border-t border-gray-200" />;
@@ -64,6 +66,7 @@ const NumbersActionsMenu = ({
   
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
 
   // Get Vapi connection status from Redux
   const { vapiStatuses } = useSelector((state) => state.numbers || {});
@@ -74,6 +77,9 @@ const NumbersActionsMenu = ({
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
+      // Don't close meny if the confirmation modal is open
+      if (showDisconnectModal) return;
+
       if (
         menuRef.current &&
         !menuRef.current.contains(event.target) &&
@@ -85,7 +91,7 @@ const NumbersActionsMenu = ({
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [onClose, anchorRef]);
+  }, [onClose, anchorRef, showDisconnectModal]);
 
   if (!isOpen || !account || !position) return null;
 
@@ -105,7 +111,7 @@ const NumbersActionsMenu = ({
             phoneNumber: account.phoneNumber,
             id: account.id
           });
-          alert("Missing required information to connect");
+          toast.error("Missing required information to connect");
           setIsConnecting(false);
           return;
         }
@@ -128,7 +134,7 @@ const NumbersActionsMenu = ({
 
         console.log("✅ Successfully connected :", result);
         
-        alert("Number Connected Successfully");
+        toast.success("Number Connected Successfully");
         onClose();
       } catch (error) {
         console.error("❌ Failed to connect to Vapi:", error);
@@ -139,7 +145,7 @@ const NumbersActionsMenu = ({
           ? error 
           : error?.message || error?.error || "Unknown error occurred";
         
-        alert(`Failed to connect: ${errorMessage}`);
+        toast.error(`Failed to connect: ${errorMessage}`);
       } finally {
         setIsConnecting(false);
       }
@@ -147,47 +153,7 @@ const NumbersActionsMenu = ({
     }
 
     if (action === "DisconnectVapi") {
-      try {
-        const confirmDisconnect = window.confirm(
-          `Are you sure you want to disconnect ${account.phoneNumber}?`
-        );
-
-        if (!confirmDisconnect) return;
-
-        setIsDisconnecting(true);
-
-        if (!vapiInfo || !vapiInfo.vapiPhoneNumId) {
-          alert("No connection found for this number");
-          setIsDisconnecting(false);
-          return;
-        }
-
-        console.log("🚀 Attempting to disconnect from Vapi with:", {
-          phoneNum: account.phoneNumber,
-          phoneSid: account.id,
-        });
-
-        await dispatch(
-          deleteNumberFromVapi({
-            phoneNum: account.phoneNumber,
-            phoneSid: account.id,
-          })
-        ).unwrap();
-
-        console.log("✅ Successfully disconnected");
-        alert("Successfully disconnected");
-        onClose();
-      } catch (error) {
-        console.error("❌ Failed to disconnect from Vapi:", error);
-        
-        const errorMessage = typeof error === 'string' 
-          ? error 
-          : error?.message || error?.error || "Unknown error occurred";
-        
-        alert(`Failed to disconnect: ${errorMessage}`);
-      } finally {
-        setIsDisconnecting(false);
-      }
+      setShowDisconnectModal(true);
       return;
     }
 
@@ -244,7 +210,47 @@ const NumbersActionsMenu = ({
     onClose();
   };
 
+  const confirmDisconnectVapi = async () => {
+    setShowDisconnectModal(false);
+    try {
+      setIsDisconnecting(true);
+
+      if (!vapiInfo || !vapiInfo.vapiPhoneNumId) {
+        toast.error("No connection found for this number");
+        setIsDisconnecting(false);
+        return;
+      }
+
+      console.log("🚀 Attempting to disconnect from Vapi with:", {
+        phoneNum: account.phoneNumber,
+        phoneSid: account.id,
+      });
+
+      await dispatch(
+        deleteNumberFromVapi({
+          phoneNum: account.phoneNumber,
+          phoneSid: account.id,
+        })
+      ).unwrap();
+
+      console.log("✅ Successfully disconnected");
+      toast.success("Successfully disconnected");
+      onClose();
+    } catch (error) {
+      console.error("❌ Failed to disconnect from Vapi:", error);
+      
+      const errorMessage = typeof error === 'string' 
+        ? error 
+        : error?.message || error?.error || "Unknown error occurred";
+      
+      toast.error(`Failed to disconnect: ${errorMessage}`);
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
   return (
+    <>
     <div
       ref={menuRef}
       className="fixed w-60 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden py-1"
@@ -303,6 +309,13 @@ const NumbersActionsMenu = ({
         )}
       </div>
     </div>
+    <ConfirmDeleteModal
+      isOpen={showDisconnectModal}
+      onClose={() => setShowDisconnectModal(false)}
+      onConfirm={confirmDisconnectVapi}
+      title={`Disconnect ${account.phoneNumber}`}
+    />
+    </>
   );
 };
 

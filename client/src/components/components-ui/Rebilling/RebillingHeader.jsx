@@ -22,7 +22,7 @@ const AgencyHeader = () => {
         <button className="p-2 hover:bg-gray-100 rounded-lg">
           <Trash2 size={16} className="text-gray-500" />
         </button>
-        <button onClick={() => navigate("/homepage")} className="p-2 hover:bg-gray-100 rounded-lg">
+        <button onClick={() => navigate("/dashboard")} className="p-2 hover:bg-gray-100 rounded-lg">
           <ArrowUpRight size={16} className="text-gray-500" />
         </button>
       </div>

@@ -76,7 +76,7 @@ const Register = () => {
 
             <Link
               to="/login"
-              className="block w-full border border-gray-300 py-2 rounded-lg text-gray-700 hover:bg-gray-50"
+              className="block w-full border border-gray-300 py-2 rounded-lg text-gray-700 hover:bg-gray-50 text-center"
             >
               Back to Login
             </Link>

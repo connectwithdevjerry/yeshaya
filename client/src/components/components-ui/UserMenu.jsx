@@ -33,7 +33,7 @@ const UserMenuPopup = () => {
       navigate("/login");
     } catch (error) {
 
-      localStorage.removeItem("token");
+      localStorage.removeItem("accessToken");
       navigate("/login");
     } finally {
       setLoggingOut(false);

@@ -44,6 +44,12 @@ const Assistants = () => {
     error,
   } = useSelector((state) => state.assistants);
 
+  // Derive displayed assistants and mocked counts
+  const filteredAssistants = activeTab === "all" ? assistants : [];
+  const favoriteCount = 0;
+  const importedCount = 0;
+  const archivedCount = 0;
+
   useEffect(() => {
     if (subaccountId) {
       dispatch(fetchAssistants(subaccountId));
@@ -126,13 +132,13 @@ const Assistants = () => {
             All {assistants.length}
           </TabButton>
           <TabButton isActive={activeTab === "favorites"} onClick={() => setActiveTab("favorites")}>
-            Favorites 0
+            Favorites {favoriteCount}
           </TabButton>
           <TabButton isActive={activeTab === "imported"} onClick={() => setActiveTab("imported")}>
-            Imported 0
+            Imported {importedCount}
           </TabButton>
           <TabButton isActive={activeTab === "archived"} onClick={() => setActiveTab("archived")}>
-            Archived 0
+            Archived {archivedCount}
           </TabButton>
         </div>
 
@@ -159,10 +165,10 @@ const Assistants = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr><td colSpan={6} className="px-6 py-8 text-center">Loading...</td></tr>
-              ) : assistants.length === 0 ? (
+              ) : filteredAssistants.length === 0 ? (
                 <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500"><Ban className="mx-auto mb-2"/> No assistants found</td></tr>
               ) : (
-                assistants.map((assistant) => (
+                filteredAssistants.map((assistant) => (
                   <tr key={assistant.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleAssistantClick(assistant)}>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       <div className="flex items-center space-x-2">

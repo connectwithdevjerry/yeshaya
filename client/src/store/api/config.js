@@ -91,8 +91,19 @@ const clearAuthAndRedirect = () => {
 // ✅ Attach access token to each request
 apiClient.interceptors.request.use(
   async (config) => {
-    // Skip token check for auth endpoints
-    if (config.url?.includes('/auth/')) {
+    // List of auth endpoints that do not require a token
+    const publicAuthEndpoints = [
+      '/auth/signin',
+      '/auth/signup',
+      '/auth/forgot_password',
+      '/auth/exchange-token',
+      '/auth/activate'
+    ];
+    
+    const isPublicEndpoint = publicAuthEndpoints.some(endpoint => config.url?.includes(endpoint));
+
+    // Skip token check for public endpoints
+    if (isPublicEndpoint) {
       return config;
     }
 
@@ -154,11 +165,21 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    const publicAuthEndpoints = [
+      '/auth/signin',
+      '/auth/signup',
+      '/auth/forgot_password',
+      '/auth/exchange-token',
+      '/auth/activate'
+    ];
+    
+    const isPublicEndpoint = publicAuthEndpoints.some(endpoint => originalRequest.url?.includes(endpoint));
+
     // Check if error is 401 and we haven't already tried to refresh
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url?.includes('/auth/')
+      !isPublicEndpoint
     ) {
       console.log("⚠️ 401 error detected, attempting token refresh");
       

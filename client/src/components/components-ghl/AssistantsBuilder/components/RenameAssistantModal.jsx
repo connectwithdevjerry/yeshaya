@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import { updateAssistant } from "../../../../store/slices/assistantsSlice";
 import { useCurrentAccount } from "../../../../hooks/useCurrentAccount";
+import toast from "react-hot-toast";
 
 export const RenameAssistantModal = ({ isOpen, onClose }) => {
   const [assistantName, setAssistantName] = useState("");
@@ -68,6 +69,7 @@ export const RenameAssistantModal = ({ isOpen, onClose }) => {
       ).unwrap();
 
       console.log("✅ Assistant renamed successfully");
+      toast.success("Assistant renamed successfully");
       onClose();
     } catch (err) {
       console.error("❌ Error renaming assistant:", err);

@@ -7,6 +7,14 @@ import { useSelector, useDispatch } from "react-redux";
 import { fetchWalletBalance } from "../../../../store/slices/assistantsSlice";
 import toast from "react-hot-toast";
 
+let globalVapiInstance = null;
+const getVapiInstance = () => {
+  if (!globalVapiInstance) {
+    globalVapiInstance = new Vapi(import.meta.env.VITE_VAPI_PUBLIC_KEY);
+  }
+  return globalVapiInstance;
+};
+
 export const VoiceLabView = () => {
   const vapiRef = useRef(null);
   const [searchParams] = useSearchParams();
@@ -45,30 +53,45 @@ export const VoiceLabView = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, currentUserTranscript, currentAITranscript]);
 
+  // Ref to track call status for safe unmounting
+  const isCallActiveRef = useRef(false);
   useEffect(() => {
-    vapiRef.current = new Vapi(import.meta.env.VITE_VAPI_PUBLIC_KEY);
+    isCallActiveRef.current = isCallActive;
+  }, [isCallActive]);
 
-    vapiRef.current.on("call-start", () => {
+  useEffect(() => {
+    const vapi = getVapiInstance();
+    vapiRef.current = vapi;
+
+    const onCallStart = () => {
+      console.log("🟢 Vapi: Call connected!");
       setIsCallActive(true);
       setIsConnecting(false);
+      
+      // Force microphone un-mute just in case Daily clamped it natively
+      if (vapi.setMuted) {
+        vapi.setMuted(false);
+      }
+
       setMessages((prev) => [
         ...prev,
-        { role: "System", text: "Call connected!" },
+        { role: "System", text: "Call connected! Microphone active." },
       ]);
-    });
+    };
 
-    vapiRef.current.on("call-end", () => {
+    const onCallEnd = () => {
+      console.log("🔴 Vapi: Call ended.");
       setIsCallActive(false);
       setIsConnecting(false);
       setIsThinking(false);
       setCurrentUserTranscript("");
       setCurrentAITranscript("");
       setMessages((prev) => [...prev, { role: "System", text: "Call ended." }]);
-      // Refresh balance after call ends to show updated amount
       dispatch(fetchWalletBalance());
-    });
+    };
 
-    vapiRef.current.on("speech-update", (update) => {
+    const onSpeechUpdate = (update) => {
+      // console.log("🎙️ Vapi Speech Update:", update); // disabled for spam
       if (update.role === "user") {
         setCurrentUserTranscript(update.transcript || "");
         if (
@@ -82,9 +105,18 @@ export const VoiceLabView = () => {
           setCurrentUserTranscript("");
         }
       }
-    });
+    };
 
-    vapiRef.current.on("message", (msg) => {
+    const onMessage = (msg) => {
+      console.log("📨 Vapi Message Received:", msg);
+      // Vapi pushes all events here, including human transcriptions depending on SDK version
+      if (msg.type === "transcript" && msg.role === "user") {
+          // Some older VAPI SDK versions route user transcripts through standard messages
+          if (msg.transcriptType === "final" && msg.transcript?.trim().length > 0) {
+             setMessages((prev) => [...prev, { role: "User", text: msg.transcript }]);
+          }
+      }
+
       if (msg.type === "transcript" && msg.role === "assistant") {
         if (msg.transcriptType === "partial") {
           setCurrentAITranscript(msg.transcript);
@@ -96,16 +128,34 @@ export const VoiceLabView = () => {
           setCurrentAITranscript("");
         }
       }
-    });
+    };
 
-    vapiRef.current.on("error", (e) => {
+    const onError = (e) => {
       console.error(e);
       setIsConnecting(false);
       toast.error("An error occurred during the call.");
-    });
+    };
 
-    return () => vapiRef.current?.stop();
-  }, [assistantId, dispatch]);
+    vapi.on("call-start", onCallStart);
+    vapi.on("call-end", onCallEnd);
+    vapi.on("speech-update", onSpeechUpdate);
+    vapi.on("message", onMessage);
+    vapi.on("error", onError);
+
+    return () => {
+      // ✅ Clean up listeners properly so re-renders don't duplicate events
+      vapi.off("call-start", onCallStart);
+      vapi.off("call-end", onCallEnd);
+      vapi.off("speech-update", onSpeechUpdate);
+      vapi.off("message", onMessage);
+      vapi.off("error", onError);
+
+      // ✅ Avoid WASM_OR_WORKER_NOT_READY error: only call stop() on unmount IF we actively have a live call
+      if (isCallActiveRef.current) {
+        vapi.stop();
+      }
+    };
+  }, [dispatch]);
 
   const handleToggleCall = async () => {
     if (!isCallActive) {
@@ -124,8 +174,10 @@ export const VoiceLabView = () => {
           ]);
           return;
         }
+        console.log("🚀 Vapi: Attempting to start call with Assistant ID:", assistantId);
         await vapiRef.current.start(assistantId);
       } catch (error) {
+        console.error("❌ Vapi: Failed to start call:", error);
         setIsConnecting(false);
         toast.error("Failed to verify account status.");
         setMessages((prev) => [

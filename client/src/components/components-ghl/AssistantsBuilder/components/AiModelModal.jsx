@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import { updateAssistant } from "../../../../store/slices/assistantsSlice";
 import { getSubaccountIdFromUrl, getAssistantIdFromUrl } from "../../../../utils/urlUtils";
+import toast from "react-hot-toast";
 
 // Using real brand icons/logos to match the screenshot
 const OpenAIIcon = () => (
@@ -170,7 +171,7 @@ export const AIModelModal = ({ isOpen, onClose }) => {
 
     } catch (error) {
       console.error('❌ Error updating model:', error);
-      alert(`Failed to update model: ${error}`);
+      toast.error(`Failed to update model: ${error?.message || error}`);
     } finally {
       setIsSaving(false);
       setSelectedModel(null);

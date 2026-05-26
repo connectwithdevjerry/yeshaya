@@ -99,7 +99,7 @@ export const ToolkitSidebar = ({ isOpen, onToggle, activeTab }) => {
 
   return (
     <div
-      className={`max-h-full border-l border-gray-200 bg-white flex-shrink-0 flex flex-col relative transition-all duration-300 ease-in-out ${
+      className={`max-h-full border-l border-gray-200 bg-white flex-shrink-0 flex flex-col relative transition-all duration-300 ease-in-out shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] ${
         isOpen ? sidebarWidth : "w-0 overflow-hidden"
       }`}
     >
@@ -153,16 +153,7 @@ export const ToolkitSidebar = ({ isOpen, onToggle, activeTab }) => {
         </>
       )}
 
-      {/* Toggle Button (only for Builder tab) */}
-      {!isOpen && activeTab === "Builder" && (
-        <button
-          onClick={() => onToggle(true)}
-          className="absolute top-1/2 left-0 transform -translate-y-1/2 -ml-3 z-10 p-1 bg-white border border-gray-300 rounded-full shadow-md text-gray-500 hover:text-blue-600 transition"
-          title="Show Toolkit"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-      )}
+
 
       {/* ✅ Tools & APIs Modal */}
       <ToolsAndAPIsModal isOpen={isToolsModalOpen} onClose={closeToolsModal} />

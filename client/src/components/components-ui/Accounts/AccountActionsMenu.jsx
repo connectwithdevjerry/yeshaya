@@ -56,8 +56,7 @@ const AccountActionsMenu = ({
       if (
         menuRef.current &&
         !menuRef.current.contains(event.target) &&
-        anchorRef.current &&
-        !anchorRef.current.contains(event.target)
+        (!anchorRef?.current || !anchorRef.current.contains(event.target))
       ) {
         onClose();
       }
