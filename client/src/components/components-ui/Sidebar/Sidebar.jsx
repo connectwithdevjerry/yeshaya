@@ -26,8 +26,17 @@ const ICON_MAP = {
   creditcard: CreditCard,
 };
 
+const MAIN_NAV = [
+  { name: "Dashboard",    icon: "dashboard",  link: "/dashboard" },
+  { name: "Subaccounts",  icon: "users",      link: "/"          },
+  { name: "Agency",       icon: "building",   link: "/agency"    },
+  { name: "Rebilling",    icon: "document",   link: "/rebilling" },
+  { name: "Integrations", icon: "link",       link: "/integrations" },
+];
+
 /* ─────────────────────────────────────────────
    NavItem — single link with accent bar active state
+   IMPORTANT: defined at module level, not inside Sidebar render
 ───────────────────────────────────────────── */
 function NavItem({ item, collapsed }) {
   const Icon = ICON_MAP[item.icon] || Link2;
@@ -80,6 +89,7 @@ function NavItem({ item, collapsed }) {
 
 /* ─────────────────────────────────────────────
    SectionLabel
+   IMPORTANT: defined at module level, not inside Sidebar render
 ───────────────────────────────────────────── */
 function SectionLabel({ label, collapsed }) {
   if (collapsed) {
@@ -95,14 +105,103 @@ function SectionLabel({ label, collapsed }) {
 }
 
 /* ─────────────────────────────────────────────
+   SidebarContent — extracted to module level to prevent
+   infinite remount loop caused by defining it inside Sidebar render
+───────────────────────────────────────────── */
+function SidebarContent({
+  mobile,
+  collapsed,
+  displayBalance,
+  safeUserInfo,
+  onCollapse,
+  onClose,
+}) {
+  const isCollapsed = collapsed && !mobile;
+
+  return (
+    <div
+      className={`flex flex-col h-full bg-[#0a0f1e] relative
+        ${mobile ? "w-72" : isCollapsed ? "w-16" : "w-64"}
+        transition-all duration-300 ease-in-out`}
+    >
+      {/* ── Brand Header ── */}
+      <div
+        className={`flex items-center border-b border-white/5 flex-shrink-0
+          ${isCollapsed ? "px-0 py-4 justify-center" : "px-4 py-3.5 gap-3"}`}
+      >
+        <img
+          src={LOGO_URL}
+          alt="Yashayah AI"
+          className="w-8 h-8 rounded-lg object-cover flex-shrink-0 shadow-lg"
+        />
+        {!isCollapsed && (
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-white leading-none tracking-tight">Yashayah AI</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Voice Intelligence</p>
+          </div>
+        )}
+        {/* Collapse toggle — desktop only */}
+        {!mobile && (
+          <button
+            onClick={onCollapse}
+            className="p-1 rounded-md text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-all duration-150 flex-shrink-0"
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {isCollapsed
+              ? <PanelLeftOpen  className="w-4 h-4" />
+              : <PanelLeftClose className="w-4 h-4" />
+            }
+          </button>
+        )}
+        {/* Mobile close button */}
+        {mobile && (
+          <button
+            onClick={onClose}
+            className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-all"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* ── Workspace switcher (UserProfile) ── */}
+      <div className={isCollapsed ? "flex justify-center py-3 px-2" : ""}>
+        <UserProfile collapsed={isCollapsed} />
+      </div>
+
+      {/* ── Navigation ── */}
+      <nav
+        className={`flex-1 overflow-y-auto sidebar-scroll py-2 space-y-0.5
+          ${isCollapsed ? "px-2" : "px-3"}`}
+      >
+        <SectionLabel label="Workspace" collapsed={isCollapsed} />
+        {MAIN_NAV.map((item) => (
+          <NavItem key={item.name} item={item} collapsed={isCollapsed} />
+        ))}
+      </nav>
+
+      {/* ── Footer ── */}
+      <BottomInfo
+        balance={displayBalance}
+        currentUser={safeUserInfo.currentUser}
+        collapsed={isCollapsed}
+      />
+
+      {/* Subtle bottom gradient */}
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
    Main UI Sidebar
 ───────────────────────────────────────────── */
 export function Sidebar({ userInfo, navigationItems }) {
   const dispatch = useDispatch();
   const location = useLocation();
 
-  const [collapsed,       setCollapsed]       = useState(false);
-  const [mobileOpen,      setMobileOpen]      = useState(false);
+  const [collapsed,  setCollapsed]  = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const { walletBalance, fetchingBalance } = useSelector((s) => s.assistants);
 
@@ -116,98 +215,15 @@ export function Sidebar({ userInfo, navigationItems }) {
     currentUser: { initial: "A", email: "user@agency.com" },
   };
 
-  const displayBalance = fetchingBalance && !walletBalance
+  const displayBalance = fetchingBalance && walletBalance === null
     ? "…"
     : walletBalance !== null
       ? `$${Number(walletBalance).toFixed(2)}`
       : (userInfo?.balance || "$0.00");
 
-  /* Navigation sections */
-  const MAIN_NAV = [
-    { name: "Dashboard",    icon: "dashboard",  link: "/dashboard" },
-    { name: "Subaccounts",  icon: "users",      link: "/"          },
-    { name: "Agency",       icon: "building",   link: "/agency"    },
-    { name: "Rebilling",    icon: "document",   link: "/rebilling" },
-    { name: "Integrations", icon: "link",       link: "/integrations" },
-  ];
-
-  /* ── Sidebar inner content ── */
-  const SidebarContent = ({ mobile = false }) => (
-    <div
-      className={`flex flex-col h-full bg-[#0a0f1e] relative
-        ${mobile ? "w-72" : collapsed ? "w-16" : "w-64"}
-        transition-all duration-300 ease-in-out`}
-    >
-      {/* ── Brand Header ── */}
-      <div className={`flex items-center border-b border-white/5 flex-shrink-0
-        ${collapsed && !mobile ? "px-0 py-4 justify-center" : "px-4 py-3.5 gap-3"}`}
-      >
-        <img
-          src={LOGO_URL}
-          alt="Yashayah AI"
-          className="w-8 h-8 rounded-lg object-cover flex-shrink-0 shadow-lg"
-        />
-        {(!collapsed || mobile) && (
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white leading-none tracking-tight">Yashayah AI</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">Voice Intelligence</p>
-          </div>
-        )}
-        {/* Collapse toggle — desktop only */}
-        {!mobile && (
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="p-1 rounded-md text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-all duration-150 flex-shrink-0"
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed
-              ? <PanelLeftOpen  className="w-4 h-4" />
-              : <PanelLeftClose className="w-4 h-4" />
-            }
-          </button>
-        )}
-        {/* Mobile close button */}
-        {mobile && (
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-all"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      {/* ── Workspace switcher (UserProfile) ── */}
-      <div className={collapsed && !mobile ? "flex justify-center py-3 px-2" : ""}>
-        <UserProfile collapsed={collapsed && !mobile} />
-      </div>
-
-      {/* ── Navigation ── */}
-      <nav className={`flex-1 overflow-y-auto sidebar-scroll py-2 space-y-0.5
-        ${collapsed && !mobile ? "px-2" : "px-3"}`}
-      >
-        <SectionLabel label="Workspace" collapsed={collapsed && !mobile} />
-        {MAIN_NAV.map((item) => (
-          <NavItem key={item.name} item={item} collapsed={collapsed && !mobile} />
-        ))}
-      </nav>
-
-      {/* ── Footer ── */}
-      <BottomInfo
-        balance={displayBalance}
-        numbers={safeUserInfo.numbers || 0}
-        currentUser={safeUserInfo.currentUser}
-        collapsed={collapsed && !mobile}
-      />
-
-      {/* Subtle bottom gradient */}
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
-    </div>
-  );
-
   return (
     <>
-      {/* ── Mobile hamburger trigger (shown on small screens) ── */}
+      {/* ── Mobile hamburger trigger ── */}
       <button
         onClick={() => setMobileOpen(true)}
         className="lg:hidden fixed top-4 left-4 z-40 p-2 bg-slate-900 border border-white/10 rounded-xl text-slate-300 shadow-lg hover:bg-slate-800 transition-all"
@@ -218,7 +234,14 @@ export function Sidebar({ userInfo, navigationItems }) {
 
       {/* ── Desktop sidebar ── */}
       <div className="hidden lg:block h-screen flex-shrink-0">
-        <SidebarContent />
+        <SidebarContent
+          mobile={false}
+          collapsed={collapsed}
+          displayBalance={displayBalance}
+          safeUserInfo={safeUserInfo}
+          onCollapse={() => setCollapsed((c) => !c)}
+          onClose={() => setMobileOpen(false)}
+        />
       </div>
 
       {/* ── Mobile drawer ── */}
@@ -244,7 +267,14 @@ export function Sidebar({ userInfo, navigationItems }) {
               transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
               className="lg:hidden fixed left-0 top-0 bottom-0 z-50"
             >
-              <SidebarContent mobile />
+              <SidebarContent
+                mobile
+                collapsed={collapsed}
+                displayBalance={displayBalance}
+                safeUserInfo={safeUserInfo}
+                onCollapse={() => setCollapsed((c) => !c)}
+                onClose={() => setMobileOpen(false)}
+              />
             </motion.div>
           </>
         )}

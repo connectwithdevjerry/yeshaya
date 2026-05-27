@@ -1,89 +1,24 @@
 // src/components/components-ui/Sidebar/BottomInfo.jsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Settings, CreditCard, Phone, ChevronUp, Loader2 } from "lucide-react";
+import { Settings, CreditCard, ChevronUp, Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import UserMenuPopup from "../UserMenu";
-import { fetchAssistants } from "../../../store/slices/assistantsSlice";
-import { fetchPurchasedNumbers } from "../../../store/slices/numberSlice";
-import { fetchSubAccounts } from "../../../store/slices/integrationSlice";
 import { getUserDetails } from "../../../store/slices/authSlice";
 
 export function BottomInfo({ balance, collapsed = false }) {
-  const dispatch   = useDispatch();
-  const navigate   = useNavigate();
-  const [isOpen,        setIsOpen]        = useState(false);
-  const [subaccounts,   setSubaccounts]   = useState([]);
-  const [allAssistants, setAllAssistants] = useState([]);
-  const [loadingData,   setLoadingData]   = useState(false);
-  const [numbersFetched,setNumbersFetched]= useState(false);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const [isOpen, setIsOpen] = useState(false);
 
-  const { purchasedNumbers, loadingPurchased } = useSelector((s) => s.numbers);
-  const { user, loading: userLoading }         = useSelector((s) => s.auth);
+  const { user, loading: userLoading } = useSelector((s) => s.auth);
 
+  // Fetch user details once on mount
   useEffect(() => { dispatch(getUserDetails()); }, [dispatch]);
 
-  useEffect(() => {
-    const get = async () => {
-      try {
-        setLoadingData(true);
-        const r = await dispatch(fetchSubAccounts()).unwrap();
-        setSubaccounts(r?.locations || []);
-      } catch { setSubaccounts([]); }
-      finally { setLoadingData(false); }
-    };
-    get();
-  }, [dispatch]);
-
-  useEffect(() => {
-    if (subaccounts.length > 0 && allAssistants.length === 0) {
-      const get = async () => {
-        try {
-          setLoadingData(true);
-          const results = await Promise.all(
-            subaccounts.map((s) => dispatch(fetchAssistants(s.id)).unwrap())
-          );
-          setAllAssistants(
-            results.flatMap((a, i) =>
-              (a || []).map((ast) => ({
-                ...ast,
-                subaccountId: subaccounts[i].id,
-                subaccountName: subaccounts[i].name || subaccounts[i].companyName,
-              }))
-            )
-          );
-        } catch { setAllAssistants([]); }
-        finally { setLoadingData(false); }
-      };
-      get();
-    }
-  }, [dispatch, subaccounts, allAssistants.length]);
-
-  useEffect(() => {
-    if (allAssistants.length > 0 && !numbersFetched) {
-      setNumbersFetched(true);
-      Promise.all(
-        allAssistants.map((a) =>
-          dispatch(fetchPurchasedNumbers({ subaccountId: a.subaccountId, assistantId: a.id || a.assistantId }))
-        )
-      ).catch(() => setNumbersFetched(false));
-    }
-  }, [dispatch, allAssistants, numbersFetched]);
-
-  const totalNumbers = useMemo(() => {
-    if (!purchasedNumbers?.length) return 0;
-    const seen = new Set();
-    return purchasedNumbers.filter((n) => {
-      const sid = n.phoneNumberDetails?.sid || n.sid;
-      if (!sid || seen.has(sid)) return false;
-      seen.add(sid); return true;
-    }).length;
-  }, [purchasedNumbers]);
-
-  const isLoading = loadingData || loadingPurchased;
-  const userInitial = user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U";
-  const userName = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : "";
+  const userInitial = user?.firstName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U";
+  const userName    = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : "";
 
   /* ── Collapsed mode: just the avatar + tooltip ── */
   if (collapsed) {
@@ -97,7 +32,9 @@ export function BottomInfo({ balance, collapsed = false }) {
         >
           <Settings className="w-4 h-4" />
           <div className="pointer-events-none absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50">
-            <div className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-xl whitespace-nowrap">Settings</div>
+            <div className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-xl whitespace-nowrap">
+              Settings
+            </div>
           </div>
         </Link>
 
@@ -143,27 +80,14 @@ export function BottomInfo({ balance, collapsed = false }) {
   return (
     <div className="border-t border-white/5 px-3 pb-3 pt-2 space-y-1">
 
-      {/* Stats row */}
-      <div className="flex items-center gap-2 px-2 py-1.5">
-        <div
-          onClick={() => navigate("/settings?tab=billing")}
-          className="flex-1 flex items-center gap-2 cursor-pointer group"
-        >
-          <CreditCard className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-          <span className="text-xs text-slate-500 group-hover:text-slate-300 transition-colors">Balance</span>
-        </div>
+      {/* Balance row */}
+      <div
+        onClick={() => navigate("/settings?tab=billing")}
+        className="flex items-center gap-2 px-2 py-1.5 cursor-pointer group"
+      >
+        <CreditCard className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+        <span className="text-xs text-slate-500 group-hover:text-slate-300 transition-colors flex-1">Balance</span>
         <span className="text-xs font-semibold text-white tabular-nums">{balance || "$0.00"}</span>
-      </div>
-
-      <div className="flex items-center gap-2 px-2 py-1.5">
-        <Phone className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-        <span className="text-xs text-slate-500 flex-1">Numbers</span>
-        <span className="text-xs font-semibold text-white tabular-nums">
-          {isLoading
-            ? <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
-            : totalNumbers
-          }
-        </span>
       </div>
 
       {/* Settings link */}
