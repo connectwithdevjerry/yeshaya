@@ -273,6 +273,114 @@ export const updateCompanyDetails = createAsyncThunk(
   },
 );
 
+/* ── Domain settings ── */
+export const getDomainSettings = createAsyncThunk(
+  "auth/getDomainSettings",
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await axios.get("https://api.yashayah.cloud/auth/domain-settings", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+export const saveDomainSettings = createAsyncThunk(
+  "auth/saveDomainSettings",
+  async (payload, { rejectWithValue }) => {
+    try {
+      const res = await axios.post("https://api.yashayah.cloud/auth/domain-settings/save", payload, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+export const verifyDomain = createAsyncThunk(
+  "auth/verifyDomain",
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await axios.post("https://api.yashayah.cloud/auth/domain-settings/verify", {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data; // { domainStatus, message }
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+/* ── Snapshot settings ── */
+export const getSnapshot = createAsyncThunk(
+  "auth/getSnapshot",
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await axios.get("https://api.yashayah.cloud/auth/snapshot", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+export const saveSnapshot = createAsyncThunk(
+  "auth/saveSnapshot",
+  async (payload, { rejectWithValue }) => {
+    try {
+      const res = await axios.post("https://api.yashayah.cloud/auth/snapshot/save", payload, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+/* ── Admin settings ── */
+export const getAdminSettings = createAsyncThunk(
+  "auth/getAdminSettings",
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await axios.get("https://api.yashayah.cloud/auth/admin-settings", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+export const saveAdminSettings = createAsyncThunk(
+  "auth/saveAdminSettings",
+  async (payload, { rejectWithValue }) => {
+    try {
+      const res = await axios.post("https://api.yashayah.cloud/auth/admin-settings/save", payload, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
 // Fetch User Details Thunk
 export const getUserDetails = createAsyncThunk(
   "auth/getUserDetails",
@@ -325,6 +433,16 @@ const authSlice = createSlice({
     companyLoading: false,
     companyError: null,
     company: null,
+    // Domain
+    domainSettings: null,
+    domainLoading: false,
+    domainVerifying: false,
+    // Snapshot
+    snapshot: null,
+    snapshotLoading: false,
+    // Admin
+    adminSettings: null,
+    adminLoading: false,
   },
   reducers: {
     clearError: (state) => {
@@ -542,7 +660,37 @@ const authSlice = createSlice({
       .addCase(getUserDetails.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
-      });
+      })
+
+      // Domain Settings
+      .addCase(getDomainSettings.pending,  (state) => { state.domainLoading = true; })
+      .addCase(getDomainSettings.fulfilled, (state, action) => { state.domainLoading = false; state.domainSettings = action.payload; })
+      .addCase(getDomainSettings.rejected,  (state) => { state.domainLoading = false; })
+      .addCase(saveDomainSettings.pending,  (state) => { state.domainLoading = true; })
+      .addCase(saveDomainSettings.fulfilled, (state) => { state.domainLoading = false; })
+      .addCase(saveDomainSettings.rejected,  (state) => { state.domainLoading = false; })
+      .addCase(verifyDomain.pending,  (state) => { state.domainVerifying = true; })
+      .addCase(verifyDomain.fulfilled, (state, action) => {
+        state.domainVerifying = false;
+        if (state.domainSettings) state.domainSettings.domainStatus = action.payload.domainStatus;
+      })
+      .addCase(verifyDomain.rejected,  (state) => { state.domainVerifying = false; })
+
+      // Snapshot
+      .addCase(getSnapshot.pending,  (state) => { state.snapshotLoading = true; })
+      .addCase(getSnapshot.fulfilled, (state, action) => { state.snapshotLoading = false; state.snapshot = action.payload; })
+      .addCase(getSnapshot.rejected,  (state) => { state.snapshotLoading = false; })
+      .addCase(saveSnapshot.pending,  (state) => { state.snapshotLoading = true; })
+      .addCase(saveSnapshot.fulfilled, (state, action) => { state.snapshotLoading = false; if (action.payload) state.snapshot = action.payload; })
+      .addCase(saveSnapshot.rejected,  (state) => { state.snapshotLoading = false; })
+
+      // Admin Settings
+      .addCase(getAdminSettings.pending,  (state) => { state.adminLoading = true; })
+      .addCase(getAdminSettings.fulfilled, (state, action) => { state.adminLoading = false; state.adminSettings = action.payload; })
+      .addCase(getAdminSettings.rejected,  (state) => { state.adminLoading = false; })
+      .addCase(saveAdminSettings.pending,  (state) => { state.adminLoading = true; })
+      .addCase(saveAdminSettings.fulfilled, (state) => { state.adminLoading = false; })
+      .addCase(saveAdminSettings.rejected,  (state) => { state.adminLoading = false; });
   },
 });
 

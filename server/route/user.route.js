@@ -12,6 +12,13 @@ const {
   createCompanyDetails,
   updateCompanyDetails,
   getUserDetails,
+  getDomainSettings,
+  saveDomainSettings,
+  verifyDomain,
+  getSnapshot,
+  saveSnapshot,
+  getAdminSettings,
+  saveAdminSettings,
   // admin_super_signup,
 } = require("../controller/user.controller");
 const {
@@ -26,6 +33,13 @@ const {
   REGISTER_COMPANY,
   UPDATE_COMPANY_DETAILS,
   GET_USER_DETAILS,
+  GET_DOMAIN_SETTINGS,
+  SAVE_DOMAIN_SETTINGS,
+  VERIFY_DOMAIN,
+  GET_SNAPSHOT,
+  SAVE_SNAPSHOT,
+  GET_ADMIN_SETTINGS,
+  SAVE_ADMIN_SETTINGS,
 } = require("../constants");
 const { verifyAccessToken } = require("../jwt_helpers");
 const multer = require("multer");
@@ -56,5 +70,18 @@ router.post(
   upload.single("logo"),
   updateCompanyDetails,
 );
+
+// Domain settings
+router.get(GET_DOMAIN_SETTINGS,  verifyAccessToken, getDomainSettings);
+router.post(SAVE_DOMAIN_SETTINGS, verifyAccessToken, saveDomainSettings);
+router.post(VERIFY_DOMAIN,        verifyAccessToken, verifyDomain);
+
+// Snapshot settings
+router.get(GET_SNAPSHOT,  verifyAccessToken, getSnapshot);
+router.post(SAVE_SNAPSHOT, verifyAccessToken, saveSnapshot);
+
+// Admin settings
+router.get(GET_ADMIN_SETTINGS,  verifyAccessToken, getAdminSettings);
+router.post(SAVE_ADMIN_SETTINGS, verifyAccessToken, saveAdminSettings);
 
 module.exports = router;

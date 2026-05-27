@@ -69,10 +69,35 @@ const userSchema = mongoose.Schema({
     },
   ],
   whiteLabel: {
-    recordType: { type: String },
-    recordName: { type: String },
-    recordValue: { type: String },
+    recordType:   { type: String },
+    recordName:   { type: String },
+    recordValue:  { type: String },
+    domainName:   { type: String, default: "" },
+    domainStatus: { type: String, default: "not_configured" }, // "not_configured" | "active"
   },
+  snapshot: {
+    features: {
+      voice:  { type: Boolean, default: true  },
+      chat:   { type: Boolean, default: true  },
+      kb:     { type: Boolean, default: false },
+      phones: { type: Boolean, default: true  },
+    },
+    rebilling: {
+      voice: { enabled: { type: Boolean, default: false }, price: { type: String, default: "" } },
+      chat:  { enabled: { type: Boolean, default: false }, price: { type: String, default: "" } },
+      kb:    { enabled: { type: Boolean, default: false }, price: { type: String, default: "" } },
+      phone: { enabled: { type: Boolean, default: false }, price: { type: String, default: "" } },
+    },
+    resources: [{ type: String }],
+    limits: {
+      assistants: { enabled: { type: Boolean, default: false }, value: { type: String, default: "" } },
+      messages:   { enabled: { type: Boolean, default: false }, value: { type: String, default: "" } },
+      calling:    { enabled: { type: Boolean, default: false }, value: { type: String, default: "" } },
+      phones:     { enabled: { type: Boolean, default: false }, value: { type: String, default: "" } },
+    },
+  },
+  adminLockPassword: { type: String, default: "" },
+  resendApiKey:      { type: String, default: "" },
   company: {
     name: { type: String, required: false },
     logoId: { type: String, required: false },

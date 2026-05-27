@@ -551,6 +551,141 @@ const getUserDetails = async (req, res) => {
   }
 };
 
+/* ─────────────────────────────────────────────
+   DOMAIN SETTINGS
+───────────────────────────────────────────── */
+const getDomainSettings = async (req, res) => {
+  try {
+    const user = await userModel.findById(req.user);
+    const wl = user.whiteLabel || {};
+    return res.send({
+      status: true,
+      data: {
+        domainName:   wl.domainName   || "",
+        domainStatus: wl.domainStatus || "not_configured",
+        record: {
+          type:  wl.recordType  || "A",
+          name:  wl.recordName  || "@",
+          value: wl.recordValue || "76.76.21.21",
+        },
+      },
+    });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+const saveDomainSettings = async (req, res) => {
+  try {
+    const { domainName, recordType, recordName, recordValue } = req.body;
+    const user = await userModel.findById(req.user);
+    user.whiteLabel.domainName   = domainName   || user.whiteLabel.domainName;
+    user.whiteLabel.recordType   = recordType   || user.whiteLabel.recordType;
+    user.whiteLabel.recordName   = recordName   || user.whiteLabel.recordName;
+    user.whiteLabel.recordValue  = recordValue  || user.whiteLabel.recordValue;
+    user.whiteLabel.domainStatus = "not_configured"; // reset on save; verify separately
+    await user.save();
+    return res.send({ status: true, message: "Domain settings saved" });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+const verifyDomain = async (req, res) => {
+  try {
+    const dns = require("dns").promises;
+    const user = await userModel.findById(req.user);
+    const { domainName, recordValue } = user.whiteLabel;
+
+    if (!domainName) {
+      return res.send({ status: false, message: "No domain configured" });
+    }
+
+    let resolved = false;
+    try {
+      const addresses = await dns.resolve4(domainName);
+      resolved = addresses.includes(recordValue || "76.76.21.21");
+    } catch (_) {
+      resolved = false;
+    }
+
+    if (resolved) {
+      user.whiteLabel.domainStatus = "active";
+      await user.save();
+      return res.send({ status: true, domainStatus: "active", message: "Domain verified successfully" });
+    } else {
+      return res.send({ status: true, domainStatus: "not_configured", message: "DNS records not yet propagated" });
+    }
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+/* ─────────────────────────────────────────────
+   SNAPSHOT SETTINGS
+───────────────────────────────────────────── */
+const getSnapshot = async (req, res) => {
+  try {
+    const user = await userModel.findById(req.user);
+    return res.send({ status: true, data: user.snapshot || {} });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+const saveSnapshot = async (req, res) => {
+  try {
+    const { features, rebilling, resources, limits } = req.body;
+    const user = await userModel.findById(req.user);
+
+    if (!user.snapshot) user.snapshot = {};
+
+    if (features)   Object.assign(user.snapshot.features,   features);
+    if (rebilling)  Object.assign(user.snapshot.rebilling,  rebilling);
+    if (resources !== undefined) user.snapshot.resources = resources;
+    if (limits)     Object.assign(user.snapshot.limits,     limits);
+
+    user.markModified("snapshot");
+    await user.save();
+    return res.send({ status: true, message: "Snapshot settings saved", data: user.snapshot });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+/* ─────────────────────────────────────────────
+   ADMIN SETTINGS
+───────────────────────────────────────────── */
+const getAdminSettings = async (req, res) => {
+  try {
+    const user = await userModel.findById(req.user);
+    return res.send({
+      status: true,
+      data: {
+        hasAdminPassword:  !!user.adminLockPassword,
+        resendConfigured:  !!user.resendApiKey,
+      },
+    });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+const saveAdminSettings = async (req, res) => {
+  try {
+    const { adminLockPassword, resendApiKey } = req.body;
+    const user = await userModel.findById(req.user);
+
+    if (adminLockPassword !== undefined) user.adminLockPassword = adminLockPassword;
+    if (resendApiKey      !== undefined) user.resendApiKey      = resendApiKey;
+
+    await user.save();
+    return res.send({ status: true, message: "Admin settings saved" });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
 module.exports = {
   signup,
   signin,
@@ -563,4 +698,11 @@ module.exports = {
   createCompanyDetails,
   updateCompanyDetails,
   getUserDetails,
+  getDomainSettings,
+  saveDomainSettings,
+  verifyDomain,
+  getSnapshot,
+  saveSnapshot,
+  getAdminSettings,
+  saveAdminSettings,
 };

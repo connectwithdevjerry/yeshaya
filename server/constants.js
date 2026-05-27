@@ -80,6 +80,14 @@ const AUTO_CARD_PAY_WEBHOOK = "/autopay/webhook";
 const GET_ANALYTICS = "/get-analytics";
 const GET_TEAM_NOTES = "/get-team-notes";
 const UPDATE_TEAM_NOTES = "/update-team-notes";
+// Agency settings
+const GET_DOMAIN_SETTINGS  = "/domain-settings";
+const SAVE_DOMAIN_SETTINGS = "/domain-settings/save";
+const VERIFY_DOMAIN        = "/domain-settings/verify";
+const GET_SNAPSHOT         = "/snapshot";
+const SAVE_SNAPSHOT        = "/snapshot/save";
+const GET_ADMIN_SETTINGS   = "/admin-settings";
+const SAVE_ADMIN_SETTINGS  = "/admin-settings/save";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -166,4 +174,11 @@ module.exports = {
   GET_ANALYTICS,
   GET_TEAM_NOTES,
   UPDATE_TEAM_NOTES,
+  GET_DOMAIN_SETTINGS,
+  SAVE_DOMAIN_SETTINGS,
+  VERIFY_DOMAIN,
+  GET_SNAPSHOT,
+  SAVE_SNAPSHOT,
+  GET_ADMIN_SETTINGS,
+  SAVE_ADMIN_SETTINGS,
 };
