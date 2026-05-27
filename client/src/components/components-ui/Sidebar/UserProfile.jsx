@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { ChevronDown, Building2, Plus, CheckCircle2 } from "lucide-react";
 import { getCompanyDetails } from "../../../store/slices/authSlice";
-import { fetchImportedSubAccounts } from "../../../store/slices/integrationSlice";
+import { fetchSubAccounts } from "../../../store/slices/integrationSlice";
 import { AnimatePresence, motion } from "framer-motion";
 
 export function UserProfile({ collapsed = false }) {
@@ -19,9 +19,7 @@ export function UserProfile({ collapsed = false }) {
 
   useEffect(() => {
     dispatch(getCompanyDetails());
-    // Use the same thunk as the SubAccounts page so both share one state key
-    // without race-condition overwrites
-    dispatch(fetchImportedSubAccounts());
+    dispatch(fetchSubAccounts());
   }, [dispatch]);
 
   const companyName  = companyDetails?.name || "Agency";
