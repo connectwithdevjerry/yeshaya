@@ -1,55 +1,122 @@
-// src/components/WebhooksContent.jsx
+// src/components/components-ui/Integration/Webhooks.jsx
+import React, { useState } from "react";
+import { Info, Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
+import toast from "react-hot-toast";
 
-import React from 'react';
-import { CircleAlert } from 'lucide-react';
-import Card from '../ui/Card';
-
-const WebhookEventToggle = ({ name, description }) => (
-  <div className="flex items-center justify-between py-3 border-b last:border-b-0">
-    <div className="flex items-center">
-      <span className="text-base font-semibold text-gray-800 mr-2">{name}</span>
-      <span className="text-gray-400 cursor-help" title={description}>
-        <CircleAlert className="w-4 h-4" />
-      </span>
-    </div>
-    {/* Tailwind Toggle Switch implementation */}
-    <label className="relative inline-flex items-center cursor-pointer">
-      <input type="checkbox" value="" className="sr-only peer" />
-      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
-    </label>
-  </div>
+/* ── Indigo gradient toggle ── */
+const Toggle = ({ value, onChange }) => (
+  <button
+    type="button"
+    onClick={() => onChange(!value)}
+    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-all duration-200 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-indigo-500/30
+      ${value ? "bg-gradient-to-r from-indigo-500 to-violet-600" : "bg-gray-200"}`}
+  >
+    <span
+      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200
+        ${value ? "translate-x-4" : "translate-x-0.5"}`}
+    />
+  </button>
 );
 
+const EVENTS = [
+  { key: "oauth",    name: "OAuth Events",   description: "Fired when a user connects or disconnects an OAuth integration."    },
+  { key: "call",     name: "Call Events",    description: "Fired at the start, end, and during AI voice call sessions."        },
+  { key: "message",  name: "Message Events", description: "Fired when an AI chat message is sent or received."                 },
+  { key: "payment",  name: "Payment Events", description: "Fired on successful charges, refunds, and subscription changes."    },
+];
 
-const WebhooksContent = () => (
-  <Card>
-    <h2 className="text-lg font-semibold text-gray-700 mb-4">Webhook Events</h2>
-    
-    <div className="mb-6">
-      <label htmlFor="endpoint-url" className="block text-sm font-medium text-gray-700 mb-1">
-        Endpoint URL
-      </label>
-      <input
-        type="url"
-        id="endpoint-url"
-        className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-        placeholder=""
-      />
-    </div>
+const WebhooksContent = () => {
+  const [endpointUrl, setEndpointUrl] = useState("");
+  const [events,      setEvents]      = useState({ oauth: false, call: false, message: false, payment: false });
+  const [saving,      setSaving]      = useState(false);
 
-    <div className="space-y-4 ">
-      <WebhookEventToggle name="Oauth Events" description="Description for Oauth Events" />
-      <WebhookEventToggle name="Call Events" description="Description for Call Events" />
-      <WebhookEventToggle name="Message Events" description="Description for Message Events" />
-      <WebhookEventToggle name="Payment Events" description="Description for Payment Events" />
-    </div>
+  const toggleEvent = (key) => setEvents((p) => ({ ...p, [key]: !p[key] }));
 
-    <div className="flex justify-end mt-8 pt-4 border-t">
-      <button className="px-6 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors">
-        Save Changes
-      </button>
+  const handleSave = async () => {
+    if (!endpointUrl.trim()) {
+      toast.error("Please enter an endpoint URL");
+      return;
+    }
+    setSaving(true);
+    await new Promise((r) => setTimeout(r, 900)); // stub — wire to real API when available
+    setSaving(false);
+    toast.success("Webhook settings saved");
+  };
+
+  const activeCount = Object.values(events).filter(Boolean).length;
+
+  return (
+    <div className="space-y-6">
+      {/* Section header */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-800">Webhook Events</h3>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Receive real-time HTTP POST notifications when events occur in your account.
+        </p>
+      </div>
+
+      {/* Endpoint URL */}
+      <div className="space-y-1.5">
+        <label className="block text-sm font-semibold text-gray-800">Endpoint URL</label>
+        <p className="text-xs text-gray-500">All enabled events will be posted to this URL.</p>
+        <input
+          type="url"
+          value={endpointUrl}
+          onChange={(e) => setEndpointUrl(e.target.value)}
+          placeholder="https://yourdomain.com/webhook"
+          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white font-mono placeholder:text-gray-400"
+        />
+      </div>
+
+      {/* Events list */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-sm font-semibold text-gray-800">Events</span>
+          <span className="text-xs text-gray-400">{activeCount} of {EVENTS.length} enabled</span>
+        </div>
+
+        {EVENTS.map(({ key, name, description }, idx) => (
+          <motion.div
+            key={key}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.18, delay: idx * 0.05 }}
+            className={`flex items-center justify-between gap-4 px-4 py-3.5 rounded-xl border transition-colors
+              ${events[key] ? "bg-white border-indigo-100" : "bg-gray-50/50 border-gray-100"}`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">{name}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+              </div>
+            </div>
+            <Toggle value={events[key]} onChange={() => toggleEvent(key)} />
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Info note */}
+      <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-indigo-50 border border-indigo-100">
+        <Info className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-indigo-700 leading-relaxed">
+          Webhook payloads are signed with a secret header for verification. See the docs for payload format details.
+        </p>
+      </div>
+
+      {/* Save */}
+      <div className="flex justify-end pt-1 border-t border-gray-100">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all disabled:opacity-60"
+        >
+          {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+          Save Changes
+        </button>
+      </div>
     </div>
-  </Card>
-);
+  );
+};
 
 export default WebhooksContent;

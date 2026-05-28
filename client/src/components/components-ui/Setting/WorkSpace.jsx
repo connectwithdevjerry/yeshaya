@@ -1,223 +1,189 @@
+// src/components/components-ui/Setting/WorkSpace.jsx
 import React, { useEffect, useState } from "react";
-import Card from "../ui/Card";
-import { Settings, Loader2, Upload } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { 
-  getCompanyDetails, 
-  registerCompany, 
-  updateCompanyDetails 
+import { Loader2, Upload, ImageIcon, Building2 } from "lucide-react";
+import {
+  getCompanyDetails,
+  registerCompany,
+  updateCompanyDetails,
 } from "../../../store/slices/authSlice";
 import toast from "react-hot-toast";
 
-const FormField = ({ id, label, type = "text", value, onChange, placeholder = "", icon: Icon, description }) => (
-  <div className="mb-4">
-    <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
-      {label}
-      {description && (
-        <span className="ml-1 text-gray-400 cursor-help" title={description}>
-          <Settings className="inline-block w-4 h-4" />
-        </span>
-      )}
-    </label>
-    <input
-      type={type}
-      id={id}
-      name={id}
-      value={value}
-      onChange={onChange}
-      className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-      placeholder={placeholder}
-    />
+const inputCls =
+  "w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none transition-all duration-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white placeholder:text-gray-400";
+
+const Field = ({ label, hint, children }) => (
+  <div className="space-y-1.5">
+    <div>
+      <label className="block text-sm font-semibold text-gray-800">{label}</label>
+      {hint && <p className="text-xs text-gray-500 mt-0.5">{hint}</p>}
+    </div>
+    {children}
   </div>
 );
 
 const WorkspaceSettings = () => {
   const dispatch = useDispatch();
-  const { companyDetails, companyLoading } = useSelector((state) => state.auth);
-  
-  // Controlled form state
+  const { companyDetails, companyLoading } = useSelector((s) => s.auth);
+
   const [formData, setFormData] = useState({
-    name: "",
-    address: "",
-    phoneNum: "",
-    website: "",
-    industry: "",
-    documentationURL: "",
-    hex: "#000000",
+    name: "", address: "", phoneNum: "", website: "",
+    industry: "", documentationURL: "", hex: "#1038e1",
   });
-  const [logoFile, setLogoFile] = useState(null);
+  const [logoFile,   setLogoFile]   = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
 
-  useEffect(() => {
-    dispatch(getCompanyDetails());
-  }, [dispatch]);
+  useEffect(() => { dispatch(getCompanyDetails()); }, [dispatch]);
 
-  // Sync Redux state to local form state when data arrives
   useEffect(() => {
     if (companyDetails) {
       setFormData({
-        name: companyDetails.name || "",
-        address: companyDetails.address || "",
-        phoneNum: companyDetails.phoneNum || "",
-        website: companyDetails.website || "",
-        industry: companyDetails.industry || "",
+        name:             companyDetails.name             || "",
+        address:          companyDetails.address          || "",
+        phoneNum:         companyDetails.phoneNum         || "",
+        website:          companyDetails.website          || "",
+        industry:         companyDetails.industry         || "",
         documentationURL: companyDetails.documentationURL || "",
-        hex: companyDetails.hex || "#000000",
+        hex:              companyDetails.hex              || "#1038e1",
       });
-      setPreviewUrl(companyDetails.logo || "");
+      if (companyDetails.logo) setPreviewUrl(companyDetails.logo);
     }
   }, [companyDetails]);
 
-  const handleInputChange = (e) => {
+  const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((p) => ({ ...p, [name]: value }));
   };
 
-  const handleFileChange = (e) => {
+  const handleFile = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setLogoFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-    }
+    if (file) { setLogoFile(file); setPreviewUrl(URL.createObjectURL(file)); }
   };
 
   const handleSave = async () => {
-    const submissionData = new FormData();
-    Object.keys(formData).forEach((key) => {
-      submissionData.append(key, formData[key]);
-    });
-    if (logoFile) {
-      submissionData.append("logo", logoFile);
-    }
-
+    const data = new FormData();
+    Object.keys(formData).forEach((k) => data.append(k, formData[k]));
+    if (logoFile) data.append("logo", logoFile);
     try {
       if (companyDetails) {
-        // If company exists, use Update API
-        await dispatch(updateCompanyDetails(submissionData)).unwrap();
-        toast.success("Workspace updated successfully");
+        await dispatch(updateCompanyDetails(data)).unwrap();
+        toast.success("Workspace updated!");
       } else {
-        // If no company, use Register API
-        await dispatch(registerCompany(submissionData)).unwrap();
-        toast.success("Company registered successfully");
+        await dispatch(registerCompany(data)).unwrap();
+        toast.success("Workspace created!");
       }
-    } catch (error) {
-      toast.error(error || "Action failed");
+    } catch (err) {
+      toast.error(err || "Failed to save");
     }
   };
 
   if (companyLoading && !companyDetails) {
     return (
-      <div className="flex justify-center p-12">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      <div className="flex justify-center items-center py-20">
+        <Loader2 className="w-7 h-7 animate-spin text-indigo-500" />
       </div>
     );
   }
 
   return (
-    <Card>
-      <div className="flex justify-between items-center mb-4 border-b pb-4">
-        <h2 className="text-lg font-semibold text-gray-800">My Workspace</h2>
-        <span className="text-sm text-gray-500 font-mono">
-          ID: {companyDetails?.agencyId ?? "NEW_WORKSPACE"}
-        </span>
-      </div>
+    <div className="space-y-8">
 
-      {/* Logo Upload Section */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Company Logo</label>
-        <div className="flex items-center gap-4">
-          <div className="relative group">
-            <img
-              src={previewUrl || "https://via.placeholder.com/60"}
-              alt="Preview"
-              className="w-20 h-20 rounded-lg object-cover border-2 border-gray-100 shadow-sm"
-            />
-            <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 rounded-lg cursor-pointer transition-opacity">
-              <Upload size={18} />
-              <input type="file" className="hidden" onChange={handleFileChange} accept="image/*" />
-            </label>
+      {/* Section header */}
+      <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+            <Building2 className="w-4 h-4 text-indigo-500" />
           </div>
-          <div className="text-xs text-gray-500">
-            <p className="font-medium text-gray-700">Logo Square</p>
-            <p>PNG, JPG up to 2MB</p>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800">My Workspace</h3>
+            <p className="text-xs text-gray-500 font-mono">
+              {companyDetails?.agencyId ? `ID: ${companyDetails.agencyId}` : "New workspace"}
+            </p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-        <FormField 
-          id="name" 
-          label="Company Name" 
-          value={formData.name} 
-          onChange={handleInputChange} 
-        />
-        <FormField 
-          id="industry" 
-          label="Industry" 
-          value={formData.industry} 
-          onChange={handleInputChange} 
-          placeholder="e.g. Automation and AI"
-        />
-        <FormField 
-          id="address" 
-          label="Company Address" 
-          value={formData.address} 
-          onChange={handleInputChange} 
-        />
-        <FormField 
-          id="phoneNum" 
-          label="Company Number" 
-          type="tel" 
-          value={formData.phoneNum} 
-          onChange={handleInputChange} 
-        />
-        <FormField 
-          id="website" 
-          label="Company Website" 
-          type="url" 
-          value={formData.website} 
-          onChange={handleInputChange} 
-        />
-        <FormField 
-          id="documentationURL" 
-          label="Documentation URL" 
-          type="url" 
-          value={formData.documentationURL} 
-          onChange={handleInputChange} 
-        />
-        
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Brand Color (Hex)</label>
-          <div className="flex gap-2">
-            <input 
-              type="color" 
-              name="hex" 
-              value={formData.hex} 
-              onChange={handleInputChange} 
-              className="h-9 w-12 border rounded-md cursor-pointer"
-            />
-            <input 
-              type="text" 
-              name="hex" 
-              value={formData.hex} 
-              onChange={handleInputChange} 
-              className="flex-1 p-2 border border-gray-300 rounded-md text-sm uppercase"
-            />
+      {/* Logo upload */}
+      <Field label="Company Logo" hint="Square PNG or SVG, min 256×256px, up to 2 MB">
+        <div className="flex items-center gap-5">
+          <label className="group relative w-20 h-20 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer hover:border-indigo-400 transition-colors">
+            {previewUrl
+              ? <img src={previewUrl} alt="Logo" className="w-full h-full object-contain" />
+              : <ImageIcon className="w-7 h-7 text-gray-300" />
+            }
+            <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl">
+              <Upload className="w-4 h-4 text-white" />
+              <span className="text-[10px] text-white font-medium mt-1">Upload</span>
+            </div>
+            <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
+          </label>
+          <div>
+            <p className="text-xs font-medium text-gray-700">Click to upload</p>
+            <p className="text-xs text-gray-400 mt-0.5">PNG, SVG, JPG up to 2 MB</p>
+            {previewUrl && (
+              <button
+                onClick={() => { setLogoFile(null); setPreviewUrl(""); }}
+                className="text-xs text-red-500 hover:text-red-600 mt-1.5 transition-colors"
+              >
+                Remove
+              </button>
+            )}
           </div>
         </div>
+      </Field>
+
+      {/* Fields grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Company Name">
+          <input type="text" name="name" value={formData.name} onChange={handleChange}
+            placeholder="Acme Agency" className={inputCls} />
+        </Field>
+        <Field label="Industry">
+          <input type="text" name="industry" value={formData.industry} onChange={handleChange}
+            placeholder="e.g. Real Estate, Healthcare" className={inputCls} />
+        </Field>
+        <Field label="Business Address">
+          <input type="text" name="address" value={formData.address} onChange={handleChange}
+            placeholder="123 Main St, City, State" className={inputCls} />
+        </Field>
+        <Field label="Phone Number">
+          <input type="tel" name="phoneNum" value={formData.phoneNum} onChange={handleChange}
+            placeholder="+1 (555) 000-0000" className={inputCls} />
+        </Field>
+        <Field label="Website">
+          <input type="url" name="website" value={formData.website} onChange={handleChange}
+            placeholder="https://yoursite.com" className={inputCls} />
+        </Field>
+        <Field label="Documentation URL">
+          <input type="url" name="documentationURL" value={formData.documentationURL} onChange={handleChange}
+            placeholder="https://docs.yoursite.com" className={inputCls} />
+        </Field>
       </div>
 
-      <div className="flex justify-end mt-6 pt-4 border-t">
-        <button 
+      {/* Brand color */}
+      <Field label="Brand Color" hint="Used for accents in the white-label portal">
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-xl border border-gray-200 flex-shrink-0 shadow-sm"
+            style={{ backgroundColor: formData.hex }} />
+          <input type="text" name="hex" value={formData.hex} onChange={handleChange}
+            className={`${inputCls} font-mono uppercase flex-1`} placeholder="#1038e1" />
+          <input type="color" name="hex" value={formData.hex} onChange={handleChange}
+            className="w-10 h-10 rounded-xl border border-gray-200 cursor-pointer p-1 bg-white flex-shrink-0" />
+        </div>
+      </Field>
+
+      {/* Save */}
+      <div className="flex justify-end pt-2 border-t border-gray-100">
+        <button
           onClick={handleSave}
           disabled={companyLoading}
-          className="flex items-center gap-2 px-6 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {companyLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-          {companyDetails ? "Save Changes" : "Register Company"}
+          {companyDetails ? "Save Changes" : "Create Workspace"}
         </button>
       </div>
-    </Card>
+    </div>
   );
 };
 

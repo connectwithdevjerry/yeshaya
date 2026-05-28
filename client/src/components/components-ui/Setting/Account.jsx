@@ -1,133 +1,139 @@
+// src/components/components-ui/Setting/Account.jsx
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { getUserDetails } from "../../../store/slices/authSlice";
-import Card from "../ui/Card";
-import { Loader2 } from "lucide-react";
+import { Loader2, User, Lock, Mail } from "lucide-react";
+
+const inputCls =
+  "w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none transition-all duration-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white placeholder:text-gray-400";
+
+const Field = ({ label, hint, children }) => (
+  <div className="space-y-1.5">
+    <div>
+      <label className="block text-sm font-semibold text-gray-800">{label}</label>
+      {hint && <p className="text-xs text-gray-500 mt-0.5">{hint}</p>}
+    </div>
+    {children}
+  </div>
+);
 
 const AccountSettings = () => {
   const dispatch = useDispatch();
   const { user, loading } = useSelector((state) => state.auth);
 
-  // Local state for the form inputs
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    phone: "",
-  });
+  const [formData, setFormData] = useState({ firstName: "", lastName: "", phone: "" });
 
-  // 1. Fetch user details on mount
-  useEffect(() => {
-    dispatch(getUserDetails());
-  }, [dispatch]);
+  useEffect(() => { dispatch(getUserDetails()); }, [dispatch]);
 
-  // 2. Sync local form state when Redux user data is loaded
   useEffect(() => {
     if (user) {
       setFormData({
         firstName: user.firstName || "",
-        lastName: user.lastName || "",
-        phone: user.phone || "", // Assuming your API might return phone
+        lastName:  user.lastName  || "",
+        phone:     user.phone     || "",
       });
     }
   }, [user]);
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.id]: e.target.value });
-  };
-
-  const handleSave = () => {
-    console.log("Saving changes:", formData);
-    // You would dispatch an updateProfile action here
-  };
+  const handleChange = (e) =>
+    setFormData((p) => ({ ...p, [e.target.id]: e.target.value }));
 
   if (loading && !user) {
     return (
-      <div className="flex justify-center items-center h-screen w-[800px]">
-        <Loader2 className="animate-spin w-8 h-8 text-blue-600" />
+      <div className="flex justify-center items-center py-20">
+        <Loader2 className="animate-spin w-7 h-7 text-indigo-500" />
       </div>
     );
   }
 
   return (
-    <div className="bg-slate-50 w-[800px] min-h-screen font-sans">
-      <Card>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">My Profile</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
-              First Name
-            </label>
-            <input
-              type="text"
-              id="firstName"
-              value={formData.firstName}
-              onChange={handleChange}
-              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-            />
+    <div className="space-y-8">
+
+      {/* ── Profile ── */}
+      <div className="space-y-5">
+        <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
+          <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+            <User className="w-4 h-4 text-indigo-500" />
           </div>
           <div>
-            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
-              Last Name
-            </label>
-            <input
-              type="text"
-              id="lastName"
-              value={formData.lastName}
-              onChange={handleChange}
-              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-            />
+            <h3 className="text-sm font-semibold text-gray-800">My Profile</h3>
+            <p className="text-xs text-gray-500">Update your personal information.</p>
           </div>
         </div>
-        <div className="mb-6">
-          <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700 mb-1">
-            Phone Number
-          </label>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="First Name">
+            <input
+              type="text" id="firstName" value={formData.firstName}
+              onChange={handleChange} placeholder="Jane"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Last Name">
+            <input
+              type="text" id="lastName" value={formData.lastName}
+              onChange={handleChange} placeholder="Doe"
+              className={inputCls}
+            />
+          </Field>
+        </div>
+
+        <Field label="Phone Number">
           <input
-            type="tel"
-            id="phoneNumber"
-            value={formData.phone}
-            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-            className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-            placeholder="No phone number set"
+            type="tel" id="phone" value={formData.phone}
+            onChange={handleChange} placeholder="+1 (555) 000-0000"
+            className={inputCls}
           />
-        </div>
-        <div className="flex justify-end">
-          <button 
-            onClick={handleSave}
-            className="px-6 py-2 bg-black text-white text-sm font-medium rounded-md shadow-md hover:bg-gray-800 transition-colors"
-          >
+        </Field>
+
+        <div className="flex justify-end pt-2">
+          <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all">
             Save Changes
           </button>
         </div>
-      </Card>
+      </div>
 
-      <Card>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4"> Account Security </h2>
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email Address
-            </label>
-            <p className="text-gray-600 text-base">
-              {user?.email || "Loading email..."}
-            </p>
+      {/* ── Account Security ── */}
+      <div className="space-y-5">
+        <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
+          <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+            <Lock className="w-4 h-4 text-indigo-500" />
           </div>
-          <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md shadow-sm hover:bg-gray-200 transition-colors">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800">Account Security</h3>
+            <p className="text-xs text-gray-500">Manage your email and password.</p>
+          </div>
+        </div>
+
+        {/* Email row */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 bg-gray-50/50 rounded-xl border border-gray-100">
+          <div className="flex items-center gap-3">
+            <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Email Address</p>
+              <p className="text-sm font-medium text-gray-800 mt-0.5">{user?.email || "—"}</p>
+            </div>
+          </div>
+          <button className="inline-flex items-center px-4 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 text-sm font-semibold hover:bg-gray-50 hover:border-gray-300 transition-all">
             Change Email
           </button>
         </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
-            <p className="text-gray-600 text-base"> ************ </p>
+
+        {/* Password row */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 bg-gray-50/50 rounded-xl border border-gray-100">
+          <div className="flex items-center gap-3">
+            <Lock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Password</p>
+              <p className="text-sm font-medium text-gray-800 mt-0.5 tracking-widest">••••••••••••</p>
+            </div>
           </div>
-          <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md shadow-sm hover:bg-gray-200 transition-colors">
+          <button className="inline-flex items-center px-4 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 text-sm font-semibold hover:bg-gray-50 hover:border-gray-300 transition-all">
             Reset Password
           </button>
         </div>
-      </Card>
+      </div>
+
     </div>
   );
 };
