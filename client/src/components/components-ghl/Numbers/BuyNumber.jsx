@@ -1,429 +1,318 @@
 // src/components/components-ghl/Numbers/BuyNumber.jsx
 import React, { useState, useEffect } from "react";
 import {
-  X,
-  MessageSquare,
-  Phone,
-  Volume2,
-  Loader2,
-  Truck,
-  ChevronDown,
+  X, MessageSquare, Phone, Volume2, Loader2, ShoppingCart,
+  ChevronDown, ChevronLeft, ChevronRight, Search, Bot, Check,
+  MapPin, AlertCircle,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch, useSelector } from "react-redux";
-import {
-  fetchAvailableNumbers,
-  buyNumber,
-} from "../../../store/slices/numberSlice";
+import { fetchAvailableNumbers, buyNumber } from "../../../store/slices/numberSlice";
 import { fetchAssistants } from "../../../store/slices/assistantsSlice";
+import toast from "react-hot-toast";
 
-// Helper function to get capability icons
-const getCapabilityIcons = (capabilities) => {
-  const icons = [];
+const capIcons = (caps) => [
+  caps?.voice && { Icon: Phone,        label: "Voice", color: "text-indigo-500 bg-indigo-50 border-indigo-100" },
+  caps?.SMS   && { Icon: MessageSquare, label: "SMS",   color: "text-sky-500 bg-sky-50 border-sky-100" },
+  caps?.MMS   && { Icon: Volume2,       label: "MMS",   color: "text-violet-500 bg-violet-50 border-violet-100" },
+].filter(Boolean);
 
-  if (capabilities.SMS) {
-    icons.push({ Icon: MessageSquare, name: "SMS", key: "sms" });
-  }
-
-  if (capabilities.MMS) {
-    icons.push({ Icon: Truck, name: "MMS", key: "mms" });
-  }
-
-  if (capabilities.voice) {
-    icons.push({ Icon: Phone, name: "Voice Call", key: "phone" });
-    icons.push({ Icon: Volume2, name: "Audio", key: "audio" });
-  }
-
-  return icons;
-};
+const ITEMS_PER_PAGE = 10;
 
 const BuyNumberModal = ({ isOpen, onClose }) => {
-  const [areaCode, setAreaCode] = useState("");
-  const [selectedNumber, setSelectedNumber] = useState(null);
+  const [areaCode,          setAreaCode]          = useState("");
+  const [selectedNumber,    setSelectedNumber]    = useState(null);
   const [selectedAssistant, setSelectedAssistant] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
-  const [buyingNumber, setBuyingNumber] = useState(false);
+  const [currentPage,       setCurrentPage]       = useState(1);
+  const [buyingNumber,      setBuyingNumber]      = useState(false);
 
-  const dispatch = useDispatch();
-  const {
-    data: availableNumbers,
-    loading,
-    error,
-  } = useSelector((state) => state.numbers);
-  const { data: assistants, loading: assistantsLoading } = useSelector(
-    (state) => state.assistants
-  );
-
-  // ✅ Fetch numbers and assistants when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      dispatch(fetchAvailableNumbers());
-
-      // Get subaccountId from localStorage or your auth state
-      const subaccountId = localStorage.getItem("selectedSubaccountId");
-      if (subaccountId) {
-        dispatch(fetchAssistants(subaccountId));
-      }
-    }
-  }, [isOpen, dispatch]);
-
+  const dispatch     = useDispatch();
+  const { data: availableNumbers, loading, error } = useSelector((s) => s.numbers);
+  const { data: assistants, loading: assistantsLoading } = useSelector((s) => s.assistants);
   const searchParams = new URLSearchParams(window.location.search);
   const subaccountId = searchParams.get("subaccount");
 
-  // Reset form when modal closes
   useEffect(() => {
-    if (!isOpen) {
-      setAreaCode("");
-      setSelectedNumber(null);
-      setSelectedAssistant("");
-      setCurrentPage(1);
+    if (isOpen) {
+      dispatch(fetchAvailableNumbers());
+      const sid = localStorage.getItem("selectedSubaccountId");
+      if (sid) dispatch(fetchAssistants(sid));
     }
+  }, [isOpen, dispatch]);
+
+  useEffect(() => {
+    if (!isOpen) { setAreaCode(""); setSelectedNumber(null); setSelectedAssistant(""); setCurrentPage(1); }
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  // ✅ Filter numbers by area code
-  const filteredNumbers = areaCode.trim()
-    ? availableNumbers.filter((num) =>
-        num.phoneNumber.includes(areaCode.replace(/\D/g, ""))
-      )
+  const filtered    = areaCode.trim()
+    ? availableNumbers.filter((n) => n.phoneNumber.includes(areaCode.replace(/\D/g, "")))
     : availableNumbers;
-
-  // ✅ Pagination
-  const totalPages = Math.ceil(filteredNumbers.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedNumbers = filteredNumbers.slice(
-    startIndex,
-    startIndex + itemsPerPage
-  );
-
-  const handleSearch = () => {
-    setCurrentPage(1); // Reset to first page on search
-    setSelectedNumber(null);
-  };
+  const totalPages  = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const start       = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginated   = filtered.slice(start, start + ITEMS_PER_PAGE);
 
   const handleBuy = async () => {
-    if (selectedNumber && selectedAssistant && subaccountId) {
-      setBuyingNumber(true);
-
-      try {
-        const resultAction = await dispatch(
-          buyNumber({
-            subaccountId: subaccountId,
-            assistantId: selectedAssistant,
-            number: selectedNumber.phoneNumber,
-          })
-        );
-
-        if (buyNumber.fulfilled.match(resultAction)) {
-          console.log(
-            "✅ Number purchased successfully:",
-            resultAction.payload
-          );
-          // Optionally refresh the available numbers list
-          dispatch(fetchAvailableNumbers());
-          onClose();
-        } else {
-          console.error("❌ Failed to buy number:", resultAction.payload);
-          alert(`Failed to buy number: ${resultAction.payload}`);
-        }
-      } catch (error) {
-        console.error("❌ Error buying number:", error);
-        alert("An error occurred while buying the number");
-      } finally {
-        setBuyingNumber(false);
+    if (!selectedNumber || !selectedAssistant) return;
+    if (!subaccountId) { toast.error("No subaccount selected"); return; }
+    setBuyingNumber(true);
+    try {
+      const result = await dispatch(buyNumber({ subaccountId, assistantId: selectedAssistant, number: selectedNumber.phoneNumber }));
+      if (buyNumber.fulfilled.match(result)) {
+        toast.success(`${selectedNumber.friendlyName} purchased!`);
+        dispatch(fetchAvailableNumbers());
+        onClose();
+      } else {
+        toast.error(result.payload || "Failed to buy number");
       }
-    } else {
-      if (!subaccountId) {
-        alert("Subaccount ID is missing. Please select a subaccount.");
-      }
+    } catch {
+      toast.error("An error occurred");
+    } finally {
+      setBuyingNumber(false);
     }
   };
 
-  const handlePageChange = (direction) => {
-    if (direction === "next" && currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    } else if (direction === "prev" && currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
+  const canBuy = selectedNumber && selectedAssistant && !buyingNumber;
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl p-6 relative max-h-[90vh] flex flex-col">
-        {/* Modal Header */}
-        <div className="flex justify-between items-center pb-4 border-b border-gray-200 mb-6">
-          <h3 className="text-xl font-semibold text-gray-800">
-            Buy phone number
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: "spring", damping: 28, stiffness: 280 }}
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
           >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Search Bar & Assistant Selector */}
-        <div className="space-y-4 mb-6">
-          {/* Assistant Dropdown */}
-          <div>
-            <label
-              htmlFor="assistant-select"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Select Assistant <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <select
-                id="assistant-select"
-                value={selectedAssistant}
-                onChange={(e) => setSelectedAssistant(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm appearance-none pr-10"
-                disabled={assistantsLoading}
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm">
+                  <ShoppingCart className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Buy a Phone Number</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Search and purchase a US number</p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
               >
-                <option value="">
-                  {assistantsLoading
-                    ? "Loading assistants..."
-                    : "Choose an assistant"}
-                </option>
-                {assistants.map((assistant) => (
-                  <option key={assistant.id} value={assistant.id}>
-                    {assistant.name} ({assistant.id})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            {assistants.length === 0 && !assistantsLoading && (
-              <p className="text-xs text-amber-600 mt-1">
-                No assistants found. Please create an assistant first.
-              </p>
-            )}
-          </div>
 
-          {/* Area Code Search */}
-          <div className="flex items-end gap-3">
-            <div className="flex-grow">
-              <label
-                htmlFor="area-code"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Desired area code (US only)
-              </label>
-              <input
-                type="text"
-                id="area-code"
-                value={areaCode}
-                onChange={(e) => setAreaCode(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleSearch()}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                placeholder="e.g., 217"
-                maxLength="3"
-              />
-            </div>
-            <button
-              onClick={handleSearch}
-              disabled={loading}
-              className="px-4 py-2 bg-black text-white text-sm font-medium rounded-md shadow-sm hover:bg-gray-800 transition-colors disabled:bg-gray-400"
-            >
-              {loading ? "Searching..." : "Search"}
-            </button>
-          </div>
-        </div>
+            {/* Search controls */}
+            <div className="px-6 py-4 border-b border-gray-100 space-y-3 flex-shrink-0 bg-gray-50/30">
+              {/* Assistant selector */}
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  <Bot className="w-3 h-3" /> Assign to Assistant <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedAssistant}
+                    onChange={(e) => setSelectedAssistant(e.target.value)}
+                    disabled={assistantsLoading}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white outline-none appearance-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-gray-50 disabled:cursor-not-allowed pr-8"
+                  >
+                    <option value="">{assistantsLoading ? "Loading assistants…" : "Choose an assistant"}</option>
+                    {assistants.map((a) => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+                {assistants.length === 0 && !assistantsLoading && (
+                  <p className="flex items-center gap-1.5 text-xs text-amber-600">
+                    <AlertCircle className="w-3 h-3" /> No assistants found — create one first.
+                  </p>
+                )}
+              </div>
 
-        {/* Results Count */}
-        <div className="text-sm font-medium text-gray-600 mb-2 flex justify-between items-center">
-          <span>Available Numbers</span>
-          <span className="text-gray-400">
-            {filteredNumbers.length} numbers
-          </span>
-        </div>
-
-        {/* Table/List of Available Numbers */}
-        <div className="bg-gray-50 rounded-lg shadow-sm overflow-hidden border border-gray-200 flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-              <span className="ml-3 text-gray-600">Loading numbers...</span>
-            </div>
-          ) : error ? (
-            <div className="flex items-center justify-center py-12 text-red-500">
-              <p>Error: {error}</p>
-            </div>
-          ) : paginatedNumbers.length === 0 ? (
-            <div className="flex items-center justify-center py-12 text-gray-500">
-              <p>No numbers available for this area code</p>
-            </div>
-          ) : (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-500 sticky top-0">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-100 uppercase">
-                    NUMBER
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-100 uppercase">
-                    LOCATION
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-100 uppercase">
-                    CAPABILITIES
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-100 uppercase">
-                    AVAILABLE
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {paginatedNumbers.map((item, index) => {
-                  const capabilityIcons = getCapabilityIcons(item.capabilities);
-                  const isSelected =
-                    selectedNumber?.phoneNumber === item.phoneNumber;
-
-                  return (
-                    <tr
-                      key={item.phoneNumber}
-                      className={`cursor-pointer transition-colors ${
-                        isSelected
-                          ? "bg-indigo-50 border-l-4 border-indigo-600"
-                          : "hover:bg-gray-50"
-                      }`}
-                      onClick={() => setSelectedNumber(item)}
-                    >
-                      {/* Number */}
-                      <td className="px-6 py-2 whitespace-nowrap text-sm font-medium text-gray-800">
-                        <div className="flex flex-col">
-                          <span className="font-semibold">
-                            {item.friendlyName}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {item.phoneNumber}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Location */}
-                      <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-600">
-                        <div className="flex flex-col">
-                          <span>
-                            {item.locality}, {item.region}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {item.postalCode || "N/A"}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Capabilities */}
-                      <td className="px-6 py-2 whitespace-nowrap text-sm">
-                        <div className="flex items-center gap-2">
-                          {capabilityIcons.map(({ Icon, name, key }) => (
-                            <div
-                              key={key}
-                              className="relative group"
-                              title={name}
-                            >
-                              <Icon className="w-4 h-4 text-gray-500 hover:text-indigo-600 transition-colors" />
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-
-                      {/* Available */}
-                      <td className="px-6 py-2 whitespace-nowrap text-sm">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Yes
-                        </span>
-                      </td>
-
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Pagination */}
-        {!loading && paginatedNumbers.length > 0 && (
-          <div className="flex justify-between items-center text-sm text-gray-500 mt-4 pt-4 border-t">
-            <div className="flex items-center gap-2">
-              <span>
-                Showing {startIndex + 1} -{" "}
-                {Math.min(startIndex + itemsPerPage, filteredNumbers.length)} of{" "}
-                {filteredNumbers.length}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span>
-                Page {currentPage} of {totalPages}
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handlePageChange("prev")}
-                  disabled={currentPage === 1}
-                  className="p-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              {/* Area code search */}
+              <div className="flex items-end gap-3">
+                <div className="flex-1 space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Area Code (US only)
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
+                    <input
+                      type="text"
+                      value={areaCode}
+                      onChange={(e) => setAreaCode(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && setCurrentPage(1)}
+                      placeholder="e.g. 212"
+                      maxLength={3}
+                      className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 placeholder:text-gray-300"
+                    />
+                  </div>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  onClick={() => setCurrentPage(1)}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 disabled:opacity-60 transition-all"
                 >
-                  {"<"}
-                </button>
-                <button
-                  onClick={() => handlePageChange("next")}
-                  disabled={currentPage === totalPages}
-                  className="p-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                >
-                  {">"}
-                </button>
+                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                  Search
+                </motion.button>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Modal Footer */}
-        <div className="flex justify-between items-center space-x-3 pt-4 border-t border-gray-200 mt-6">
-          {/* Selected Number & Assistant Info */}
-          <div className="text-sm text-gray-600 flex flex-col gap-1">
-            {selectedNumber && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Selected Number:</span>
-                <span className="text-indigo-600 font-semibold">
-                  {selectedNumber.friendlyName}
-                </span>
-              </div>
-            )}
-            {selectedAssistant && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Assistant:</span>
-                <span className="text-indigo-600 font-semibold">
-                  {assistants.find((a) => a.id === selectedAssistant)?.name}
-                </span>
-              </div>
-            )}
-          </div>
+            {/* Results header */}
+            <div className="flex items-center justify-between px-6 py-2.5 border-b border-gray-50 flex-shrink-0">
+              <span className="text-xs font-semibold text-gray-500">Available Numbers</span>
+              <span className="text-xs text-gray-400">{filtered.length} results</span>
+            </div>
 
-          <div className="flex gap-3 ml-auto">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              Close
-            </button>
-            <button
-              onClick={handleBuy}
-              disabled={!selectedNumber || !selectedAssistant || buyingNumber}
-              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-            >
-              {buyingNumber ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Buying...
-                </>
+            {/* Table */}
+            <div className="flex-1 overflow-y-auto">
+              {loading ? (
+                <div className="flex items-center justify-center py-16 gap-3">
+                  <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+                  <span className="text-sm text-gray-500">Searching numbers…</span>
+                </div>
+              ) : error ? (
+                <div className="flex items-center justify-center py-16 text-rose-500 text-sm">{error}</div>
+              ) : paginated.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center">
+                    <Phone className="w-5 h-5 text-gray-300" />
+                  </div>
+                  <p className="text-sm text-gray-500">No numbers for that area code</p>
+                </div>
               ) : (
-                "Buy Number"
+                <table className="min-w-full">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-gray-50/90 backdrop-blur border-b border-gray-100">
+                      {["Number", "Location", "Capabilities", "Available"].map((h) => (
+                        <th key={h} className="px-5 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    <AnimatePresence>
+                      {paginated.map((item, i) => {
+                        const caps    = capIcons(item.capabilities);
+                        const active  = selectedNumber?.phoneNumber === item.phoneNumber;
+                        return (
+                          <motion.tr
+                            key={item.phoneNumber}
+                            initial={{ opacity: 0, x: -6 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.03 }}
+                            onClick={() => setSelectedNumber(item)}
+                            className={`cursor-pointer transition-all ${
+                              active
+                                ? "bg-indigo-50/60 border-l-2 border-l-indigo-500"
+                                : "hover:bg-gray-50"
+                            }`}
+                          >
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-2">
+                                {active && <Check className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />}
+                                <div>
+                                  <p className="text-sm font-bold text-gray-800">{item.friendlyName}</p>
+                                  <p className="text-xs font-mono text-gray-400">{item.phoneNumber}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                <MapPin className="w-3 h-3 text-gray-300" />
+                                <span>{[item.locality, item.region].filter(Boolean).join(", ") || "—"}</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-1">
+                                {caps.map(({ Icon, label, color }) => (
+                                  <span key={label} className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-semibold ${color}`}>
+                                    <Icon className="w-3 h-3" /> {label}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="px-5 py-3">
+                              <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-xl w-fit">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Available
+                              </span>
+                            </td>
+                          </motion.tr>
+                        );
+                      })}
+                    </AnimatePresence>
+                  </tbody>
+                </table>
               )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+            </div>
+
+            {/* Pagination */}
+            {!loading && paginated.length > 0 && (
+              <div className="flex items-center justify-between px-6 py-3 border-t border-gray-100 bg-gray-50/30 flex-shrink-0">
+                <span className="text-xs text-gray-400">
+                  {start + 1}–{Math.min(start + ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">Page {currentPage} of {totalPages}</span>
+                  <button onClick={() => setCurrentPage((p) => p - 1)} disabled={currentPage === 1}
+                    className="p-1.5 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-100 disabled:opacity-40 transition-colors">
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => setCurrentPage((p) => p + 1)} disabled={currentPage === totalPages}
+                    className="p-1.5 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-100 disabled:opacity-40 transition-colors">
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-white flex-shrink-0">
+              <div className="text-xs space-y-0.5">
+                {selectedNumber && (
+                  <p className="text-gray-600">
+                    Number: <span className="font-mono font-semibold text-indigo-600">{selectedNumber.friendlyName}</span>
+                  </p>
+                )}
+                {selectedAssistant && (
+                  <p className="text-gray-600">
+                    Assistant: <span className="font-semibold text-indigo-600">{assistants.find((a) => a.id === selectedAssistant)?.name}</span>
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={onClose}
+                  className="px-4 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-transparent hover:border-gray-200 transition-all">
+                  Cancel
+                </button>
+                <motion.button
+                  onClick={handleBuy}
+                  disabled={!canBuy}
+                  whileHover={canBuy ? { scale: 1.02 } : {}}
+                  whileTap={canBuy ? { scale: 0.98 } : {}}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {buyingNumber
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Buying…</>
+                    : <><ShoppingCart className="w-3.5 h-3.5" /> Buy Number</>
+                  }
+                </motion.button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
 

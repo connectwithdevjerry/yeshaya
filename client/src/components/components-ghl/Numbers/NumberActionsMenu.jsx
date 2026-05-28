@@ -1,87 +1,60 @@
 // src/components/components-ghl/Numbers/NumberActionsMenu.jsx
 import React, { useRef, useEffect, useState } from "react";
 import {
-  Star,
-  ExternalLink,
-  Pencil,
-  Scale,
-  Eye,
-  UserPlus,
-  Users,
-  Lock,
-  Link,
-  Zap,
-  Loader2,
-  XCircle,
+  Star, ExternalLink, Pencil, Scale, Eye,
+  Loader2, XCircle, Wifi, WifiOff, Phone,
 } from "lucide-react";
-import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { vapiConnect, deleteNumberFromVapi } from "../../../store/slices/numberSlice";
+import toast from "react-hot-toast";
 
-const MenuItem = ({ icon: Icon, text, onClick, isSeparator = false, disabled = false, loading = false, variant = "default" }) => {
-  if (isSeparator) return <li className="my-1 border-t border-gray-200" />;
+const MenuItem = ({ icon: Icon, label, onClick, disabled, loading, variant = "default" }) => (
+  <motion.button
+    whileHover={{ x: 2 }}
+    type="button"
+    onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
+    disabled={disabled || loading}
+    className={`flex items-center w-full gap-3 px-4 py-2.5 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed rounded-xl ${
+      variant === "danger"
+        ? "text-rose-600 hover:bg-rose-50"
+        : "text-gray-700 hover:bg-indigo-50 hover:text-indigo-700"
+    }`}
+  >
+    <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${
+      variant === "danger" ? "bg-rose-100" : "bg-gray-100"
+    }`}>
+      {loading
+        ? <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-500" />
+        : <Icon className={`w-3.5 h-3.5 ${variant === "danger" ? "text-rose-500" : "text-gray-500"}`} />
+      }
+    </div>
+    <span className="font-medium">{label}</span>
+  </motion.button>
+);
 
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          // console.log kept for easier debugging
-          console.log("🔹 MenuItem clicked:", text);
-          onClick?.(e);
-        }}
-        disabled={disabled || loading}
-        className={`flex items-center w-full px-4 py-2 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-          variant === "danger" 
-            ? "text-red-700 hover:bg-red-50" 
-            : "text-gray-700 hover:bg-gray-100"
-        }`}
-      >
-        {loading ? (
-          <Loader2 size={18} className="text-gray-500 mr-3 animate-spin" />
-        ) : (
-          <Icon size={18} className={variant === "danger" ? "text-red-500 mr-3" : "text-gray-500 mr-3"} />
-        )}
-        {text}
-      </button>
-    </li>
-  );
-};
-
-const NumbersActionsMenu = ({
-  isOpen,
-  onClose,
-  account,
-  anchorRef,
-  position,
-}) => {
-  const menuRef = useRef(null);
-  const navigate = useNavigate();
-  const location = useLocation();
+const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position }) => {
+  const menuRef       = useRef(null);
+  const navigate      = useNavigate();
+  const location      = useLocation();
   const [searchParams] = useSearchParams();
-  const dispatch = useDispatch();
-  
-  const [isConnecting, setIsConnecting] = useState(false);
+  const dispatch      = useDispatch();
+
+  const [isConnecting,    setIsConnecting]    = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
-  // Get Vapi connection status from Redux
-  const { vapiStatuses } = useSelector((state) => state.numbers || {});
-  const vapiInfo = vapiStatuses?.[account?.id]; 
-  const isConnectedToVapi = vapiInfo?.isConnected === true;
-  const isChecking = Boolean(vapiInfo?.checking);
+  const { vapiStatuses }   = useSelector((s) => s.numbers || {});
+  const vapiInfo           = vapiStatuses?.[account?.id];
+  const isConnectedToVapi  = vapiInfo?.isConnected === true;
+  const isChecking         = Boolean(vapiInfo?.checking);
 
-  // Close menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
+    const handleClickOutside = (e) => {
       if (
-        menuRef.current &&
-        !menuRef.current.contains(event.target) &&
-        anchorRef?.current &&
-        !anchorRef.current.contains(event.target)
-      ) {
-        onClose();
-      }
+        menuRef.current && !menuRef.current.contains(e.target) &&
+        anchorRef?.current && !anchorRef.current.contains(e.target)
+      ) onClose();
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -89,220 +62,121 @@ const NumbersActionsMenu = ({
 
   if (!isOpen || !account || !position) return null;
 
-  const handleAction = async (action) => {
-    console.log(`🟢 handleAction triggered for: ${action}`);
-    console.log("📦 Account data:", account);
-
-    if (action === "ConnectVapi") {
-      try {
-        setIsConnecting(true);
-        
-        // Validate required fields
-        if (!account.companyId || !account.assistantId || !account.phoneNumber || !account.id) {
-          console.error("❌ Missing required fields:", {
-            companyId: account.companyId,
-            assistantId: account.assistantId,
-            phoneNumber: account.phoneNumber,
-            id: account.id
-          });
-          alert("Missing required information to connect");
-          setIsConnecting(false);
-          return;
-        }
-
-        console.log("🚀 Attempting to connect to Vapi with:", {
-          subaccountId: account.companyId,
-          assistantId: account.assistantId,
-          number: account.phoneNumber,
-          phoneSid: account.id,
-        });
-        
-        const result = await dispatch(
-          vapiConnect({
-            subaccountId: account.companyId,
-            assistantId: account.assistantId,
-            number: account.phoneNumber,
-            phoneSid: account.id, // This is the Twilio SID
-          })
-        ).unwrap();
-
-        console.log("✅ Successfully connected :", result);
-        
-        alert("Number Connected Successfully");
-        onClose();
-      } catch (error) {
-        console.error("❌ Failed to connect to Vapi:", error);
-        console.error("❌ Error details:", JSON.stringify(error, null, 2));
-        
-        // Extract meaningful error message
-        const errorMessage = typeof error === 'string' 
-          ? error 
-          : error?.message || error?.error || "Unknown error occurred";
-        
-        alert(`Failed to connect: ${errorMessage}`);
-      } finally {
-        setIsConnecting(false);
-      }
+  const handleConnect = async () => {
+    if (!account.companyId || !account.assistantId || !account.phoneNumber || !account.id) {
+      toast.error("Missing required information to connect");
       return;
     }
-
-    if (action === "DisconnectVapi") {
-      try {
-        const confirmDisconnect = window.confirm(
-          `Are you sure you want to disconnect ${account.phoneNumber}?`
-        );
-
-        if (!confirmDisconnect) return;
-
-        setIsDisconnecting(true);
-
-        if (!vapiInfo || !vapiInfo.vapiPhoneNumId) {
-          alert("No connection found for this number");
-          setIsDisconnecting(false);
-          return;
-        }
-
-        console.log("🚀 Attempting to disconnect from Vapi with:", {
-          phoneNum: account.phoneNumber,
-          phoneSid: account.id,
-        });
-
-        await dispatch(
-          deleteNumberFromVapi({
-            phoneNum: account.phoneNumber,
-            phoneSid: account.id,
-          })
-        ).unwrap();
-
-        console.log("✅ Successfully disconnected");
-        alert("Successfully disconnected");
-        onClose();
-      } catch (error) {
-        console.error("❌ Failed to disconnect from Vapi:", error);
-        
-        const errorMessage = typeof error === 'string' 
-          ? error 
-          : error?.message || error?.error || "Unknown error occurred";
-        
-        alert(`Failed to disconnect: ${errorMessage}`);
-      } finally {
-        setIsDisconnecting(false);
-      }
-      return;
+    setIsConnecting(true);
+    try {
+      await dispatch(vapiConnect({
+        subaccountId: account.companyId,
+        assistantId:  account.assistantId,
+        number:       account.phoneNumber,
+        phoneSid:     account.id,
+      })).unwrap();
+      toast.success("Number connected successfully!");
+      onClose();
+    } catch (err) {
+      const msg = typeof err === "string" ? err : err?.message || "Unknown error";
+      toast.error(`Failed to connect: ${msg}`);
+    } finally {
+      setIsConnecting(false);
     }
+  };
 
-    if (action === "Open") {
-      try {
-        let targetRoute = "/assistants";
-
-        if (location.pathname === "/app") {
-          targetRoute = searchParams.get("route") || "/assistants";
-        } else if (
-          [
-            "/inbox",
-            "/call",
-            "/contacts",
-            "/knowledge",
-            "/assistants",
-            "/activetags",
-            "/numbers",
-            "/pools",
-            "/widgets",
-            "/helps",
-            "/ghl_settings",
-            '/blog'
-          ].includes(location.pathname)
-        ) {
-          targetRoute = location.pathname;
-        }
-
-        const params = new URLSearchParams({
-          agencyid: account.companyId || "UNKNOWN_COMPANY",
-          subaccount: account.id || "NO_ID",
-          allow: "yes",
-          myname: account.name || "NoName",
-          myemail: account.email || "noemail@example.com",
-          route: targetRoute,
-        });
-
-        const url = `/app?${params.toString()}`;
-
-        console.log("➡️ Navigating to:", url);
-
-        onClose();
-
-        setTimeout(() => {
-          navigate(url);
-        }, 0);
-
-        return;
-      } catch (err) {
-        console.error("❌ Navigation error:", err);
-      }
+  const handleDisconnect = async () => {
+    if (!vapiInfo?.vapiPhoneNumId) { toast.error("No Vapi connection found"); return; }
+    setIsDisconnecting(true);
+    try {
+      await dispatch(deleteNumberFromVapi({ phoneNum: account.phoneNumber, phoneSid: account.id })).unwrap();
+      toast.success("Disconnected successfully");
+      onClose();
+    } catch (err) {
+      const msg = typeof err === "string" ? err : err?.message || "Unknown error";
+      toast.error(`Failed to disconnect: ${msg}`);
+    } finally {
+      setIsDisconnecting(false);
     }
-
-    onClose();
   };
 
   return (
-    <div
-      ref={menuRef}
-      className="fixed w-60 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden py-1"
-      style={{ top: position.top, left: position.left }}
-    >
-      <ul className="divide-y divide-gray-100">
-        <MenuItem icon={Star} text="Rename" onClick={onClose} />
-
-        {/* Show Checking... if status is being determined */}
-        {isChecking && (
-          <li>
-            <div className="flex items-center w-full px-4 py-2 text-sm text-gray-700">
-              <Loader2 size={18} className="text-gray-500 mr-3 animate-spin" />
-              Checking Vapi status...
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          ref={menuRef}
+          initial={{ opacity: 0, scale: 0.95, y: -6 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: -4 }}
+          transition={{ type: "spring", damping: 24, stiffness: 300 }}
+          className="fixed w-56 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 overflow-hidden py-2"
+          style={{ top: position.top, left: position.left }}
+        >
+          {/* Number info header */}
+          <div className="px-4 py-3 border-b border-gray-100 mb-1">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0">
+                <Phone className="w-3.5 h-3.5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-gray-800 truncate">{account.name || "Unnamed"}</p>
+                <p className="text-[10px] font-mono text-gray-400 truncate">{account.phoneNumber}</p>
+              </div>
             </div>
-          </li>
-        )}
+            <div className="flex items-center gap-1.5 mt-2">
+              {isConnectedToVapi ? (
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
+                  <Wifi className="w-2.5 h-2.5" /> Connected
+                </span>
+              ) : isChecking ? (
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-gray-500 bg-gray-50 px-2 py-0.5 rounded-lg border border-gray-100">
+                  <Loader2 className="w-2.5 h-2.5 animate-spin" /> Checking…
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-lg border border-gray-100">
+                  <WifiOff className="w-2.5 h-2.5" /> Not connected
+                </span>
+              )}
+            </div>
+          </div>
 
-        {/* Conditionally show Connect or Disconnect based on isConnected boolean */}
-        {!isChecking && (isConnectedToVapi ? (
-          <MenuItem 
-            icon={XCircle} 
-            text="Disconnect"
-            onClick={() => handleAction("DisconnectVapi")}
-            loading={isDisconnecting}
-            disabled={isDisconnecting}
-            variant="danger"
-          />
-        ) : (
-          <MenuItem
-            icon={ExternalLink}
-            text="Connect"
-            onClick={() => handleAction("ConnectVapi")}
-            loading={isConnecting}
-            disabled={isConnecting}
-          />
-        ))}
+          <div className="px-2 space-y-0.5">
+            <MenuItem icon={Star}   label="Rename"          onClick={onClose} />
+            <MenuItem icon={Pencil} label="Edit Account"    onClick={onClose} />
+            <MenuItem icon={Scale}  label="Manage Limits"   onClick={onClose} />
+            <MenuItem icon={Eye}    label="Edit Permissions" onClick={onClose} />
 
-        <MenuItem icon={Pencil} text="Edit account" onClick={onClose} />
-        <MenuItem icon={Scale} text="Manage limits" onClick={onClose} />
-        <MenuItem icon={Eye} text="Edit permissions" onClick={onClose} />
-      </ul>
-      <div className="pt-2 px-4 text-xs text-gray-500 border-t border-gray-100">
-        <p className="font-semibold truncate">
-          {account.name || "Unnamed Account"}
-        </p>
-        <p>Last edited: 11/05/25</p>
-        {/* Footer connection message based on isConnected boolean */}
-        {isConnectedToVapi && (
-          <p className="text-green-600 font-medium mt-1">
-            ✓ Connect Number
-          </p>
-        )}
-        {!isConnectedToVapi && !isChecking && (
-          <p className="text-gray-500 mt-1">Not connected</p>
-        )}
-      </div>
-    </div>
+            <div className="my-1 border-t border-gray-100" />
+
+            {isChecking ? (
+              <div className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-400">
+                <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                </div>
+                <span>Checking status…</span>
+              </div>
+            ) : isConnectedToVapi ? (
+              <MenuItem
+                icon={XCircle}
+                label="Disconnect Vapi"
+                onClick={handleDisconnect}
+                loading={isDisconnecting}
+                disabled={isDisconnecting}
+                variant="danger"
+              />
+            ) : (
+              <MenuItem
+                icon={ExternalLink}
+                label="Connect to Vapi"
+                onClick={handleConnect}
+                loading={isConnecting}
+                disabled={isConnecting}
+              />
+            )}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
 

@@ -1,87 +1,153 @@
-// src/components/numbers/ImportNumberModal.jsx
-import React, { useState } from 'react';
-import { X, Info } from 'lucide-react';
+// src/components/components-ghl/Numbers/ImportNumber.jsx
+import React, { useState } from "react";
+import { X, Upload, Phone, Link2, HelpCircle, ArrowRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+
+const inputCls =
+  "w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 placeholder:text-gray-300";
 
 const ImportNumberModal = ({ isOpen, onClose }) => {
-  const [number, setNumber] = useState('');
-  const [terminationUri, setTerminationUri] = useState('');
+  const [number,         setNumber]         = useState("");
+  const [terminationUri, setTerminationUri] = useState("");
+  const [showAuth,       setShowAuth]       = useState(false);
 
-  if (!isOpen) return null;
+  const canImport = number.trim() && terminationUri.trim();
 
   const handleImport = () => {
-    console.log('Importing Number:', { number, terminationUri });
+    console.log("Importing:", { number, terminationUri });
     onClose();
-    setNumber('');
-    setTerminationUri('');
+    setNumber("");
+    setTerminationUri("");
+    setShowAuth(false);
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 relative">
-        {/* Modal Header */}
-        <div className="flex justify-between items-center pb-4 border-b border-gray-200 mb-6">
-          <h3 className="text-xl font-semibold text-gray-800">Import a number</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Modal Content */}
-        <div className="space-y-6 mb-8">
-          {/* Number Input */}
-          <div>
-            <label htmlFor="import-number" className="block text-sm font-medium text-gray-700 mb-1">
-              Number (raw format)
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                id="import-number"
-                value={number}
-                onChange={(e) => setNumber(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm pr-10"
-              />
-              <Info className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" title="Raw format phone number" />
-            </div>
-          </div>
-
-          {/* Termination URI Input */}
-          <div>
-            <label htmlFor="termination-uri" className="block text-sm font-medium text-gray-700 mb-1">
-              Termination URI
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                id="termination-uri"
-                value={terminationUri}
-                onChange={(e) => setTerminationUri(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm pr-10"
-              />
-              <Info className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" title="Termination URI" />
-            </div>
-          </div>
-          
-          <p className="text-sm font-medium text-indigo-600 cursor-pointer hover:text-indigo-800">
-            <span className="mr-1 inline-block">{'<'}</span> Add Authentication
-          </p>
-        </div>
-
-        {/* Modal Footer */}
-        <div className="flex justify-end items-center space-x-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700">
-            Close
-          </button>
-          <button
-            onClick={handleImport}
-            disabled={number.trim() === '' || terminationUri.trim() === ''}
-            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors"
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 8 }}
+            transition={{ type: "spring", damping: 28, stiffness: 300 }}
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
           >
-            Import number
-          </button>
-        </div>
-      </div>
-    </div>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 flex items-center justify-center shadow-sm">
+                  <Upload className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Import a Number</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Bring in your existing phone number</p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              {/* Number */}
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  <Phone className="w-3 h-3" /> Number (raw format)
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={number}
+                    onChange={(e) => setNumber(e.target.value)}
+                    placeholder="+12125551234"
+                    autoFocus
+                    className={inputCls}
+                  />
+                  <HelpCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" title="Raw E.164 format phone number" />
+                </div>
+              </div>
+
+              {/* Termination URI */}
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  <Link2 className="w-3 h-3" /> Termination URI
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={terminationUri}
+                    onChange={(e) => setTerminationUri(e.target.value)}
+                    placeholder="sip:username@domain.pstn.twilio.com"
+                    className={inputCls}
+                  />
+                  <HelpCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" title="Your SIP termination URI" />
+                </div>
+              </div>
+
+              {/* Add Auth toggle */}
+              <button
+                onClick={() => setShowAuth((p) => !p)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
+              >
+                <ArrowRight className={`w-3 h-3 transition-transform ${showAuth ? "rotate-90" : ""}`} />
+                {showAuth ? "Hide Authentication" : "Add Authentication"}
+              </button>
+
+              <AnimatePresence>
+                {showAuth && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden space-y-3"
+                  >
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Username</label>
+                      <input type="text" placeholder="sip-username" className={inputCls} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Password</label>
+                      <input type="password" placeholder="••••••••" className={inputCls} />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-700 hover:bg-white border border-transparent hover:border-gray-200 transition-all"
+              >
+                Cancel
+              </button>
+              <motion.button
+                onClick={handleImport}
+                disabled={!canImport}
+                whileHover={canImport ? { scale: 1.02 } : {}}
+                whileTap={canImport ? { scale: 0.98 } : {}}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 text-white text-sm font-semibold shadow-md shadow-sky-500/20 hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Upload className="w-3.5 h-3.5" /> Import Number
+              </motion.button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
 
