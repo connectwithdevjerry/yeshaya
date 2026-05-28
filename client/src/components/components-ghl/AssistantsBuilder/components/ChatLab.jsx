@@ -1,167 +1,162 @@
+// src/components/components-ghl/AssistantsBuilder/components/ChatLab.jsx
 import React, { useState, useRef, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
-import { Info, Send } from "lucide-react";
+import { Send, MessageSquare, Trash2, Info, Bot, Sparkles } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { sendChatMessage } from "../../../../store/slices/assistantsSlice";
 import { getAssistantIdFromUrl } from "../../../../utils/urlUtils";
 
 export const ChatLabView = () => {
-  const dispatch = useDispatch();
+  const dispatch     = useDispatch();
   const [searchParams] = useSearchParams();
-  const assistantId = getAssistantIdFromUrl(searchParams);
+  const assistantId  = getAssistantIdFromUrl(searchParams);
 
-  const [messages, setMessages] = useState([]);
+  const [messages,   setMessages]   = useState([]);
   const [inputValue, setInputValue] = useState("");
-  const scrollRef = useRef(null);
+  const scrollRef    = useRef(null);
 
   const assistantName = useSelector(
-    (state) => state.assistants?.selectedAssistant?.name || "Assistant",
+    (s) => s.assistants?.selectedAssistant?.name || "Assistant"
   );
 
-  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   const handleSend = async () => {
     if (!inputValue.trim() || !assistantId) return;
-
     const userText = inputValue;
-    setMessages((prev) => [...prev, { role: "user", content: userText }]);
+    setMessages((p) => [...p, { role: "user", content: userText }]);
     setInputValue("");
-
-    // Add thinking state
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", isLoading: true, name: assistantName },
-    ]);
+    setMessages((p) => [...p, { role: "assistant", isLoading: true, name: assistantName }]);
 
     try {
-      const response = await dispatch(
-        sendChatMessage({ assistantId, userText }),
-      ).unwrap();
-
-      // Accessing response.reply based on your JSON example:
-      // { "status": true, "reply": [{ "role": "assistant", "content": "..." }] }
+      const response = await dispatch(sendChatMessage({ assistantId, userText })).unwrap();
       const botReply = response.reply?.[0]?.content || "No response received.";
-
-      setMessages((prev) => {
-        const updated = [...prev];
-        const lastIndex = updated.length - 1;
-        updated[lastIndex] = {
-          role: "assistant",
-          isLoading: false,
-          name: assistantName,
-          content: botReply,
-        };
+      setMessages((p) => {
+        const updated = [...p];
+        updated[updated.length - 1] = { role: "assistant", isLoading: false, name: assistantName, content: botReply };
         return updated;
       });
-    } catch (error) {
-      console.error("Chat Error:", error);
-      // ... handle error UI
+    } catch {
+      setMessages((p) => {
+        const updated = [...p];
+        updated[updated.length - 1] = { role: "assistant", isLoading: false, name: assistantName, content: "Something went wrong. Please try again." };
+        return updated;
+      });
     }
   };
 
   return (
-    <div className="flex flex-col flex-1 h-full bg-white p-2 relative">
-      <div className="flex justify-between items-center mb-2 px-4 text-sm text-gray-700">
-        <div className="flex items-center space-x-3 ml-auto">
-          <span className="text-blue-500 px-3 py-1 border border-blue-100 rounded-md text-xs font-medium bg-blue-50/30">
-            Live Lab Mode
+    <div className="flex flex-col h-full bg-white">
+      {/* Sub-header */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gray-50/40">
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 border border-indigo-100 rounded-xl text-[11px] font-semibold text-indigo-600">
+            <Sparkles className="w-3 h-3" /> Live Lab Mode
           </span>
+          <span className="text-[11px] text-gray-400 flex items-center gap-1">
+            <Info className="w-3 h-3" /> No tools or appointments
+          </span>
+        </div>
+        {messages.length > 0 && (
           <button
             onClick={() => setMessages([])}
-            className="text-blue-600 px-3 py-1 border border-blue-100 rounded-md text-xs font-medium hover:bg-blue-50"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-gray-200 text-xs font-medium text-gray-500 hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50 transition-all"
           >
-            Clear conversation
+            <Trash2 className="w-3 h-3" /> Clear
           </button>
-          <Info className="w-4 h-4 text-gray-400" />
-        </div>
+        )}
       </div>
 
-      <div className="mx-4 p-2 mb-8 bg-yellow-50 rounded-lg border border-yellow-200 text-yellow-800 flex items-center justify-center text-sm font-medium">
-        <Info className="w-4 h-4 mr-2" />
-        Labs do not call tools or book appointments
-      </div>
-
-      {/* Main Content Area */}
-      <div
-        className="flex-1 overflow-y-auto px-4 custom-scrollbar"
-        ref={scrollRef}
-      >
-        {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center space-y-2">
-            <div className="text-2xl mb-1">🤖</div>
-            <h3 className="text-xl font-bold text-gray-900">Chat Lab</h3>
-            <p className="text-sm text-gray-500 font-medium">
-              Test your assistant's knowledge and prompts here.
-            </p>
-          </div>
-        ) : (
-          <div className="max-w-4xl mx-auto space-y-8 pt-4">
-            {messages.map((msg, index) => (
-              <div
-                key={index}
-                className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-6 space-y-5">
+        <AnimatePresence>
+          {messages.length === 0 ? (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="h-full min-h-[300px] flex flex-col items-center justify-center gap-4"
+            >
+              <div className="relative">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                  <Bot className="w-7 h-7 text-white" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-400 border-2 border-white" />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-bold text-gray-800">Chat Lab</p>
+                <p className="text-xs text-gray-400 mt-1">Test your assistant's responses below</p>
+              </div>
+            </motion.div>
+          ) : (
+            messages.map((msg, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18 }}
+                className={`flex max-w-4xl mx-auto ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 {msg.role === "user" ? (
                   <div className="flex flex-col items-end gap-1">
-                    <span className="text-xs font-bold text-gray-500 mr-1">
-                      You
-                    </span>
-                    <div className="bg-white border border-gray-200 px-4 py-2 rounded-xl text-gray-800 shadow-sm font-medium">
+                    <span className="text-[10px] font-bold text-gray-400 mr-1">You</span>
+                    <div className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm font-medium shadow-md shadow-indigo-500/15 max-w-sm">
                       {msg.content}
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-start gap-2 w-full max-w-[80%]">
+                  <div className="flex flex-col items-start gap-1.5 max-w-[75%]">
                     <div className="flex items-center gap-2 pl-1">
-                      <span className="text-lg">🤖</span>
-                      <span className="text-xs font-bold text-gray-800">
-                        {msg.name}
-                      </span>
+                      <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+                        <Bot className="w-3 h-3 text-white" />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-600">{msg.name}</span>
                     </div>
                     {msg.isLoading ? (
-                      <div className="w-full max-w-[400px] bg-[#f8f9fa] border border-gray-100 p-4 rounded-xl space-y-3">
-                        <div className="h-3 bg-gray-200 rounded-full w-full animate-pulse"></div>
-                        <div className="h-3 bg-gray-200 rounded-full w-[85%] animate-pulse"></div>
-                        <div className="h-3 bg-gray-200 rounded-full w-[40%] animate-pulse"></div>
+                      <div className="bg-gray-50 border border-gray-100 px-4 py-3 rounded-2xl rounded-tl-sm space-y-2.5 min-w-[180px]">
+                        {[100, 80, 50].map((w, j) => (
+                          <div key={j} className={`h-2 bg-gray-200 rounded-full animate-pulse`} style={{ width: `${w}%` }} />
+                        ))}
                       </div>
                     ) : (
-                      <div className="w-full bg-[#4f86f7] text-white p-4 rounded-xl shadow-sm text-sm font-medium leading-relaxed whitespace-pre-wrap">
+                      <div className="bg-gray-50 border border-gray-100 text-gray-800 px-4 py-2.5 rounded-2xl rounded-tl-sm text-sm leading-relaxed whitespace-pre-wrap shadow-sm">
                         {msg.content}
                       </div>
                     )}
                   </div>
                 )}
-              </div>
-            ))}
-          </div>
-        )}
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
       </div>
 
-      <div className="max-w-4xl w-full mx-auto px-6 pb-4 pt-4">
-        <div className="relative">
+      {/* Input */}
+      <div className="px-5 pb-5 pt-3 border-t border-gray-100 bg-white">
+        <div className="max-w-4xl mx-auto relative">
           <input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            className="w-full p-4 pr-14 border border-gray-200 rounded-xl outline-none text-gray-800 shadow-sm focus:ring-2 focus:ring-blue-100"
-            placeholder="Message your AI"
+            placeholder="Message your AI…"
+            className="w-full pl-4 pr-14 py-3.5 border border-gray-200 rounded-2xl text-sm outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white placeholder:text-gray-300"
           />
-          <button
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={handleSend}
             disabled={!inputValue.trim()}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-[#10b981] text-white rounded-lg shadow-sm disabled:opacity-50"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 disabled:opacity-40 transition-all"
           >
-            <Send className="w-5 h-5 rotate-45" />
-          </button>
+            <Send className="w-3.5 h-3.5 rotate-45" />
+          </motion.button>
         </div>
-        <p className="mt-3 text-xs text-gray-400 text-center">
-          AI can make mistakes - check important information.
+        <p className="mt-2 text-[10px] text-gray-400 text-center">
+          AI can make mistakes — always verify important information.
         </p>
       </div>
     </div>
