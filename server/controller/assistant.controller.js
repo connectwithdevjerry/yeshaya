@@ -8,6 +8,12 @@ const fs = require("fs");
 const { fillTemplate, extractText } = require("../helperFunctions");
 const { MAKE_OUTBOUND_CALL } = require("../constants");
 const emailHelper = require("../resendObject");
+const { createNotification } = require("./notification.controller");
+const {
+  validateContact,
+  findDuplicateContact,
+  mergeContactData,
+} = require("../helpers/contactValidator");
 
 const toolsProperties = {
   scrape_website: {
@@ -928,15 +934,21 @@ const createTool = async (toolName, userId) => {
 const getUserAnalytics = async (req, res) => {
   try {
     const userId = req.user;
+    const { subaccountId } = req.query;
     const user = await userModel.findById(userId);
 
     if (!user) return res.send({ message: "User not found" });
+
+    // Scope to a single sub-account when provided, otherwise all (agency-wide)
+    const targetSubs = subaccountId
+      ? user.ghlSubAccountIds.filter((sub) => sub.accountId === subaccountId)
+      : user.ghlSubAccountIds;
 
     // 1. Gather distinct Assistant IDs and Phone counts
     let assistantIds = [];
     let phoneNumbersCount = 0;
 
-    user.ghlSubAccountIds.forEach((sub) => {
+    targetSubs.forEach((sub) => {
       sub.vapiAssistants.forEach((ast) => {
         assistantIds.push(ast.assistantId);
         phoneNumbersCount += ast.numberDetails.length;
@@ -1696,13 +1708,32 @@ const getSubGhlTokens = async (userId, accountId) => {
   const SUB_CLIENT_ID = process.env.GHL_SUB_CLIENT_ID;
   const SUB_CLIENT_SECRET = process.env.GHL_SUB_CLIENT_SECRET;
 
+  // Match by accountId only (ignore connected flag so we can still detect a
+  // sub-account that exists but has lost its token)
   const targetSubaccount = ghlSubAccountIds.find(
-    (sub) => sub.accountId === accountId && sub.connected,
+    (sub) => sub.accountId === accountId,
   );
+
+  if (!targetSubaccount) {
+    console.warn(`⚠️ getSubGhlTokens → sub-account ${accountId} not found for user ${userId}`);
+    const err = new Error("GHL_RECONNECT_REQUIRED");
+    err.code = "GHL_RECONNECT_REQUIRED";
+    throw err;
+  }
 
   const refreshToken = targetSubaccount.ghlSubRefreshToken;
 
-  console.log({ refreshToken });
+  // No token stored → never fully connected / token wiped. Don't call GHL with
+  // an empty token (which returns a confusing 422). Signal reconnect instead.
+  if (!refreshToken || typeof refreshToken !== "string") {
+    console.warn(`⚠️ getSubGhlTokens → no refresh token for sub-account ${accountId}. Reconnect required.`);
+    targetSubaccount.connected = false;
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+    const err = new Error("GHL_RECONNECT_REQUIRED");
+    err.code = "GHL_RECONNECT_REQUIRED";
+    throw err;
+  }
 
   try {
     const url = "https://services.leadconnectorhq.com/oauth/token";
@@ -1740,7 +1771,28 @@ const getSubGhlTokens = async (userId, accountId) => {
       "Error refreshing GHL Access Token:",
       error.response?.data || error.message,
     );
-    throw Error(error.message);
+
+    // If the refresh token is dead/revoked, mark the sub-account as disconnected
+    // so the UI can prompt the user to reconnect, instead of failing forever.
+    const ghlError = error.response?.data?.error;
+    if (ghlError === "invalid_grant") {
+      try {
+        targetSubaccount.connected = false;
+        user.markModified("ghlSubAccountIds");
+        await user.save();
+        console.warn(
+          `⚠️ Sub-account ${accountId} marked disconnected — refresh token invalid. Reconnect required.`,
+        );
+      } catch (saveErr) {
+        console.error("Failed to mark sub-account disconnected:", saveErr.message);
+      }
+
+      const err = new Error("GHL_RECONNECT_REQUIRED");
+      err.code = "GHL_RECONNECT_REQUIRED";
+      throw err;
+    }
+
+    throw new Error(error.message);
   }
 };
 
@@ -1799,9 +1851,19 @@ const getAvailableCalendars = async (req, res) => {
     });
 
   try {
-    const tkns = await getSubGhlTokens(userId, accountId);
-
-    console.log({ tkns });
+    let tkns;
+    try {
+      tkns = await getSubGhlTokens(userId, accountId);
+    } catch (err) {
+      if (err.code === "GHL_RECONNECT_REQUIRED") {
+        return res.status(200).json({
+          status: false,
+          reconnectRequired: true,
+          message: "This sub-account's GoHighLevel connection has expired. Please reconnect.",
+        });
+      }
+      throw err;
+    }
 
     const response = await axios.get(
       `https://services.leadconnectorhq.com/calendars/`,
@@ -1829,60 +1891,65 @@ const getAvailableCalendars = async (req, res) => {
 };
 
 const getConnectedCalendar = async (req, res) => {
-  const userId = req.user;
-  const { accountId, assistantId } = req.query;
-  const user = await userModel.findById(userId);
+  try {
+    const userId = req.user;
+    const { accountId, assistantId } = req.query;
+    const user = await userModel.findById(userId);
 
-  const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === accountId && sub.connected,
-  );
+    const targetSubaccount = user.ghlSubAccountIds.find(
+      (sub) => sub.accountId === accountId && sub.connected,
+    );
 
-  if (!targetSubaccount)
-    return res.send({
-      status: false,
-      message: "This subaccount does not exist!",
-    });
-
-  const targetAssistant = targetSubaccount.vapiAssistants.find(
-    (target) => target.assistantId === assistantId,
-  );
-
-  if (!targetAssistant)
-    return res.send({
-      status: false,
-      message: "This assistant does not exist!",
-    });
-
-  const tkns = await getSubGhlTokens(userId, accountId);
-
-  let config = {
-    method: "get",
-    maxBodyLength: Infinity,
-    // url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
-    url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${tkns.data.access_token}`,
-      Version: "2021-04-15",
-    },
-  };
-
-  axios
-    .request(config)
-    .then((response) => {
-      // console.log(JSON.stringify(response.data));
-      return res.send({
-        status: true,
-        data: response.data || {},
-      });
-    })
-    .catch((error) => {
-      // console.log(error);
+    if (!targetSubaccount)
       return res.send({
         status: false,
-        message: error.message || "This assistant does not exist!",
+        message: "This subaccount does not exist!",
       });
+
+    const targetAssistant = targetSubaccount.vapiAssistants.find(
+      (target) => target.assistantId === assistantId,
+    );
+
+    if (!targetAssistant)
+      return res.send({
+        status: false,
+        message: "This assistant does not exist!",
+      });
+
+    let tkns;
+    try {
+      tkns = await getSubGhlTokens(userId, accountId);
+    } catch (err) {
+      if (err.code === "GHL_RECONNECT_REQUIRED") {
+        return res.status(200).json({
+          status: false,
+          reconnectRequired: true,
+          message: "This sub-account's GoHighLevel connection has expired. Please reconnect.",
+        });
+      }
+      throw err;
+    }
+
+    const config = {
+      method: "get",
+      maxBodyLength: Infinity,
+      url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${tkns.data.access_token}`,
+        Version: "2021-04-15",
+      },
+    };
+
+    const response = await axios.request(config);
+    return res.send({ status: true, data: response.data || {} });
+  } catch (error) {
+    console.error("Error fetching connected calendar:", error.message);
+    return res.send({
+      status: false,
+      message: error.message || "Failed to fetch connected calendar",
     });
+  }
 };
 
 const deleteAssistantTool = async (req, res) => {
@@ -2176,11 +2243,21 @@ const linkKnowledgeBaseToAssistant = async (req, res) => {
 
 const getAllKnowledgeBases = async (req, res) => {
   const userId = req.user;
+  const { subaccountId } = req.query;
 
   try {
     const user = await userModel.findById(userId);
 
-    const toolPromises = user.allKnowledgeBaseToolIds.map(
+    // Scope to the sub-account's KBs when provided, else agency-level list
+    let toolIds;
+    if (subaccountId) {
+      const sub = user.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+      toolIds = sub?.subAccountKnowledgeBaseToolIds || [];
+    } else {
+      toolIds = user.allKnowledgeBaseToolIds || [];
+    }
+
+    const toolPromises = toolIds.map(
       (id) =>
         axios
           .get(`https://api.vapi.ai/tool/${id}`, {
@@ -2341,6 +2418,7 @@ const deleteKnowledgeBase = async (req, res) => {
       {
         $pull: {
           allKnowledgeBaseToolIds: toolId,
+          "ghlSubAccountIds.$[].subAccountKnowledgeBaseToolIds": toolId,
           "ghlSubAccountIds.$[].vapiAssistants.$[].knowledgeBaseToolIds":
             toolId,
         },
@@ -2436,10 +2514,19 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
 
 const addKnowledgeBase = async (req, res) => {
   const userId = req.user;
-  const { knowledgeBaseUrl, type, title } = req.body;
+  const { knowledgeBaseUrl, type, title, subaccountId } = req.body;
 
   try {
     const user = await userModel.findById(userId);
+
+    // Resolve the target sub-account (scopes the KB to this location)
+    const targetSubaccount = subaccountId
+      ? user.ghlSubAccountIds.find((sub) => sub.accountId === subaccountId)
+      : null;
+
+    if (subaccountId && !targetSubaccount) {
+      return res.status(404).json({ status: false, message: "Sub-account not found" });
+    }
 
     // const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
     //   sub.vapiAssistants.some(
@@ -2628,13 +2715,26 @@ const addKnowledgeBase = async (req, res) => {
     // user.markModified("ghlSubAccountIds");
     // await user.save();
 
-    user.allKnowledgeBaseToolIds.push(toolId);
+    // Store against the sub-account when provided, else fall back to agency-level
+    if (targetSubaccount) {
+      if (!Array.isArray(targetSubaccount.subAccountKnowledgeBaseToolIds)) {
+        targetSubaccount.subAccountKnowledgeBaseToolIds = [];
+      }
+      targetSubaccount.subAccountKnowledgeBaseToolIds.push(toolId);
+    } else {
+      user.allKnowledgeBaseToolIds.push(toolId);
+    }
     user.markModified("ghlSubAccountIds");
     await user.save();
 
-    // console.log(
-    //   `Knowledge base added and linked successfully to Assistant ${assistantId}.`
-    // );
+    // Notify on new knowledge base
+    await createNotification({
+      userId,
+      type: "knowledge_base_added",
+      title: "Knowledge Base Added",
+      message: `Knowledge base "${title || "Untitled"}" has been added and is ready to link to your assistants.`,
+      metadata: { toolId, title, type },
+    });
 
     return res.send({ status: true, data: toolResponse.data });
   } catch (error) {
@@ -2706,12 +2806,17 @@ const getAssistantKnowledgeBases = async (req, res) => {
 };
 
 const getAssistantCallLogs = async (req, res) => {
-  // const { assistantIds } = req.body; // Expecting ["id1", "id2"]
   const userId = req.user;
+  const { subaccountId } = req.query;
 
   const user = await userModel.findById(userId);
 
-  const validAssistantIds = user.ghlSubAccountIds.flatMap((subAccount) =>
+  // Scope to one sub-account when provided, otherwise all
+  const targetSubs = subaccountId
+    ? user.ghlSubAccountIds.filter((sub) => sub.accountId === subaccountId)
+    : user.ghlSubAccountIds;
+
+  const validAssistantIds = targetSubs.flatMap((subAccount) =>
     subAccount.vapiAssistants.map((assistant) => assistant.assistantId),
   );
 
@@ -3068,21 +3173,18 @@ const sendChatMessage = async (req, res) => {
 
   const user = await userModel.findById(userId);
 
-  content = "Wallet balance is too low. Please top up to continue.";
-
-  if (user.walletBalance <= 0) {
-    req.session.chatHistory[assistantId].push({
-      role: "assistant",
-      content,
-    });
-    return res.send({ status: false, reply: content });
-  }
-
+  // Initialize session chat history before any usage
   if (!req.session.chatHistory) {
     req.session.chatHistory = {};
   }
   if (!req.session.chatHistory[assistantId]) {
     req.session.chatHistory[assistantId] = [];
+  }
+
+  if (user.walletBalance <= 0) {
+    const content = "Wallet balance is too low. Please top up to continue.";
+    req.session.chatHistory[assistantId].push({ role: "assistant", content });
+    return res.send({ status: false, reply: [{ role: "assistant", content }] });
   }
 
   try {
@@ -3095,10 +3197,10 @@ const sendChatMessage = async (req, res) => {
     console.log("Sending messages to Vapi:", messages);
 
     const response = await axios.post(
-      "https://api.vapi.ai/chat", // Corrected Endpoint
+      "https://api.vapi.ai/chat",
       {
-        assistantId: assistantId, // Passed in the body
-        input: messages, // Vapi expects 'input' or 'messages'
+        assistantId,
+        input: messages,
       },
       {
         headers: {
@@ -3108,25 +3210,21 @@ const sendChatMessage = async (req, res) => {
       },
     );
 
-    const amountToDeduct = response.data.cost || 0;
-    const type = "chat_message";
-
-    user.walletBalance -= amountToDeduct;
-    await user.save();
-
-    user.billingEvents.push({
-      callId: response.data.id,
-      type,
-      amount: amountToDeduct,
-    });
-
     console.log("Received response from Vapi:", response.data);
 
-    req.session.chatHistory[assistantId].push({
-      role: "user",
-      content: userText,
+    const amountToDeduct = response.data.cost || 0;
+    user.walletBalance -= amountToDeduct;
+    user.billingEvents.push({
+      callId: response.data.id,
+      type: "chat_message",
+      amount: amountToDeduct,
     });
-    req.session.chatHistory[assistantId].push(response.data.output[0]);
+    await user.save();
+
+    req.session.chatHistory[assistantId].push({ role: "user", content: userText });
+    if (response.data.output?.[0]) {
+      req.session.chatHistory[assistantId].push(response.data.output[0]);
+    }
 
     return res.send({ status: true, reply: response.data.output });
   } catch (error) {
@@ -3144,11 +3242,19 @@ const sendChatMessage = async (req, res) => {
 
 const getContacts = async (req, res) => {
   const userId = req.user;
+  const { subaccountId } = req.query;
   try {
     const user = await userModel.findById(userId);
-    const contacts = user.ghlSubAccountIds
-      .map((acc) => acc.savedContacts)
-      .flat(); // assuming first subaccount for simplicity
+
+    let contacts;
+    if (subaccountId) {
+      // Only this sub-account's contacts
+      const sub = user.ghlSubAccountIds.find((acc) => acc.accountId === subaccountId);
+      contacts = sub ? sub.savedContacts : [];
+    } else {
+      // No scope provided → all (agency-wide)
+      contacts = user.ghlSubAccountIds.map((acc) => acc.savedContacts).flat();
+    }
 
     return res.send({ status: true, data: contacts });
   } catch (error) {
@@ -3167,26 +3273,83 @@ const createContact = async (req, res) => {
   try {
     const userId = req.user;
     const { subaccountId } = req.query;
-    const contactData = req.body;
+    const rawData = req.body;
 
     const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
 
-    user.ghlSubAccountIds
-      .find((subaccount) => subaccount.accountId === subaccountId)
-      .savedContacts.push(contactData);
+    const subaccount = user.ghlSubAccountIds.find(
+      (s) => s.accountId === subaccountId,
+    );
+    if (!subaccount) {
+      return res.status(404).json({ status: false, message: "Subaccount not found" });
+    }
 
+    // 1. Validate + normalise
+    const { valid, errors, cleaned } = validateContact(rawData);
+    if (!valid) {
+      console.warn("⚠️ createContact → validation failed:", errors);
+      return res.status(400).json({
+        status: false,
+        message: Object.values(errors)[0],
+        errors,
+      });
+    }
+
+    // 2. Duplicate detection
+    const duplicate = findDuplicateContact(subaccount.savedContacts, {
+      email: cleaned.email,
+      phone: cleaned.phone,
+    });
+
+    if (duplicate) {
+      // Merge — fill empty fields on the existing contact
+      const changes = mergeContactData(duplicate, cleaned);
+      if (Object.keys(changes).length > 0) {
+        duplicate.set(changes);
+        user.markModified("ghlSubAccountIds");
+        await user.save();
+      }
+      console.log(`🔀 createContact → merged into existing contact ${duplicate._id}`);
+      return res.send({
+        status: true,
+        merged: true,
+        message: "Matched an existing contact and updated it.",
+        data: duplicate,
+      });
+    }
+
+    // 3. No duplicate → create new
+    subaccount.savedContacts.push(cleaned);
+    user.markModified("ghlSubAccountIds");
     await user.save();
 
-    return res.send({ status: true, message: "Contact created successfully." });
+    const newContact = subaccount.savedContacts[subaccount.savedContacts.length - 1];
+
+    // Notify on new contact
+    const contactName =
+      [cleaned.firstName, cleaned.lastName].filter(Boolean).join(" ") ||
+      cleaned.email || cleaned.phone || "Unknown";
+    await createNotification({
+      userId,
+      type: "new_contact",
+      title: "New Contact Added",
+      message: `${contactName} has been added to your contacts.`,
+      metadata: { subaccountId, contactName, email: cleaned.email, phone: cleaned.phone },
+    });
+
+    return res.send({
+      status: true,
+      merged: false,
+      message: "Contact created successfully.",
+      data: newContact,
+    });
   } catch (error) {
-    console.error(
-      "Error creating Vapi contact:",
-      error.response?.data || error.message,
-    );
-    return {
+    console.error("Error creating contact:", error.response?.data || error.message);
+    return res.status(500).json({
       status: false,
       message: error.response?.data || error.message,
-    };
+    });
   }
 };
 
@@ -3256,8 +3419,19 @@ const updateContact = async (req, res) => {
         .send({ status: false, message: "No data provided." });
     }
 
+    // Validate the changed fields (partial = only check what's provided)
+    const { valid, errors, cleaned } = validateContact(updatedData, { partial: true });
+    if (!valid) {
+      console.warn("⚠️ updateContact → validation failed:", errors);
+      return res.status(400).json({
+        status: false,
+        message: Object.values(errors)[0],
+        errors,
+      });
+    }
+
     // 3. Update the data using .set()
-    contact.set(updatedData);
+    contact.set(cleaned);
 
     // 4. Save the parent document
     await user.save();
@@ -3407,6 +3581,208 @@ const updateTeamNotes = async (req, res) => {
   }
 };
 
+// ─── Bulk import contacts (CSV) ──────────────────────────────────────────────
+const importContacts = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId } = req.query;
+    const { contacts } = req.body; // array of contact objects
+
+    console.log(`🔄 importContacts → ${contacts?.length || 0} rows for subaccount ${subaccountId}`);
+
+    if (!Array.isArray(contacts) || contacts.length === 0) {
+      return res.status(400).json({ status: false, message: "No contacts provided" });
+    }
+    if (contacts.length > 1000) {
+      return res.status(400).json({ status: false, message: "Maximum 1000 contacts per import" });
+    }
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    const subaccount = user.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+    if (!subaccount) {
+      return res.status(404).json({ status: false, message: "Subaccount not found" });
+    }
+
+    const result = { added: 0, merged: 0, skipped: 0, errors: [] };
+
+    contacts.forEach((raw, index) => {
+      // Validate + normalise
+      const { valid, errors, cleaned } = validateContact(raw);
+      if (!valid) {
+        result.skipped += 1;
+        result.errors.push({ row: index + 1, reason: Object.values(errors)[0] });
+        return;
+      }
+
+      // Dedup against already-stored AND already-processed-in-this-batch
+      const duplicate = findDuplicateContact(subaccount.savedContacts, {
+        email: cleaned.email,
+        phone: cleaned.phone,
+      });
+
+      if (duplicate) {
+        const changes = mergeContactData(duplicate, cleaned);
+        if (Object.keys(changes).length > 0) {
+          duplicate.set(changes);
+          result.merged += 1;
+        } else {
+          result.skipped += 1;
+        }
+      } else {
+        subaccount.savedContacts.push(cleaned);
+        result.added += 1;
+      }
+    });
+
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    // Notify
+    await createNotification({
+      userId,
+      type: "new_contact",
+      title: "Contacts Imported",
+      message: `${result.added} added, ${result.merged} merged, ${result.skipped} skipped.`,
+      metadata: { subaccountId, ...result },
+    });
+
+    console.log("✅ importContacts → result:", result);
+    return res.send({ status: true, message: "Import complete", result });
+  } catch (error) {
+    console.error("❌ importContacts error:", error.message);
+    return res.status(500).json({ status: false, message: error.message });
+  }
+};
+
+// ─── Live GHL location details for a sub-account (client info) ────────────────
+const getSubAccountGhlDetails = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId } = req.query;
+    if (!subaccountId) {
+      return res.status(400).json({ status: false, message: "subaccountId is required" });
+    }
+
+    let tkns;
+    try {
+      tkns = await getSubGhlTokens(userId, subaccountId);
+    } catch (err) {
+      if (err.code === "GHL_RECONNECT_REQUIRED") {
+        return res.status(200).json({
+          status: false,
+          reconnectRequired: true,
+          message: "GoHighLevel connection expired. Reconnect to load client info.",
+        });
+      }
+      throw err;
+    }
+
+    const response = await axios.get(
+      `https://services.leadconnectorhq.com/locations/${subaccountId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${tkns.data.access_token}`,
+          Version: "2021-07-28",
+          Accept: "application/json",
+        },
+      },
+    );
+
+    const loc = response.data?.location || response.data || {};
+    const addressParts = [loc.address, loc.city, loc.state, loc.postalCode, loc.country].filter(Boolean);
+
+    const business = {
+      name:    loc.name || "",
+      email:   loc.email || loc.business?.email || "",
+      phone:   loc.phone || loc.business?.phone || "",
+      website: loc.website || loc.business?.website || "",
+      address: addressParts.join(", "),
+      timezone: loc.timezone || "",
+    };
+
+    return res.status(200).json({ status: true, data: business });
+  } catch (error) {
+    console.error("❌ getSubAccountGhlDetails error:", error.response?.data || error.message);
+    return res.status(500).json({ status: false, message: error.message });
+  }
+};
+
+// ─── Sub-account spend breakdown ─────────────────────────────────────────────
+const getSubAccountSpend = async (req, res) => {
+  try {
+    const userId = req.user;
+    console.log("🔄 getSubAccountSpend → userId:", userId);
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    // 1. Build map: assistantId → accountId
+    const assistantToAccount = {};
+    const accountAssistantCount = {};
+
+    user.ghlSubAccountIds.forEach((sub) => {
+      const accountId = sub.accountId;
+      accountAssistantCount[accountId] = (sub.vapiAssistants || []).length;
+      (sub.vapiAssistants || []).forEach((ast) => {
+        if (ast.assistantId) {
+          assistantToAccount[ast.assistantId] = accountId;
+        }
+      });
+    });
+
+    const uniqueAssistantIds = Object.keys(assistantToAccount);
+
+    if (uniqueAssistantIds.length === 0) {
+      console.log("ℹ️ getSubAccountSpend → no assistants found");
+      return res.status(200).json({ status: true, data: [] });
+    }
+
+    // 2. Fetch all calls from Vapi in parallel per assistant
+    console.log(`📞 getSubAccountSpend → fetching calls for ${uniqueAssistantIds.length} assistants`);
+
+    const callRequests = uniqueAssistantIds.map((id) =>
+      axios.get("https://api.vapi.ai/call", {
+        params:  { assistantId: id },
+        headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}` },
+      }).then((r) => r.data.map((call) => ({ ...call, _assistantId: id })))
+        .catch(() => []) // if one assistant fails, skip it
+    );
+
+    const callArrays = await Promise.all(callRequests);
+    const allCalls   = callArrays.flat();
+
+    // 3. Aggregate per sub-account
+    const spendMap = {};
+
+    // Initialise all accounts with zeros (so accounts with 0 calls still appear)
+    user.ghlSubAccountIds.forEach((sub) => {
+      spendMap[sub.accountId] = {
+        accountId:      sub.accountId,
+        totalCalls:     0,
+        totalSpend:     0,
+        assistantCount: accountAssistantCount[sub.accountId] || 0,
+      };
+    });
+
+    allCalls.forEach((call) => {
+      const accountId = assistantToAccount[call._assistantId];
+      if (!accountId || !spendMap[accountId]) return;
+      spendMap[accountId].totalCalls  += 1;
+      spendMap[accountId].totalSpend  += call.cost || 0;
+    });
+
+    const data = Object.values(spendMap);
+    console.log(`✅ getSubAccountSpend → ${data.length} sub-accounts, ${allCalls.length} total calls`);
+
+    return res.status(200).json({ status: true, data });
+  } catch (err) {
+    console.error("❌ getSubAccountSpend error:", err.message);
+    return res.status(500).json({ status: false, message: err.message });
+  }
+};
+
 // Execute the main function
 module.exports = {
   createAssistantAndSave,
@@ -3448,6 +3824,9 @@ module.exports = {
   getUserAnalytics,
   getTeamNotes,
   updateTeamNotes,
+  getSubAccountSpend,
+  getSubAccountGhlDetails,
+  importContacts,
 };
 
 // what's left

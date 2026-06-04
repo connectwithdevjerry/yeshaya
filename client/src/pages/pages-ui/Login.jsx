@@ -57,12 +57,9 @@ const Login = () => {
 
   useEffect(() => {
     if (isAuthenticated && accessToken) {
-      sessionStorage.setItem("token", accessToken);
-      sessionStorage.setItem("user", JSON.stringify(user));
-      localStorage.setItem("acces", accessToken);
       navigate("/dashboard", { replace: true });
     }
-  }, [isAuthenticated, accessToken, user, navigate]);
+  }, [isAuthenticated, accessToken, navigate]);
 
   useEffect(() => {
     if (typeof error === "string") {

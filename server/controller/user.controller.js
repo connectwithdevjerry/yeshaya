@@ -26,6 +26,9 @@ const myPayload = (user) => ({
   isActive: user.isActive,
   email: user.email,
   dateCreated: user.dateCreated,
+  // Team context — lets middleware resolve the agency + role without a DB hit
+  agencyOwnerId: user.agencyOwnerId ? user.agencyOwnerId.toString() : null,
+  role: user.role || "owner",
 });
 
 const signup = async (req, res, next) => {
@@ -531,15 +534,18 @@ const getCompanyDetails = async (req, res, next) => {
 
 const getUserDetails = async (req, res) => {
   try {
-    const user = await userModel.findById(req.user);
+    // Profile is the acting person's own details, not the agency owner's
+    const user = await userModel.findById(req.actingUserId || req.user);
 
     return res.send({
       status: true,
       data: {
-        email: user.email,
+        email:       user.email,
         phoneNumber: user.phoneNumber,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        firstName:   user.firstName,
+        lastName:    user.lastName,
+        role:        user.role || "owner",
+        isOwner:     !user.agencyOwnerId,
       },
     });
   } catch (error) {
@@ -548,6 +554,50 @@ const getUserDetails = async (req, res) => {
       status: false,
       message: error.message,
     });
+  }
+};
+
+const updateUserProfile = async (req, res) => {
+  try {
+    const userId = req.actingUserId || req.user; // edit your OWN profile
+    const { firstName, lastName, phoneNumber } = req.body;
+
+    console.log("🔄 updateUserProfile → userId:", userId, "| body:", req.body);
+
+    if (!firstName || !firstName.trim()) {
+      console.warn("⚠️ updateUserProfile → firstName missing");
+      return res.status(400).json({ status: false, message: "First name is required" });
+    }
+
+    const user = await userModel.findById(userId);
+    if (!user) {
+      console.warn("⚠️ updateUserProfile → user not found:", userId);
+      return res.status(404).json({ status: false, message: "User not found" });
+    }
+
+    if (firstName   !== undefined) user.firstName   = firstName.trim();
+    if (lastName    !== undefined) user.lastName    = lastName.trim();
+    if (phoneNumber !== undefined) user.phoneNumber = phoneNumber.trim();
+
+    await user.save();
+
+    const responseData = {
+      email:       user.email,
+      firstName:   user.firstName,
+      lastName:    user.lastName,
+      phoneNumber: user.phoneNumber,
+    };
+
+    console.log("✅ updateUserProfile → saved successfully:", responseData);
+
+    return res.status(200).json({
+      status: true,
+      message: "Profile updated successfully",
+      data: responseData,
+    });
+  } catch (error) {
+    console.error("❌ updateUserProfile error:", error.message, error.stack);
+    return res.status(500).json({ status: false, message: "Failed to update profile" });
   }
 };
 
@@ -638,18 +688,31 @@ const saveSnapshot = async (req, res) => {
     const { features, rebilling, resources, limits } = req.body;
     const user = await userModel.findById(req.user);
 
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    console.log("🔄 saveSnapshot → userId:", req.user, "| body:", req.body);
+
+    // Initialise snapshot if it doesn't exist yet
     if (!user.snapshot) user.snapshot = {};
 
-    if (features)   Object.assign(user.snapshot.features,   features);
-    if (rebilling)  Object.assign(user.snapshot.rebilling,  rebilling);
-    if (resources !== undefined) user.snapshot.resources = resources;
-    if (limits)     Object.assign(user.snapshot.limits,     limits);
+    // Safe spread merge — avoids crash if sub-object is undefined on fresh accounts
+    if (features !== undefined)
+      user.snapshot.features   = { ...(user.snapshot.features  || {}), ...features   };
+    if (rebilling !== undefined)
+      user.snapshot.rebilling  = { ...(user.snapshot.rebilling || {}), ...rebilling  };
+    if (resources !== undefined)
+      user.snapshot.resources  = resources;
+    if (limits !== undefined)
+      user.snapshot.limits     = { ...(user.snapshot.limits    || {}), ...limits     };
 
     user.markModified("snapshot");
     await user.save();
-    return res.send({ status: true, message: "Snapshot settings saved", data: user.snapshot });
+
+    console.log("✅ saveSnapshot → saved:", user.snapshot);
+    return res.status(200).json({ status: true, message: "Snapshot settings saved", data: user.snapshot });
   } catch (error) {
-    return res.send({ status: false, message: error.message });
+    console.error("❌ saveSnapshot error:", error.message);
+    return res.status(500).json({ status: false, message: error.message });
   }
 };
 
@@ -698,6 +761,7 @@ module.exports = {
   createCompanyDetails,
   updateCompanyDetails,
   getUserDetails,
+  updateUserProfile,
   getDomainSettings,
   saveDomainSettings,
   verifyDomain,

@@ -3,7 +3,11 @@ import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './slices/authSlice';
 import integrationReducer from './slices/integrationSlice';
 import assistantsReducer from "./slices/assistantsSlice";
-import numbersReducer from './slices/numberSlice'
+import numbersReducer from './slices/numberSlice';
+import notificationReducer from './slices/notificationSlice';
+import invoiceReducer from './slices/invoiceSlice';
+import teamReducer from './slices/teamSlice';
+import poolReducer from './slices/poolSlice';
 
 
 export const store = configureStore({
@@ -11,7 +15,11 @@ export const store = configureStore({
     auth: authReducer,
     integrations: integrationReducer,
     assistants: assistantsReducer,
-    numbers: numbersReducer
+    numbers: numbersReducer,
+    notifications: notificationReducer,
+    invoices: invoiceReducer,
+    team: teamReducer,
+    pools: poolReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

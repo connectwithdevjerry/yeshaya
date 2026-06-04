@@ -3,9 +3,11 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Download, Package } from "lucide-react";
 import WalletUsageContent from "./Wallet";
+import InvoicesContent from "./Invoices";
 
 const SUBTABS = [
   { id: "walletUsage",   label: "Wallet & Usage"  },
+  { id: "invoices",      label: "Invoices"        },
   { id: "subscriptions", label: "Subscriptions"   },
 ];
 
@@ -94,6 +96,7 @@ const BillingSettings = () => {
           transition={{ duration: 0.18 }}
         >
           {activeSubTab === "walletUsage"   && <WalletUsageContent />}
+          {activeSubTab === "invoices"      && <InvoicesContent />}
           {activeSubTab === "subscriptions" && <SubscriptionsContent />}
         </motion.div>
       </AnimatePresence>

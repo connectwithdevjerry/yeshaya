@@ -1,87 +1,63 @@
-import React, { useState } from 'react';
-import { X, Info, Loader2 } from 'lucide-react';
+// src/components/components-ghl/Knowledge/NameInputView.jsx
+import React, { useState } from "react";
+import { Loader2, Tag, ArrowLeft, Upload } from "lucide-react";
 
 const NameInputView = ({ onClose, onBack, onUpload, isLoading = false, error = null }) => {
-  const [name, setName] = useState('');
+  const [name, setName] = useState("");
 
-  const handleUpload = () => {
-    if (name.trim() && !isLoading) {
-      onUpload(name);
-    }
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && name.trim() && !isLoading) {
-      handleUpload();
-    }
-  };
+  const canSubmit = name.trim() && !isLoading;
 
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-semibold text-gray-800">Upload</h2>
-          <Info size={18} className="text-gray-400 cursor-help" />
+      <div className="p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+            <Tag className="w-4 h-4 text-indigo-500" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Give it a name</p>
+            <p className="text-xs text-gray-400 mt-0.5">Choose a descriptive name for this knowledge base.</p>
+          </div>
         </div>
-        <button 
-          onClick={onClose} 
-          className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
-          disabled={isLoading}
-        >
-          <X size={20} />
-        </button>
-      </div>
 
-      {/* Body - High padding to match the centered look */}
-      <div className="p-10">
         <div className="relative">
+          <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Name"
-            className="w-full p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-gray-700 shadow-sm disabled:bg-gray-50 disabled:cursor-not-allowed"
+            onKeyDown={(e) => e.key === "Enter" && canSubmit && onUpload(name)}
+            placeholder="e.g. Product FAQ, Support Docs…"
             autoFocus
             disabled={isLoading}
+            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-gray-50 placeholder:text-gray-300"
           />
         </div>
 
-        {/* Error Message */}
         {error && (
-          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-600">{error}</p>
+          <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+            <p className="text-xs text-red-600">{error}</p>
           </div>
         )}
       </div>
 
-      {/* Footer */}
-      <div className="flex justify-end items-center gap-4 px-6 py-4 border-t border-gray-100">
-        <button 
+      <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+        <button
           onClick={onBack}
           disabled={isLoading}
-          className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-700 hover:bg-white border border-transparent hover:border-gray-200 transition-all disabled:opacity-40"
         >
-          Close
+          <ArrowLeft className="w-3.5 h-3.5" /> Back
         </button>
-        <button 
-          onClick={handleUpload}
-          disabled={!name.trim() || isLoading}
-          className={`px-6 py-2 rounded-md text-white text-sm font-semibold shadow-sm transition-all flex items-center gap-2 ${
-            name.trim() && !isLoading
-              ? 'bg-[#a389f4] hover:bg-[#9175e6]' 
-              : 'bg-purple-300 cursor-not-allowed'
-          }`}
+        <button
+          onClick={() => canSubmit && onUpload(name)}
+          disabled={!canSubmit}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isLoading ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              <span>Uploading...</span>
-            </>
-          ) : (
-            <span>Upload</span>
-          )}
+          {isLoading
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</>
+            : <><Upload className="w-3.5 h-3.5" /> Upload</>
+          }
         </button>
       </div>
     </>

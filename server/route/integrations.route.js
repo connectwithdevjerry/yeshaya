@@ -20,11 +20,18 @@ const {
   getPurchasedNumbers,
   getVapiNumberImportStatus,
   deleteTwilioNumber,
+  deleteSubAccount,
+  toggleSubAccountFavorite,
+  toggleSubAccountArchive,
+  updateSubAccountMeta,
+  getSubAccountDetails,
+  disconnectGoHighLevel,
+  disconnectOpenAI,
+  disconnectStripe,
   ghlSubAuthorize,
   ghlSubOauthCallback,
-  // admin_super_signup,
 } = require("../controller/integrations.controller");
-const { verifyAccessToken } = require("../jwt_helpers");
+const { verifyAccessToken, requireRole } = require("../jwt_helpers");
 
 const {
   GHL_AUTHORIZE,
@@ -55,6 +62,15 @@ const {
   GET_CHARGING_DETAILS,
   UPDATE_CHARGING_DETAILS,
   AUTO_CARD_PAY_WEBHOOK,
+  DELETE_SUBACCOUNT,
+  TOGGLE_SUBACCOUNT_FAVORITE,
+  TOGGLE_SUBACCOUNT_ARCHIVE,
+  UPDATE_SUBACCOUNT_META,
+  GET_SUBACCOUNT_DETAILS,
+  GET_STRIPE_PORTAL,
+  DISCONNECT_GHL,
+  DISCONNECT_OPENAI,
+  DISCONNECT_STRIPE,
 } = require("../constants");
 const {
   stripeWebhook,
@@ -65,6 +81,7 @@ const {
   getChargingDetails,
   updateAutoChargingSettings,
   autoTopUpLowWalletUsers,
+  getStripePortalLink,
 } = require("../controller/payments.controller");
 
 router.post(TWILIO_CALL_RECEIVER, twilioCallReceiver);
@@ -99,6 +116,14 @@ router.get(
 );
 router.get(GET_PURCHASED_NUMBER, verifyAccessToken, getPurchasedNumbers);
 router.get(DELETE_TWILIO_NUMBER, verifyAccessToken, deleteTwilioNumber);
+router.delete(DELETE_SUBACCOUNT,           verifyAccessToken, requireRole("owner", "admin"), deleteSubAccount);
+router.put(TOGGLE_SUBACCOUNT_FAVORITE,     verifyAccessToken, toggleSubAccountFavorite);
+router.put(TOGGLE_SUBACCOUNT_ARCHIVE,      verifyAccessToken, toggleSubAccountArchive);
+router.put(UPDATE_SUBACCOUNT_META,         verifyAccessToken, updateSubAccountMeta);
+router.get(GET_SUBACCOUNT_DETAILS,         verifyAccessToken, getSubAccountDetails);
+router.delete(DISCONNECT_GHL,    verifyAccessToken, requireRole("owner", "admin"), disconnectGoHighLevel);
+router.delete(DISCONNECT_OPENAI, verifyAccessToken, requireRole("owner", "admin"), disconnectOpenAI);
+router.delete(DISCONNECT_STRIPE, verifyAccessToken, requireRole("owner", "admin"), disconnectStripe);
 
 // router for payments integration
 router.post(CALL_BILLING_WEBHOOK, express.json(), callBillingWebhook);
@@ -109,5 +134,6 @@ router.put(
   updateAutoChargingSettings,
 );
 router.post(AUTO_CARD_PAY_WEBHOOK, autoTopUpLowWalletUsers);
+router.get(GET_STRIPE_PORTAL,     verifyAccessToken, getStripePortalLink);
 
 module.exports = router;

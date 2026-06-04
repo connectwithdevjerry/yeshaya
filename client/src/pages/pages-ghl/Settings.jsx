@@ -1,26 +1,23 @@
 // src/pages/pages-ghl/Settings.jsx
 import React, { useState } from "react";
-import { User, Building2, Plug } from "lucide-react";
+import { Building2, Plug } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-import AccountSettings   from "../../components/components-ghl/Setting/Account.jsx";
-import WorkspaceSettings from "../../components/components-ghl/Setting/WorkSpace.jsx";
-import Integration       from "../../components/components-ghl/Setting/Integration.jsx";
+import SubAccountTab from "../../components/components-ghl/Setting/SubAccountTab.jsx";
+import Integration   from "../../components/components-ghl/Setting/Integration.jsx";
 
 const TABS = [
-  { id: "account",     label: "Account",      icon: User      },
-  { id: "workspace",   label: "Workspace",    icon: Building2 },
-  { id: "integration", label: "Integrations", icon: Plug      },
+  { id: "subaccount",  label: "Sub-account",    icon: Building2 },
+  { id: "integration", label: "CRM Connection", icon: Plug      },
 ];
 
 const GHLSettings = () => {
-  const [activeTab, setActiveTab] = useState("account");
+  const [activeTab, setActiveTab] = useState("subaccount");
 
   const content = {
-    account:     <AccountSettings />,
-    workspace:   <WorkspaceSettings />,
+    subaccount:  <SubAccountTab />,
     integration: <Integration />,
-  }[activeTab] ?? <AccountSettings />;
+  }[activeTab] ?? <SubAccountTab />;
 
   return (
     <div className="min-h-screen bg-gray-50/60">
@@ -35,7 +32,7 @@ const GHLSettings = () => {
         >
           <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Manage your account and workspace preferences.
+            Manage this sub-account's profile and CRM connection.
           </p>
         </motion.div>
 

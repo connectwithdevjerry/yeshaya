@@ -7,11 +7,12 @@ import {
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
-import { fetchImportedSubAccounts } from "../../store/slices/integrationSlice";
+import { fetchImportedSubAccounts, deleteSubAccount, updateSubAccountMeta, fetchRebillingBreakdown } from "../../store/slices/integrationSlice";
 import FolderModal from "../../components/components-ui/Modals/FolderModal";
 import { AccountDetailSidebar } from "../../components/components-ui/Modals/AccountDetailSidebar";
 import AccountActionsMenu from "../../components/components-ui/Accounts/AccountActionsMenu";
 import { copyTextToClipboard } from "../../helper";
+import toast from "react-hot-toast";
 import ImportSubaccountsModal from "../../components/components-ui/Accounts/ImportSubaccountsModal";
 
 /* ── Avatar with gradient initials ── */
@@ -80,6 +81,167 @@ const DropdownItem = ({ icon: Icon, text, onClick, description }) => (
   </button>
 );
 
+/* ── Delete Confirm Dialog ── */
+const DeleteConfirmDialog = ({ account, onConfirm, onCancel, deleting }) => (
+  <AnimatePresence>
+    {account && (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+        onClick={onCancel}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 12 }}
+          transition={{ duration: 0.18 }}
+          onClick={e => e.stopPropagation()}
+          className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md p-6"
+        >
+          <div className="flex items-start gap-4">
+            <div className="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+              <Trash2 className="w-5 h-5 text-red-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-bold text-gray-900">Delete Sub-account</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Are you sure you want to remove{" "}
+                <span className="font-semibold text-gray-800">{account.name || "this account"}</span>?
+                This will disconnect it from your agency. This action cannot be undone.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3 mt-6">
+            <button
+              onClick={onCancel}
+              disabled={deleting}
+              className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={deleting}
+              className="px-4 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-all disabled:opacity-60 flex items-center gap-2"
+            >
+              {deleting ? (
+                <>
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                    className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+                  />
+                  Deleting…
+                </>
+              ) : (
+                <><Trash2 className="w-4 h-4" /> Delete</>
+              )}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
+/* ── Edit Account Modal ── */
+const EditAccountModal = ({ account, onSave, onCancel, saving }) => {
+  const [customName, setCustomName] = React.useState(account?.customName || account?.name || "");
+  const [notes,      setNotes]      = React.useState(account?.notes || "");
+
+  React.useEffect(() => {
+    if (account) {
+      setCustomName(account.customName || account.name || "");
+      setNotes(account.notes || "");
+    }
+  }, [account]);
+
+  if (!account) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+        onClick={onCancel}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 12 }}
+          transition={{ duration: 0.18 }}
+          onClick={e => e.stopPropagation()}
+          className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md"
+        >
+          {/* Header */}
+          <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
+              <Building2 className="w-4 h-4 text-indigo-500" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Edit Sub-account</h3>
+              <p className="text-xs text-gray-400 mt-0.5 font-mono">{account.id?.slice(0,8)}…{account.id?.slice(-4)}</p>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="px-6 py-5 space-y-4">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-gray-700">Display Name</label>
+              <input
+                type="text"
+                value={customName}
+                onChange={e => setCustomName(e.target.value)}
+                placeholder={account.name || "Enter a custom name…"}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+              />
+              <p className="text-[11px] text-gray-400">Original GHL name: <span className="font-medium text-gray-600">{account.name}</span></p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-gray-700">Notes</label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Add notes about this account…"
+                rows={3}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none"
+              />
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+            <button
+              onClick={onCancel}
+              disabled={saving}
+              className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onSave({ customName, notes })}
+              disabled={saving}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md hover:brightness-110 transition-all disabled:opacity-60 flex items-center gap-2"
+            >
+              {saving ? (
+                <>
+                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }} className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+                  Saving…
+                </>
+              ) : "Save Changes"}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
+
 /* ══════════════════════════════════ */
 function SubAccounts() {
   const [activeTab,          setActiveTab]          = useState("All");
@@ -91,14 +253,28 @@ function SubAccounts() {
   const [openMenuAccountId,  setOpenMenuAccountId]  = useState(null);
   const [isImportModalOpen,  setIsImportModalOpen]  = useState(false);
   const [menuPosition,       setMenuPosition]       = useState({ top: 0, left: 0 });
+  const [deleteTarget,       setDeleteTarget]       = useState(null);
+  const [deleting,           setDeleting]           = useState(false);
+  const [editTarget,         setEditTarget]         = useState(null);
+  const [editSaving,         setEditSaving]         = useState(false);
 
   const menuAnchorRef = useRef(null);
   const dropdownRef   = useRef(null);
 
   const dispatch = useDispatch();
-  const { subAccounts, loading, error, agencyId } = useSelector(s => s.integrations || {});
+  const { subAccounts, loading, error, agencyId, rebillingBreakdown, fetchingRebilling } = useSelector(s => s.integrations || {});
 
-  useEffect(() => { dispatch(fetchImportedSubAccounts()); }, [dispatch]);
+  // Map accountId → total rebilled amount
+  const rebillMap = React.useMemo(() => {
+    const m = {};
+    (rebillingBreakdown || []).forEach(r => { m[r.accountId] = r.totalBillable; });
+    return m;
+  }, [rebillingBreakdown]);
+
+  useEffect(() => {
+    dispatch(fetchImportedSubAccounts());
+    dispatch(fetchRebillingBreakdown());
+  }, [dispatch]);
 
   useEffect(() => {
     const handleClick = e => {
@@ -108,10 +284,30 @@ function SubAccounts() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const TABS = ["All", "Active", "Favorites", "Re-billed", "Archived"];
+  const TABS = ["All", "Active", "Favorites", "Archived"];
 
-  const filtered = (activeTab === "All" ? (subAccounts || []) : []).filter(acc =>
-    !searchQuery || acc.name?.toLowerCase().includes(searchQuery.toLowerCase()) || acc.id?.includes(searchQuery)
+  const allAccounts = subAccounts || [];
+
+  const getTabAccounts = () => {
+    switch (activeTab) {
+      case "Favorites": return allAccounts.filter(a => a.isFavorite && !a.isArchived);
+      case "Archived":  return allAccounts.filter(a => a.isArchived);
+      case "Active":    return allAccounts.filter(a => !a.isArchived);
+      default:          return allAccounts;
+    }
+  };
+
+  const tabCounts = {
+    All:       allAccounts.length,
+    Active:    allAccounts.filter(a => !a.isArchived).length,
+    Favorites: allAccounts.filter(a => a.isFavorite && !a.isArchived).length,
+    Archived:  allAccounts.filter(a => a.isArchived).length,
+  };
+
+  const filtered = getTabAccounts().filter(acc =>
+    !searchQuery ||
+    (acc.customName || acc.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    acc.id?.includes(searchQuery)
   );
 
   const handleAccountClick     = acc => { setSelectedAccount(acc); setIsSidebarOpen(true); setOpenMenuAccountId(null); };
@@ -124,6 +320,35 @@ function SubAccounts() {
     setMenuPosition({ top, left: rect.right - 240 });
     setSelectedAccount(acc);
     setOpenMenuAccountId(acc.id);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await dispatch(deleteSubAccount(deleteTarget.id)).unwrap();
+      toast.success(`"${deleteTarget.name}" has been removed.`);
+      setDeleteTarget(null);
+      dispatch(fetchImportedSubAccounts());
+    } catch (err) {
+      toast.error(err || "Failed to delete sub-account.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleEditSave = async ({ customName, notes }) => {
+    if (!editTarget) return;
+    setEditSaving(true);
+    try {
+      await dispatch(updateSubAccountMeta({ id: editTarget.id, customName, notes })).unwrap();
+      toast.success("Account updated successfully.");
+      setEditTarget(null);
+    } catch (err) {
+      toast.error(err || "Failed to update account.");
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const linkToCopy = id =>
@@ -202,7 +427,7 @@ function SubAccounts() {
             >
               {tab}{" "}
               <span className={`text-xs ${activeTab === tab ? "text-indigo-400" : "text-gray-400"}`}>
-                ({tab === "All" ? (subAccounts?.length || 0) : 0})
+                ({tabCounts[tab] ?? 0})
               </span>
               {activeTab === tab && (
                 <motion.div
@@ -224,7 +449,7 @@ function SubAccounts() {
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Account</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Location ID</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Wallet</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Rebilled</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -268,10 +493,18 @@ function SubAccounts() {
                       <div className="flex items-center gap-3">
                         <Avatar name={acc.name} />
                         <div>
-                          <p className="text-sm font-semibold text-indigo-600 group-hover:text-indigo-700 leading-tight">
-                            {acc.name || "Unnamed Account"}
-                          </p>
-                          {acc.email && (
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-semibold text-indigo-600 group-hover:text-indigo-700 leading-tight">
+                              {acc.customName || acc.name || "Unnamed Account"}
+                            </p>
+                            {acc.isFavorite && (
+                              <span title="Favorite" className="text-amber-400">★</span>
+                            )}
+                          </div>
+                          {acc.customName && acc.customName !== acc.name && (
+                            <p className="text-[10px] text-gray-400 mt-0.5 italic truncate max-w-[180px]">{acc.name}</p>
+                          )}
+                          {acc.email && !acc.customName && (
                             <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[180px]">{acc.email}</p>
                           )}
                         </div>
@@ -285,20 +518,31 @@ function SubAccounts() {
                       </code>
                     </td>
 
-                    {/* Wallet */}
+                    {/* Rebilled (usage × rebilling price) */}
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-1.5">
                         <Wallet className="w-3.5 h-3.5 text-emerald-500" />
-                        <span className="text-sm font-medium text-gray-700">$0.00</span>
+                        <span className="text-sm font-medium text-gray-700">
+                          {fetchingRebilling
+                            ? <span className="inline-block w-10 h-3 bg-gray-100 rounded animate-pulse" />
+                            : `$${(rebillMap[acc.id] ?? 0).toFixed(2)}`}
+                        </span>
                       </div>
                     </td>
 
-                    {/* Status */}
+                    {/* Status — real connection state */}
                     <td className="px-4 py-3.5">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Connected
-                      </span>
+                      {acc.connected === false ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                          Reconnect needed
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Connected
+                        </span>
+                      )}
                     </td>
 
                     {/* Actions */}
@@ -319,6 +563,7 @@ function SubAccounts() {
                           <MoreHorizontal className="w-4 h-4" />
                         </button>
                         <button
+                          onClick={e => { e.stopPropagation(); setDeleteTarget(acc); }}
                           className="p-2 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-500 transition-colors"
                           title="Delete"
                         >
@@ -346,6 +591,12 @@ function SubAccounts() {
       {/* ── Modals ── */}
       <FolderModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
       <ImportSubaccountsModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} />
+      <DeleteConfirmDialog
+        account={deleteTarget}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+        deleting={deleting}
+      />
       <AccountDetailSidebar isOpen={isSidebarOpen} onClose={handleCloseSidebar} account={selectedAccount} />
       {openMenuAccountId && selectedAccount && (
         <AccountActionsMenu
@@ -354,8 +605,15 @@ function SubAccounts() {
           account={selectedAccount}
           position={menuPosition}
           anchorRef={menuAnchorRef}
+          onEdit={(acc) => setEditTarget(acc)}
         />
       )}
+      <EditAccountModal
+        account={editTarget}
+        onSave={handleEditSave}
+        onCancel={() => setEditTarget(null)}
+        saving={editSaving}
+      />
     </div>
   );
 }

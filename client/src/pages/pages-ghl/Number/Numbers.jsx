@@ -100,7 +100,7 @@ const TABS = [
   { id: "imported", label: "Imported" },
 ];
 
-const COLS = ["Name", "Number", "Updated", "Capabilities", "Status", "Assistant", "Vapi", ""];
+const COLS = ["Name", "Number", "Updated", "Capabilities", "Status", "Assistant", "Connection", ""];
 
 const Numbers = () => {
   const [isImportModalOpen,  setIsImportModalOpen]  = useState(false);
@@ -111,6 +111,9 @@ const Numbers = () => {
   const [selectedAccount,    setSelectedAccount]    = useState(null);
   const [openMenuAccountId,  setOpenMenuAccountId]  = useState(null);
   const [menuPosition,       setMenuPosition]       = useState({ top: 0, left: 0 });
+  const [currentPage,        setCurrentPage]        = useState(1);
+  const [rowsPerPage,        setRowsPerPage]        = useState(10);
+  const [searchTerm,         setSearchTerm]         = useState("");
   const menuAnchorRef = useRef(null);
 
   const dispatch  = useDispatch();
@@ -161,11 +164,31 @@ const Numbers = () => {
   }, [allPurchasedNumbers.length, subaccountId, dispatch]);
 
   const getFiltered = () => {
-    if (activeTab === "bought")   return allPurchasedNumbers.filter((n) => n.phoneNumberDetails?.origin === "twilio");
-    if (activeTab === "imported") return allPurchasedNumbers.filter((n) => n.phoneNumberDetails?.origin !== "twilio");
-    return allPurchasedNumbers;
+    let list = allPurchasedNumbers;
+    if (activeTab === "bought")   list = list.filter((n) => n.phoneNumberDetails?.origin === "twilio");
+    if (activeTab === "imported") list = list.filter((n) => n.phoneNumberDetails?.origin !== "twilio");
+
+    const q = searchTerm.trim().toLowerCase();
+    if (q) {
+      list = list.filter((n) => {
+        const d = n.phoneNumberDetails || {};
+        return (
+          (d.phoneNumber || "").toLowerCase().includes(q) ||
+          (d.friendlyName || "").toLowerCase().includes(q) ||
+          (n.assistantName || "").toLowerCase().includes(q)
+        );
+      });
+    }
+    return list;
   };
-  const filtered = getFiltered();
+  const filtered    = getFiltered();
+  const totalPages  = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
+  const safePage    = Math.min(currentPage, totalPages);
+  const paginated   = filtered.slice((safePage - 1) * rowsPerPage, safePage * rowsPerPage);
+
+  const handleTabChange = (id) => { setActiveTab(id); setCurrentPage(1); };
+  const handleRowsChange = (e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); };
+  const handleSearch = (e) => { setSearchTerm(e.target.value); setCurrentPage(1); };
 
   const fmtCaps = (caps) => {
     if (!caps) return [];
@@ -192,7 +215,7 @@ const Numbers = () => {
     { icon: Hash,         label: "Total Numbers",    value: allPurchasedNumbers.length, gradient: "from-indigo-500 to-violet-600" },
     { icon: ShoppingCart, label: "Bought",            value: boughtCount,                gradient: "from-sky-500 to-cyan-500" },
     { icon: Upload,       label: "Imported",          value: importedCount,              gradient: "from-amber-500 to-orange-500" },
-    { icon: Wifi,         label: "Vapi Connected",    value: connectedCount,             gradient: "from-emerald-500 to-teal-500" },
+    { icon: Wifi,         label: "Connected",          value: connectedCount,             gradient: "from-emerald-500 to-teal-500" },
   ];
 
   return (
@@ -239,7 +262,7 @@ const Numbers = () => {
                             id === "bought" ? boughtCount : importedCount;
               const active = activeTab === id;
               return (
-                <button key={id} onClick={() => setActiveTab(id)}
+                <button key={id} onClick={() => handleTabChange(id)}
                   className={`relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-xl transition-all ${
                     active ? "text-indigo-600" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
                   }`}
@@ -266,12 +289,22 @@ const Numbers = () => {
             </div>
           </div>
 
-          {/* Count bar */}
-          <div className="flex items-center justify-between px-5 py-2.5 border-b border-gray-50 bg-gray-50/40">
+          {/* Count bar + search */}
+          <div className="flex items-center justify-between gap-3 px-5 py-2.5 border-b border-gray-50 bg-gray-50/40">
             <p className="text-xs text-gray-400">
               Showing <span className="font-semibold text-gray-600">{filtered.length}</span> of{" "}
               <span className="font-semibold text-gray-600">{allPurchasedNumbers.length}</span> numbers
             </p>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={handleSearch}
+                placeholder="Search number, name, assistant…"
+                className="pl-8 pr-3 py-1.5 w-64 rounded-lg border border-gray-200 text-xs bg-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+              />
+            </div>
           </div>
 
           {/* Table */}
@@ -322,7 +355,7 @@ const Numbers = () => {
                   </tr>
                 ) : (
                   <AnimatePresence>
-                    {filtered.map((item, idx) => {
+                    {paginated.map((item, idx) => {
                       const d = item.phoneNumberDetails;
                       return (
                         <motion.tr
@@ -366,7 +399,7 @@ const Numbers = () => {
                               {item.assistantName || "—"}
                             </span>
                           </td>
-                          {/* Vapi */}
+                          {/* Connection */}
                           <td className="px-5 py-3.5"><VapiBadge phoneSid={d.sid} vapiStatuses={vapiStatuses} /></td>
                           {/* Actions */}
                           <td className="px-5 py-3.5">
@@ -388,21 +421,39 @@ const Numbers = () => {
             </table>
           </div>
 
-          {/* Footer */}
+          {/* Footer — live pagination */}
           {!loading && filtered.length > 0 && (
             <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50 bg-gray-50/30">
               <div className="flex items-center gap-2 text-xs text-gray-400">
-                <select className="pl-2 pr-6 py-1 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white">
-                  {[10, 25, 50].map((n) => <option key={n}>{n}</option>)}
+                <select
+                  value={rowsPerPage}
+                  onChange={handleRowsChange}
+                  className="pl-2 pr-6 py-1 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 bg-white cursor-pointer"
+                >
+                  {[10, 25, 50].map((n) => <option key={n} value={n}>{n} rows</option>)}
                 </select>
-                <span>Showing {Math.min(10, filtered.length)} of {filtered.length}</span>
+                <span>
+                  Showing{" "}
+                  <span className="font-semibold text-gray-600">
+                    {(safePage - 1) * rowsPerPage + 1}–{Math.min(safePage * rowsPerPage, filtered.length)}
+                  </span>{" "}
+                  of <span className="font-semibold text-gray-600">{filtered.length}</span>
+                </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">Page 1 of 1</span>
-                <button disabled className="p-1.5 border border-gray-200 rounded-lg text-gray-300 disabled:opacity-40">
+                <span className="text-xs text-gray-400">Page {safePage} of {totalPages}</span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage === 1}
+                  className="p-1.5 border border-gray-200 rounded-lg text-gray-500 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-200 disabled:hover:text-gray-300"
+                >
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
-                <button disabled className="p-1.5 border border-gray-200 rounded-lg text-gray-300 disabled:opacity-40">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage === totalPages}
+                  className="p-1.5 border border-gray-200 rounded-lg text-gray-500 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-gray-200 disabled:hover:text-gray-300"
+                >
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>

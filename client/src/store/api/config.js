@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -59,10 +59,12 @@ const refreshTokens = async () => {
       const newAccessToken = response.data.accessToken;
       const newRefreshToken = response.data.refreshToken;
 
-      // Update tokens
+      // Update both storages so interceptor always reads the latest token
       localStorage.setItem("accessToken", newAccessToken);
+      sessionStorage.setItem("accessToken", newAccessToken);
       if (newRefreshToken) {
         localStorage.setItem("refreshToken", newRefreshToken);
+        sessionStorage.setItem("refreshToken", newRefreshToken);
       }
 
       return newAccessToken;
@@ -91,8 +93,9 @@ const clearAuthAndRedirect = () => {
 // ✅ Attach access token to each request
 apiClient.interceptors.request.use(
   async (config) => {
-    // Skip token check for auth endpoints
-    if (config.url?.includes('/auth/')) {
+    // Skip token attachment only for public auth endpoints
+    const publicAuthPaths = ['/auth/signin', '/auth/signup', '/auth/forgot_password', '/auth/reset_password', '/auth/activate', '/auth/exchange-token'];
+    if (publicAuthPaths.some(path => config.url?.includes(path))) {
       return config;
     }
 
@@ -155,10 +158,13 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
 
     // Check if error is 401 and we haven't already tried to refresh
+    const publicAuthPaths = ['/auth/signin', '/auth/signup', '/auth/forgot_password', '/auth/reset_password', '/auth/activate', '/auth/exchange-token'];
+    const isPublicAuth = publicAuthPaths.some(path => originalRequest.url?.includes(path));
+
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url?.includes('/auth/')
+      !isPublicAuth
     ) {
       console.log("⚠️ 401 error detected, attempting token refresh");
       

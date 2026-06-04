@@ -3,7 +3,7 @@ import React, { useEffect, useMemo } from "react";
 import { TrendingUp, Clock, Wallet, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchTransactionHistory, fetchWalletBalance } from "../../store/slices/assistantsSlice";
+import { fetchTransactionHistory, fetchWalletBalance, fetchSubAccountSpend } from "../../store/slices/assistantsSlice";
 
 import RebillingHeader          from "../../components/components-ui/Rebilling/RebillingHeader";
 import RevenueChart             from "../../components/components-ui/Rebilling/RevenueChart";
@@ -70,6 +70,7 @@ const Rebilling = () => {
   useEffect(() => {
     dispatch(fetchTransactionHistory());
     dispatch(fetchWalletBalance());
+    dispatch(fetchSubAccountSpend());
   }, [dispatch]);
 
   /* ── Derived stats from live transaction data ── */

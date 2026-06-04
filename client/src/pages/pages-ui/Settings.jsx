@@ -1,23 +1,31 @@
 // src/pages/pages-ui/Settings.jsx
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { User, Building2, CreditCard } from "lucide-react";
+import { useSelector } from "react-redux";
+import { User, Building2, CreditCard, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import AccountSettings   from "../../components/components-ui/Setting/Account.jsx";
 import WorkspaceSettings from "../../components/components-ui/Setting/WorkSpace.jsx";
 import BillingSettings   from "../../components/components-ui/Setting/Billing.jsx";
-
-const TABS = [
-  { id: "account",   label: "Account",   icon: User      },
-  { id: "workspace", label: "Workspace", icon: Building2 },
-  { id: "billing",   label: "Billing",   icon: CreditCard },
-];
+import Members           from "../../components/components-ui/Setting/Members.jsx";
 
 const Settings = () => {
   const location = useLocation();
   const params   = new URLSearchParams(location.search);
   const tabParam = params.get("tab");
+
+  const { user } = useSelector((s) => s.auth || {});
+  const role = user?.role || "owner";
+  const canSeeBilling = role === "owner" || role === "admin";
+
+  // Build tabs based on role (members/viewers don't see Billing)
+  const TABS = [
+    { id: "account",   label: "Account",   icon: User      },
+    { id: "workspace", label: "Workspace", icon: Building2 },
+    ...(canSeeBilling ? [{ id: "billing", label: "Billing", icon: CreditCard }] : []),
+    { id: "team",      label: "Team",      icon: Users      },
+  ];
 
   const [activeTab, setActiveTab] = useState(tabParam || "account");
 
@@ -28,7 +36,8 @@ const Settings = () => {
   const content = {
     account:   <AccountSettings />,
     workspace: <WorkspaceSettings />,
-    billing:   <BillingSettings />,
+    billing:   canSeeBilling ? <BillingSettings /> : <AccountSettings />,
+    team:      <Members />,
   }[activeTab] ?? <AccountSettings />;
 
   return (

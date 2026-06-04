@@ -1,10 +1,8 @@
 import React, { useState } from "react";
 import {
-  X,
   Info,
   Calendar,
   User,
-  Info as InfoIcon,
   FileText,
   Settings,
   Power,
@@ -73,7 +71,7 @@ const snippets = [
     id: 5,
     title: "Style Guiderails",
     desc: "Keeps the AI's output more conversational",
-    icon: InfoIcon,
+    icon: Info,
     color: "text-blue-400",
     bg: "bg-blue-50",
     prompts: [
@@ -237,7 +235,7 @@ export const PromptSnippetsDropdown = ({ isOpen, onClose, onAddSnippet }) => {
               </div>
               <button
                 onClick={() => handleAddSnippet(item)}
-                className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[11px] font-bold hover:bg-blue-600 hover:text-white transition-all"
+                className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg text-[11px] font-bold hover:bg-indigo-600 hover:text-white transition-all"
               >
                 Add
               </button>
@@ -253,7 +251,7 @@ export const PromptSnippetsDropdown = ({ isOpen, onClose, onAddSnippet }) => {
           >
             Close
           </button>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md hover:bg-blue-700 transition-colors">
+          <button className="bg-gradient-to-r from-indigo-500 to-violet-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:brightness-110 transition-all">
             Create Snippet
           </button>
         </div>

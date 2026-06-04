@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const OpenAI = require("openai");
 const stateModel = require("../model/state.model");
 const axios = require("axios");
@@ -282,9 +283,10 @@ const callGetSubaccounts = async (req, res) => {
     const { status, subAccounts } = reqDetails;
 
     const user = await userModel.findById(userId);
-    const installedSubAccounts = user.ghlSubAccountIds.map(
-      (account) => account.connected === true && account.accountId,
-    );
+
+    // All imported account IDs (regardless of connection status) so a
+    // disconnected sub-account still appears (and can be reconnected).
+    const importedIds = user.ghlSubAccountIds.map((account) => account.accountId);
 
     if (userType == "anon") {
       return res.send({
@@ -294,12 +296,29 @@ const callGetSubaccounts = async (req, res) => {
     }
 
     const filteredSubAccounts = subAccounts.locations.filter((subAccount) =>
-      installedSubAccounts.includes(subAccount.id),
+      importedIds.includes(subAccount.id),
     );
+
+    // Merge local metadata + real connection status into GHL data
+    const metaMap = {};
+    user.ghlSubAccountIds.forEach(acc => {
+      metaMap[acc.accountId] = {
+        isFavorite:  acc.isFavorite  || false,
+        isArchived:  acc.isArchived  || false,
+        customName:  acc.customName  || "",
+        notes:       acc.notes       || "",
+        connected:   acc.connected   === true,
+      };
+    });
+
+    const enriched = filteredSubAccounts.map(sub => ({
+      ...sub,
+      ...(metaMap[sub.id] || {}),
+    }));
 
     return res.send({
       status: true,
-      data: filteredSubAccounts,
+      data: enriched,
       agencyId: user.ghlAgencyId,
     });
   } catch (error) {
@@ -1472,6 +1491,22 @@ const deleteTwilioNumber = async (req, res) => {
 const ghlSubAuthorize = async (req, res) => {
   const userId = req.user;
   const { accountId } = req.query;
+
+  console.log("🔄 ghlSubAuthorize → userId:", userId, "accountId:", accountId);
+
+  // Guard: req.user must be a valid Mongo ObjectId (not an email / empty / SSO value)
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    console.error("❌ ghlSubAuthorize → invalid userId:", userId);
+    return res.status(401).json({
+      status: false,
+      message: "Your session is invalid. Please log in to the agency dashboard before reconnecting.",
+    });
+  }
+
+  if (!accountId) {
+    return res.status(400).json({ status: false, message: "accountId is required" });
+  }
+
   const scopes =
     "locations.readonly+oauth.write+oauth.readonly+businesses.write+businesses.readonly+calendars.write+calendars.readonly+calendars%2Fevents.readonly+calendars%2Fevents.write+calendars%2Fgroups.readonly+calendars%2Fgroups.write+calendars%2Fresources.readonly+calendars%2Fresources.write&version_id=696ade02ea0d940c862c9efd";
 
@@ -1507,6 +1542,18 @@ const ghlSubOauthCallback = async (req, res) => {
   const storedState = reqState ? reqState.state : null;
   const userId = reqState ? reqState.cust_id : null;
   const accountId = reqState ? reqState.accountId : null;
+
+  console.log("🔄 ghlSubOauthCallback → userId:", userId, "accountId:", accountId);
+
+  // Guard against a malformed/missing userId reaching findById (would otherwise throw)
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    console.error("❌ ghlSubOauthCallback → invalid userId in state:", userId);
+    await stateModel.deleteOne({ state: receivedState });
+    const errorMsg = "Invalid session. Please log in and reconnect from the dashboard.";
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(errorMsg)}`,
+    );
+  }
 
   // 1. STATE VERIFICATION (CSRF Protection)
   if (!receivedState || receivedState !== storedState) {
@@ -1595,6 +1642,217 @@ const ghlSubOauthCallback = async (req, res) => {
   }
 };
 
+const deleteSubAccount = async (req, res) => {
+  try {
+    const userId       = req.user;
+    const { id }       = req.params;
+
+    if (!id) {
+      return res.status(400).json({ status: false, message: "Sub-account ID is required" });
+    }
+
+    const user = await userModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({ status: false, message: "User not found" });
+    }
+
+    const exists = user.ghlSubAccountIds.some(acc => acc.accountId === id);
+    if (!exists) {
+      return res.status(404).json({ status: false, message: "Sub-account not found" });
+    }
+
+    user.ghlSubAccountIds = user.ghlSubAccountIds.filter(acc => acc.accountId !== id);
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    return res.status(200).json({ status: true, message: "Sub-account removed successfully" });
+  } catch (err) {
+    console.error("deleteSubAccount error:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to delete sub-account" });
+  }
+};
+
+// ─── Get single sub-account details + stats ──────────────────────────────────
+const getSubAccountDetails = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { id } = req.params;
+    console.log("🔄 getSubAccountDetails → userId:", userId, "subaccount:", id);
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    const sub = user.ghlSubAccountIds.find((a) => a.accountId === id);
+    if (!sub) return res.status(404).json({ status: false, message: "Sub-account not found" });
+
+    const assistantCount = (sub.vapiAssistants || []).length;
+    const contactCount   = (sub.savedContacts  || []).length;
+    const numberCount    = (sub.vapiAssistants || []).reduce(
+      (acc, a) => acc + (a.numberDetails?.length || 0), 0
+    );
+
+    const data = {
+      accountId:        sub.accountId,
+      customName:       sub.customName || "",
+      notes:            sub.notes || "",
+      connected:        sub.connected || false,
+      isFavorite:       sub.isFavorite || false,
+      isArchived:       sub.isArchived || false,
+      installationType: sub.installationType || "",
+      tokenExpiry:      sub.ghlSubRefreshTokenExpiry || null,
+      assistantCount,
+      contactCount,
+      numberCount,
+    };
+
+    console.log("✅ getSubAccountDetails →", data);
+    return res.status(200).json({ status: true, data });
+  } catch (err) {
+    console.error("❌ getSubAccountDetails error:", err.message);
+    return res.status(500).json({ status: false, message: err.message });
+  }
+};
+
+// ─── Toggle Favorite ──────────────────────────────────────────────────────────
+const toggleSubAccountFavorite = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { id } = req.params;
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    const sub = user.ghlSubAccountIds.find(a => a.accountId === id);
+    if (!sub) return res.status(404).json({ status: false, message: "Sub-account not found" });
+
+    sub.isFavorite = !sub.isFavorite;
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    console.log(`✅ toggleFavorite → ${id} isFavorite=${sub.isFavorite}`);
+    return res.status(200).json({ status: true, isFavorite: sub.isFavorite });
+  } catch (err) {
+    console.error("❌ toggleSubAccountFavorite:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to toggle favorite" });
+  }
+};
+
+// ─── Toggle Archive ───────────────────────────────────────────────────────────
+const toggleSubAccountArchive = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { id } = req.params;
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    const sub = user.ghlSubAccountIds.find(a => a.accountId === id);
+    if (!sub) return res.status(404).json({ status: false, message: "Sub-account not found" });
+
+    sub.isArchived = !sub.isArchived;
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    console.log(`✅ toggleArchive → ${id} isArchived=${sub.isArchived}`);
+    return res.status(200).json({ status: true, isArchived: sub.isArchived });
+  } catch (err) {
+    console.error("❌ toggleSubAccountArchive:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to toggle archive" });
+  }
+};
+
+// ─── Update Sub-account metadata (name, notes) ────────────────────────────────
+const updateSubAccountMeta = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { id } = req.params;
+    const { customName, notes } = req.body;
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    const sub = user.ghlSubAccountIds.find(a => a.accountId === id);
+    if (!sub) return res.status(404).json({ status: false, message: "Sub-account not found" });
+
+    if (customName !== undefined) sub.customName = customName.trim();
+    if (notes      !== undefined) sub.notes      = notes.trim();
+
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    console.log(`✅ updateSubAccountMeta → ${id}`, { customName, notes });
+    return res.status(200).json({ status: true, message: "Updated successfully", data: { customName: sub.customName, notes: sub.notes } });
+  } catch (err) {
+    console.error("❌ updateSubAccountMeta:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to update sub-account" });
+  }
+};
+
+// ─── Disconnect GoHighLevel ───────────────────────────────────────────────────
+const disconnectGoHighLevel = async (req, res) => {
+  try {
+    const userId = req.user;
+    console.log("🔄 disconnectGoHighLevel → userId:", userId);
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    user.ghlAgencyId            = undefined;
+    user.ghlRefreshToken        = undefined;
+    user.ghlRefreshTokenExpiry  = undefined;
+
+    await user.save();
+
+    console.log("✅ GoHighLevel disconnected for user:", userId);
+    return res.status(200).json({ status: true, message: "GoHighLevel disconnected successfully" });
+  } catch (err) {
+    console.error("❌ disconnectGoHighLevel error:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to disconnect GoHighLevel" });
+  }
+};
+
+// ─── Disconnect OpenAI ────────────────────────────────────────────────────────
+const disconnectOpenAI = async (req, res) => {
+  try {
+    const userId = req.user;
+    console.log("🔄 disconnectOpenAI → userId:", userId);
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    user.openAIApiKey = undefined;
+
+    await user.save();
+
+    console.log("✅ OpenAI disconnected for user:", userId);
+    return res.status(200).json({ status: true, message: "OpenAI disconnected successfully" });
+  } catch (err) {
+    console.error("❌ disconnectOpenAI error:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to disconnect OpenAI" });
+  }
+};
+
+// ─── Disconnect Stripe ────────────────────────────────────────────────────────
+const disconnectStripe = async (req, res) => {
+  try {
+    const userId = req.user;
+    console.log("🔄 disconnectStripe → userId:", userId);
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    user.stripeAccessToken    = undefined;
+    user.stripeUserId         = undefined;
+    user.stripePublishableKey = undefined;
+
+    await user.save();
+
+    console.log("✅ Stripe disconnected for user:", userId);
+    return res.status(200).json({ status: true, message: "Stripe disconnected successfully" });
+  } catch (err) {
+    console.error("❌ disconnectStripe error:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to disconnect Stripe" });
+  }
+};
+
 module.exports = {
   ghlAuthorize,
   ghlOauthCallback,
@@ -1618,4 +1876,12 @@ module.exports = {
   getPurchasedNumbers,
   getVapiNumberImportStatus,
   deleteTwilioNumber,
+  deleteSubAccount,
+  disconnectGoHighLevel,
+  disconnectOpenAI,
+  disconnectStripe,
+  toggleSubAccountFavorite,
+  toggleSubAccountArchive,
+  updateSubAccountMeta,
+  getSubAccountDetails,
 };

@@ -1,6 +1,7 @@
 const axios = require("axios");
 const userModel = require("../model/user.model");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const { createNotification } = require("./notification.controller");
 require("dotenv").config();
 
 // billing flow:
@@ -191,6 +192,15 @@ const stripeWebhook = async (req, res) => {
       });
 
       await user.save();
+
+      // Notify user of successful payment
+      await createNotification({
+        userId,
+        type: "payment_received",
+        title: "Wallet Topped Up",
+        message: `$${amountUsd.toFixed(2)} has been added to your wallet. New balance: $${user.walletBalance.toFixed(2)}.`,
+        metadata: { amount: amountUsd, paymentIntentId: paymentIntent.id },
+      });
 
       console.log(`Wallet credited: +${amountUsd} USD for user ${userId}`);
     }
@@ -410,6 +420,24 @@ const callBillingWebhook = async (req, res) => {
     user.dateUpdated = new Date();
     await user.save();
 
+    // Fire call completed notification
+    if (type === "end-of-call-report" || type === "call.ended") {
+      const durationSec = call.endedAt && call.startedAt
+        ? Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000)
+        : null;
+      const durationText = durationSec != null
+        ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`
+        : "Unknown duration";
+
+      await createNotification({
+        userId: user._id,
+        type: "call_completed",
+        title: "Call Completed",
+        message: `A call has ended. Duration: ${durationText}. Cost: $${amountToDeduct.toFixed(4)}.`,
+        metadata: { callId: call.id, cost: amountToDeduct, duration: durationSec },
+      });
+    }
+
     return res.sendStatus(200);
   } catch (err) {
     console.error("Vapi billing webhook error:", err);
@@ -575,6 +603,52 @@ const handleVapiSmsBilling = async (req, res) => {
   }
 };
 
+// ─── Stripe Customer Portal Link ─────────────────────────────────────────────
+const getStripePortalLink = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { flow } = req.query; // "payment_method_update" | "billing_address_update" | undefined
+
+    console.log("🔄 getStripePortalLink → userId:", userId, "flow:", flow);
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    // Create Stripe customer if one doesn't exist yet
+    if (!user.stripeCustomerId) {
+      console.log("📋 Creating new Stripe customer for user:", userId);
+      const customer = await stripe.customers.create({
+        metadata: { userId: userId.toString() },
+        email:    user.email,
+      });
+      user.stripeCustomerId = customer.id;
+      await user.save();
+    }
+
+    const returnUrl = `${process.env.FRONTEND_URL}/settings?tab=billing`;
+
+    // Build session params
+    const sessionParams = {
+      customer:   user.stripeCustomerId,
+      return_url: returnUrl,
+    };
+
+    // Only payment_method_update is a valid Stripe portal flow type
+    // All other actions (billing info, invoices) are handled by the general portal
+    if (flow === "payment_method_update") {
+      sessionParams.flow_data = { type: "payment_method_update" };
+    }
+
+    const session = await stripe.billingPortal.sessions.create(sessionParams);
+
+    console.log("✅ getStripePortalLink → portal URL created:", session.url);
+    return res.status(200).json({ status: true, url: session.url });
+  } catch (err) {
+    console.error("❌ getStripePortalLink error:", err.message);
+    return res.status(500).json({ status: false, message: err.message || "Failed to generate portal link" });
+  }
+};
+
 module.exports = {
   callBillingWebhook,
   getLatestConnectedBalance,
@@ -585,4 +659,5 @@ module.exports = {
   getTransactionHistory,
   getChargingDetails,
   updateAutoChargingSettings,
+  getStripePortalLink,
 };

@@ -210,18 +210,14 @@ export const getDynamicMessage = createAsyncThunk(
 // 🆕 3. Add Knowledge Base
 export const addKnowledgeBase = createAsyncThunk(
   "assistants/addKnowledgeBase",
-  async ({ knowledgeBaseUrl, title, type }, { rejectWithValue }) => {
+  async ({ knowledgeBaseUrl, title, type, subaccountId }, { rejectWithValue }) => {
     try {
       const formData = new FormData();
 
       formData.append("title", title);
       formData.append("type", type);
-
-      if (type === "file") {
-        formData.append("knowledgeBaseUrl", knowledgeBaseUrl);
-      } else {
-        formData.append("knowledgeBaseUrl", knowledgeBaseUrl);
-      }
+      formData.append("knowledgeBaseUrl", knowledgeBaseUrl);
+      if (subaccountId) formData.append("subaccountId", subaccountId);
 
       const response = await apiClient.post(
         "/assistants/add-knowledge-bases",
@@ -298,10 +294,11 @@ export const getFileDetails = createAsyncThunk(
 //
 export const fetchKnowledgeBases = createAsyncThunk(
   "assistants/fetchKnowledgeBases",
-  async (_, { rejectWithValue }) => {
+  async (subaccountId, { rejectWithValue }) => {
     try {
+      const query = subaccountId ? `?subaccountId=${subaccountId}` : "";
       const response = await apiClient.get(
-        "/assistants/get-all-knowledge-bases",
+        `/assistants/get-all-knowledge-bases${query}`,
       );
 
       if (!response.data.status) {
@@ -480,9 +477,10 @@ export const fetchGHLCalendars = createAsyncThunk(
       );
 
       if (!response.data.status) {
-        return rejectWithValue(
-          response.data.message || "Failed to fetch calendars",
-        );
+        return rejectWithValue({
+          message: response.data.message || "Failed to fetch calendars",
+          reconnectRequired: !!response.data.reconnectRequired,
+        });
       }
 
       console.log(
@@ -519,9 +517,10 @@ export const fetchConnectedCalendar = createAsyncThunk(
       );
 
       if (!response.data.status) {
-        return rejectWithValue(
-          response.data.message || "Failed to fetch connected calendar",
-        );
+        return rejectWithValue({
+          message: response.data.message || "Failed to fetch connected calendar",
+          reconnectRequired: !!response.data.reconnectRequired,
+        });
       }
 
       console.log("✅ Connected calendar fetched:", response.data.data);
@@ -603,13 +602,14 @@ export const sendChatMessage = createAsyncThunk(
   },
 );
 
-// ✅ 15. Get Assistant Call Logs (No ID required)
+// ✅ 15. Get Assistant Call Logs
 export const getAssistantCallLogs = createAsyncThunk(
   "assistants/getAssistantCallLogs",
-  async (_, { rejectWithValue }) => {
+  async (subaccountId, { rejectWithValue }) => {
     try {
+      const query = subaccountId ? `?subaccountId=${subaccountId}` : "";
       const response = await apiClient.get(
-        "/assistants/get-assistant-call-logs",
+        `/assistants/get-assistant-call-logs${query}`,
       );
       const rawData = response.data;
 
@@ -739,11 +739,33 @@ export const createContact = createAsyncThunk(
         { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
       );
       return response.data.status
-        ? response.data.data
+        ? { data: response.data.data, merged: response.data.merged || false }
         : rejectWithValue(response.data.message);
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || "Failed to create contact",
+      );
+    }
+  },
+);
+
+// ✅ 20b. Bulk Import Contacts
+export const importContacts = createAsyncThunk(
+  "assistants/importContacts",
+  async ({ subaccountId, contacts }, { rejectWithValue }) => {
+    try {
+      console.log(`🔄 importContacts → ${contacts.length} contacts`);
+      const response = await apiClient.post(
+        `/assistants/import-contacts?subaccountId=${subaccountId}`,
+        { contacts },
+      );
+      console.log("✅ importContacts →", response.data);
+      return response.data.status
+        ? response.data.result
+        : rejectWithValue(response.data.message);
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to import contacts",
       );
     }
   },
@@ -794,13 +816,33 @@ export const deleteContact = createAsyncThunk(
   },
 );
 
+// ✅ 24. Get Sub-account Spend Breakdown
+export const fetchSubAccountSpend = createAsyncThunk(
+  "assistants/fetchSubAccountSpend",
+  async (_, { rejectWithValue }) => {
+    try {
+      console.log("🔄 fetchSubAccountSpend → requesting");
+      const response = await apiClient.get("/assistants/subaccount-spend");
+      console.log("✅ fetchSubAccountSpend →", response.data);
+      if (!response.data.status) {
+        return rejectWithValue(response.data.message || "Failed to fetch sub-account spend");
+      }
+      return response.data.data;
+    } catch (error) {
+      const message = error.response?.data?.message || "Failed to fetch sub-account spend";
+      console.error("❌ fetchSubAccountSpend →", message);
+      return rejectWithValue(message);
+    }
+  }
+);
+
 // ✅ 23. Get Assistant Analytics
 export const getAssistantAnalytics = createAsyncThunk(
   "assistants/getAnalytics",
-  async (_, { rejectWithValue }) => {
+  async (subaccountId, { rejectWithValue }) => {
     try {
-      // Simple GET request without query params or body
-      const response = await apiClient.get("/assistants/get-analytics");
+      const query = subaccountId ? `?subaccountId=${subaccountId}` : "";
+      const response = await apiClient.get(`/assistants/get-analytics${query}`);
 
       if (!response.data.status) {
         return rejectWithValue(
@@ -852,6 +894,7 @@ const assistantsSlice = createSlice({
     availableCalendars: [],
     fetchingCalendars: false,
     calendarError: null,
+    calendarReconnectRequired: false,
     linkingCalendar: false,
     connectedCalendar: null,
     fetchingConnectedCalendar: false,
@@ -875,6 +918,9 @@ const assistantsSlice = createSlice({
     analytics: null,
     fetchingAnalytics: false,
     analyticsError: null,
+    subAccountSpend: [],
+    fetchingSubAccountSpend: false,
+    subAccountSpendError: null,
   },
   reducers: {
     clearSelectedAssistant: (state) => {
@@ -1181,28 +1227,34 @@ const assistantsSlice = createSlice({
       .addCase(fetchGHLCalendars.pending, (state) => {
         state.fetchingCalendars = true;
         state.calendarError = null;
+        state.calendarReconnectRequired = false;
       })
       .addCase(fetchGHLCalendars.fulfilled, (state, action) => {
         state.fetchingCalendars = false;
         state.availableCalendars = action.payload;
+        state.calendarReconnectRequired = false;
       })
       .addCase(fetchGHLCalendars.rejected, (state, action) => {
         state.fetchingCalendars = false;
-        state.calendarError = action.payload;
+        state.calendarError = action.payload?.message || action.payload;
+        state.calendarReconnectRequired = !!action.payload?.reconnectRequired;
       })
 
       // 🔹 Fetch Connected Calendar
       .addCase(fetchConnectedCalendar.pending, (state) => {
         state.fetchingConnectedCalendar = true;
         state.calendarError = null;
+        state.calendarReconnectRequired = false;
       })
       .addCase(fetchConnectedCalendar.fulfilled, (state, action) => {
         state.fetchingConnectedCalendar = false;
         state.connectedCalendar = action.payload; // This stores the { calendarId, assistantId, ... } object
+        state.calendarReconnectRequired = false;
       })
       .addCase(fetchConnectedCalendar.rejected, (state, action) => {
         state.fetchingConnectedCalendar = false;
-        state.calendarError = action.payload;
+        state.calendarError = action.payload?.message || action.payload;
+        state.calendarReconnectRequired = !!action.payload?.reconnectRequired;
       })
 
       // 🔹 Add Tool to Assistant
@@ -1386,6 +1438,20 @@ const assistantsSlice = createSlice({
       .addCase(getAssistantAnalytics.rejected, (state, action) => {
         state.fetchingAnalytics = false;
         state.analyticsError = action.payload;
+      })
+
+      // Sub-account spend breakdown
+      .addCase(fetchSubAccountSpend.pending, (state) => {
+        state.fetchingSubAccountSpend = true;
+        state.subAccountSpendError = null;
+      })
+      .addCase(fetchSubAccountSpend.fulfilled, (state, action) => {
+        state.fetchingSubAccountSpend = false;
+        state.subAccountSpend = action.payload || [];
+      })
+      .addCase(fetchSubAccountSpend.rejected, (state, action) => {
+        state.fetchingSubAccountSpend = false;
+        state.subAccountSpendError = action.payload;
       });
   },
 });

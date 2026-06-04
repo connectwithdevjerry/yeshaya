@@ -40,6 +40,9 @@ const {
   getUserAnalytics,
   getTeamNotes,
   updateTeamNotes,
+  getSubAccountSpend,
+  getSubAccountGhlDetails,
+  importContacts,
 } = require("../controller/assistant.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
 
@@ -82,6 +85,8 @@ const {
   GET_ANALYTICS,
   GET_TEAM_NOTES,
   UPDATE_TEAM_NOTES,
+  GET_SUBACCOUNT_SPEND,
+  IMPORT_CONTACTS,
 } = require("../constants");
 
 const upload = multer({
@@ -95,7 +100,10 @@ router.get(GET_ASSISTANT, verifyAccessToken, getAssistant);
 router.get(GET_ASSISTANTS, verifyAccessToken, getAssistants);
 router.get(GET_CONTACTS, verifyAccessToken, getContacts);
 router.get(GET_CONTACT, verifyAccessToken, getContact);
-router.get(GET_ANALYTICS, verifyAccessToken, getUserAnalytics);
+router.get(GET_ANALYTICS,        verifyAccessToken, getUserAnalytics);
+router.get(GET_SUBACCOUNT_SPEND, verifyAccessToken, getSubAccountSpend);
+router.get("/subaccount-ghl-details", verifyAccessToken, getSubAccountGhlDetails);
+router.post(IMPORT_CONTACTS,     verifyAccessToken, importContacts);
 router.post(CREATE_CONTACT, verifyAccessToken, createContact);
 router.put(UPDATE_CONTACT, verifyAccessToken, updateContact);
 router.delete(DELETE_CONTACT, verifyAccessToken, deleteContact);

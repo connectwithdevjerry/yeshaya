@@ -10,8 +10,8 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import apiClient from "../../store/api/config";
-import { fetchSubAccounts } from "../../store/slices/integrationSlice";
-import { fetchWalletBalance } from "../../store/slices/assistantsSlice";
+import { fetchImportedSubAccounts } from "../../store/slices/integrationSlice";
+import { fetchWalletBalance, getAssistantAnalytics } from "../../store/slices/assistantsSlice";
 
 /* ── Animation variants ── */
 const fadeUp = (delay = 0) => ({
@@ -72,18 +72,19 @@ function DashboardPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const { subAccounts }              = useSelector(s => s.integrations || {});
-  const { balance }                  = useSelector(s => s.wallet || {});
-  const { user }                     = useSelector(s => s.auth || {});
-  const { walletBalance }            = useSelector(s => s.assistants || {});
+  const { subAccounts }                        = useSelector(s => s.integrations || {});
+  const { balance }                            = useSelector(s => s.wallet || {});
+  const { user }                               = useSelector(s => s.auth || {});
+  const { walletBalance, analytics }           = useSelector(s => s.assistants || {});
 
   const [isResetting,     setIsResetting]     = useState(false);
   const [customMenuLink,  setCustomMenuLink]  = useState("");
   const [copied,          setCopied]          = useState(false);
 
   useEffect(() => {
-    dispatch(fetchSubAccounts());
+    dispatch(fetchImportedSubAccounts());
     dispatch(fetchWalletBalance());
+    dispatch(getAssistantAnalytics());
     const base = window.location.origin;
     setCustomMenuLink(
       `${base}/app?agencyid={{agency.id}}&subaccount={{location.id}}&allow=yes&myname={{location.name}}&myemail={{user.email}}&route=/assistants`
@@ -107,7 +108,7 @@ function DashboardPage() {
         localStorage.removeItem("ghl_pending_locationId");
         sessionStorage.removeItem("ghl_locationId");
         sessionStorage.removeItem("ghl_captureTime");
-        dispatch(fetchSubAccounts());
+        dispatch(fetchImportedSubAccounts());
         setTimeout(() => navigate("/integrations"), 1500);
       } else {
         toast.error(res.data?.message || "Failed to reset connection");
@@ -122,9 +123,9 @@ function DashboardPage() {
   /* Derived values */
   const totalSubAccounts = subAccounts?.length || 0;
   const displayBalance   = walletBalance ?? balance ?? 0;
-  const activeAssistants = 0;
-  const totalCalls       = 0;
-  const totalSpent       = 0;
+  const activeAssistants = analytics?.numberOfAssistants ?? 0;
+  const totalCalls       = analytics?.totalCalls       ?? 0;
+  const totalSpent       = analytics?.totalSpend       ?? 0;
 
   /* Greeting */
   const hour = new Date().getHours();

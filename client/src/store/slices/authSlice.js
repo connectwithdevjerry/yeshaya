@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { authAPI } from "../api/authApi";
 import axios from "axios";
+import apiClient from "../api/config";
 
 export const login = createAsyncThunk(
   "auth/login",
@@ -119,7 +120,9 @@ export const verifyToken = createAsyncThunk(
       const token = tokenFromLink || localStorage.getItem("accessToken");
       if (!token) throw new Error("No token found");
       const response = await authAPI.verifyToken(token);
-      localStorage.setItem("token", response.data.token);
+      if (response.data.token) {
+        localStorage.setItem("accessToken", response.data.token);
+      }
 
       return response.data;
     } catch (error) {
@@ -324,12 +327,13 @@ export const getSnapshot = createAsyncThunk(
   "auth/getSnapshot",
   async (_, { rejectWithValue }) => {
     try {
-      const res = await axios.get("https://api.yashayah.cloud/auth/snapshot", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
-      });
+      console.log("🔄 getSnapshot → fetching");
+      const res = await apiClient.get("/auth/snapshot");
+      console.log("✅ getSnapshot →", res.data);
       if (!res.data.status) return rejectWithValue(res.data.message);
       return res.data.data;
     } catch (e) {
+      console.error("❌ getSnapshot →", e.response?.data || e.message);
       return rejectWithValue(e.response?.data?.message || e.message);
     }
   }
@@ -339,12 +343,13 @@ export const saveSnapshot = createAsyncThunk(
   "auth/saveSnapshot",
   async (payload, { rejectWithValue }) => {
     try {
-      const res = await axios.post("https://api.yashayah.cloud/auth/snapshot/save", payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
-      });
+      console.log("🔄 saveSnapshot → payload:", payload);
+      const res = await apiClient.post("/auth/snapshot/save", payload);
+      console.log("✅ saveSnapshot →", res.data);
       if (!res.data.status) return rejectWithValue(res.data.message);
       return res.data.data;
     } catch (e) {
+      console.error("❌ saveSnapshot →", e.response?.data || e.message);
       return rejectWithValue(e.response?.data?.message || e.message);
     }
   }
@@ -386,25 +391,38 @@ export const getUserDetails = createAsyncThunk(
   "auth/getUserDetails",
   async (_, { rejectWithValue }) => {
     try {
-      const response = await axios.get(
-        "https://api.yashayah.cloud/auth/get-user-details",
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-          },
-        },
-      );
-
+      const response = await apiClient.get("/auth/get-user-details");
       const data = response.data;
       if (data.status === false) {
         return rejectWithValue(data.message || "Failed to load user details");
       }
-
       localStorage.setItem("user", JSON.stringify(data.data || null));
       return data.data;
     } catch (error) {
-      const msg =
-        error.response?.data?.message || error.message || "Network error";
+      const msg = error.response?.data?.message || error.message || "Network error";
+      return rejectWithValue(msg);
+    }
+  },
+);
+
+// Update User Profile Thunk
+export const updateUserProfile = createAsyncThunk(
+  "auth/updateUserProfile",
+  async (profileData, { rejectWithValue }) => {
+    try {
+      console.log("🔄 updateUserProfile → sending:", profileData);
+      const response = await apiClient.put("/auth/update-profile", profileData);
+      console.log("✅ updateUserProfile → response:", response.data);
+      const data = response.data;
+      if (data.status === false) {
+        console.error("❌ updateUserProfile → server returned false:", data.message);
+        return rejectWithValue(data.message || "Failed to update profile");
+      }
+      localStorage.setItem("user", JSON.stringify(data.data || null));
+      return data.data;
+    } catch (error) {
+      const msg = error.response?.data?.message || error.message || "Failed to update profile";
+      console.error("❌ updateUserProfile → caught error:", msg, error.response?.data);
       return rejectWithValue(msg);
     }
   },
@@ -418,6 +436,7 @@ const authSlice = createSlice({
     refreshToken: localStorage.getItem("refreshToken") || null,
     isAuthenticated: !!localStorage.getItem("accessToken"),
     loading: false,
+    saving: false,
     error: null,
     successMessage: null,
     registrationSuccess: false,
@@ -659,6 +678,20 @@ const authSlice = createSlice({
       })
       .addCase(getUserDetails.rejected, (state, action) => {
         state.loading = false;
+        state.error = action.payload;
+      })
+
+      // Update User Profile
+      .addCase(updateUserProfile.pending, (state) => {
+        state.saving = true;
+        state.error = null;
+      })
+      .addCase(updateUserProfile.fulfilled, (state, action) => {
+        state.saving = false;
+        state.user = { ...state.user, ...action.payload };
+      })
+      .addCase(updateUserProfile.rejected, (state, action) => {
+        state.saving = false;
         state.error = action.payload;
       })
 

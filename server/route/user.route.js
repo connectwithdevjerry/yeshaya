@@ -12,6 +12,7 @@ const {
   createCompanyDetails,
   updateCompanyDetails,
   getUserDetails,
+  updateUserProfile,
   getDomainSettings,
   saveDomainSettings,
   verifyDomain,
@@ -19,7 +20,6 @@ const {
   saveSnapshot,
   getAdminSettings,
   saveAdminSettings,
-  // admin_super_signup,
 } = require("../controller/user.controller");
 const {
   USER_SIGNUP,
@@ -33,6 +33,7 @@ const {
   REGISTER_COMPANY,
   UPDATE_COMPANY_DETAILS,
   GET_USER_DETAILS,
+  UPDATE_USER_PROFILE,
   GET_DOMAIN_SETTINGS,
   SAVE_DOMAIN_SETTINGS,
   VERIFY_DOMAIN,
@@ -57,7 +58,11 @@ router.post(USER_RESET_PASS, handleResetPassword);
 router.delete(USER_LOGOUT, logout);
 router.post(EXCHANGE_TOKEN, exchangeToken);
 router.get(GET_COMPANY_DETAILS, verifyAccessToken, getCompanyDetails);
-router.get(GET_USER_DETAILS, verifyAccessToken, getUserDetails);
+router.get(GET_USER_DETAILS,     verifyAccessToken, getUserDetails);
+router.put(UPDATE_USER_PROFILE,  (req, res, next) => {
+  console.log("📥 PUT /auth/update-profile hit — auth header present:", !!req.headers["authorization"]);
+  next();
+}, verifyAccessToken, updateUserProfile);
 router.post(
   REGISTER_COMPANY,
   verifyAccessToken,

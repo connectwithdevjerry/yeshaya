@@ -77,9 +77,21 @@ const GET_CHARGING_DETAILS = "/get-charging-details";
 const UPDATE_CHARGING_DETAILS = "/update-charging-details";
 const GET_USER_DETAILS = "/get-user-details";
 const AUTO_CARD_PAY_WEBHOOK = "/autopay/webhook";
-const GET_ANALYTICS = "/get-analytics";
+const GET_ANALYTICS          = "/get-analytics";
+const GET_SUBACCOUNT_SPEND   = "/subaccount-spend";
+const IMPORT_CONTACTS        = "/import-contacts";
 const GET_TEAM_NOTES = "/get-team-notes";
 const UPDATE_TEAM_NOTES = "/update-team-notes";
+const DELETE_SUBACCOUNT            = "/delete-subaccount/:id";
+const TOGGLE_SUBACCOUNT_FAVORITE   = "/subaccount/:id/favorite";
+const TOGGLE_SUBACCOUNT_ARCHIVE    = "/subaccount/:id/archive";
+const UPDATE_SUBACCOUNT_META       = "/subaccount/:id/meta";
+const GET_SUBACCOUNT_DETAILS       = "/subaccount/:id/details";
+const UPDATE_USER_PROFILE      = "/update-profile";
+const GET_STRIPE_PORTAL        = "/stripe-portal-link";
+const DISCONNECT_GHL           = "/disconnect/ghl";
+const DISCONNECT_OPENAI        = "/disconnect/openai";
+const DISCONNECT_STRIPE        = "/disconnect/stripe";
 // Agency settings
 const GET_DOMAIN_SETTINGS  = "/domain-settings";
 const SAVE_DOMAIN_SETTINGS = "/domain-settings/save";
@@ -172,8 +184,20 @@ module.exports = {
   GET_USER_DETAILS,
   AUTO_CARD_PAY_WEBHOOK,
   GET_ANALYTICS,
+  GET_SUBACCOUNT_SPEND,
+  IMPORT_CONTACTS,
   GET_TEAM_NOTES,
   UPDATE_TEAM_NOTES,
+  DELETE_SUBACCOUNT,
+  TOGGLE_SUBACCOUNT_FAVORITE,
+  TOGGLE_SUBACCOUNT_ARCHIVE,
+  UPDATE_SUBACCOUNT_META,
+  GET_SUBACCOUNT_DETAILS,
+  UPDATE_USER_PROFILE,
+  GET_STRIPE_PORTAL,
+  DISCONNECT_GHL,
+  DISCONNECT_OPENAI,
+  DISCONNECT_STRIPE,
   GET_DOMAIN_SETTINGS,
   SAVE_DOMAIN_SETTINGS,
   VERIFY_DOMAIN,

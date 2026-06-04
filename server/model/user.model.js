@@ -6,6 +6,27 @@ const {} = require("../constants");
 const userSchema = mongoose.Schema({
   firstName: { type: String, required: false },
   lastName: { type: String, required: false },
+  // ── Team / multi-user ──
+  agencyOwnerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "user_collection",
+    default: null, // null = this user is an agency owner; set = team member
+  },
+  role: {
+    type: String,
+    enum: ["owner", "admin", "member", "viewer"],
+    default: "owner",
+  },
+  isActive: { type: Boolean, default: true },
+  teamInvites: [
+    {
+      email:     { type: String, required: true },
+      role:      { type: String, enum: ["admin", "member", "viewer"], default: "member" },
+      token:     { type: String, required: true },
+      status:    { type: String, enum: ["pending", "accepted", "cancelled"], default: "pending" },
+      invitedAt: { type: Date, default: Date.now },
+    },
+  ],
   stripePublishableKey: { type: String, required: false },
   stripeCustomerId: { type: String, required: false },
   stripeUserId: { type: String, required: false },
@@ -21,10 +42,23 @@ const userSchema = mongoose.Schema({
   allKnowledgeBaseToolIds: [String],
   ghlSubAccountIds: [
     {
-      accountId: String,
-      ghlSubRefreshToken: String,
+      accountId:              String,
+      ghlSubRefreshToken:     String,
       ghlSubRefreshTokenExpiry: Date,
-      connected: { type: Boolean, default: false },
+      connected:              { type: Boolean, default: false },
+      isFavorite:             { type: Boolean, default: false },
+      isArchived:             { type: Boolean, default: false },
+      customName:             { type: String,  default: ""    },
+      notes:                  { type: String,  default: ""    },
+      subAccountKnowledgeBaseToolIds: [String],
+      numberPools: [
+        {
+          poolId:     { type: String, required: true },
+          name:       { type: String, default: "Untitled Pool" },
+          numberSids: [String], // phoneSids assigned to this pool
+          createdAt:  { type: Date, default: Date.now },
+        },
+      ],
       savedContacts: [
         {
           firstName: String,
