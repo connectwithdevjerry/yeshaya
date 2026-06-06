@@ -33,6 +33,7 @@ import { PromptSnippetsDropdown } from "./PromptSnippetsModal";
 import { toast } from "react-hot-toast";
 import { generateOutboundCallUrl } from "../../../../store/slices/assistantsSlice";
 import { fetchPurchasedNumbers } from "../../../../store/slices/numberSlice";
+import apiClient from "../../../../store/api/config";
 
 const TABS = [
   { id: "Builder",   label: "Builder",   icon: Wrench },
@@ -105,6 +106,7 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
   const [voiceDisplay,  setVoiceDisplay]  = useState("Select Voice");
   const [phoneNumber,   setPhoneNumber]   = useState("No number");
   const [assistantTag,  setAssistantTag]  = useState("");
+  const [assignedTags,  setAssignedTags]  = useState([]); // active tags linked to this assistant
 
   const formatVoiceDisplay = (voice) => {
     if (!voice) return "Select Voice";
@@ -122,6 +124,20 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
       if (selectedAssistant.id) setAssistantTag(selectedAssistant.id);
     }
   }, [selectedAssistant]);
+
+  // Load the active tags assigned to this assistant
+  useEffect(() => {
+    const subaccountId = searchParams.get("subaccount");
+    const assistantId  = selectedAssistant?.id;
+    if (!subaccountId || !assistantId) return;
+    apiClient.get(`/active-tags?subaccountId=${subaccountId}`)
+      .then((res) => {
+        if (res.data.status) {
+          setAssignedTags((res.data.data || []).filter((t) => t.assistantId === assistantId));
+        }
+      })
+      .catch(() => {});
+  }, [searchParams, selectedAssistant?.id]);
 
   // Resolve the phone number actually connected to this assistant
   useEffect(() => {
@@ -295,14 +311,19 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Assistant tag pill */}
+          {/* Assistant tags pill — shows active tags assigned to this assistant */}
           <div
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 bg-white cursor-pointer hover:border-indigo-200 hover:bg-indigo-50 transition-all"
             onClick={() => navigate(getContextualPath("/activetags"))}
+            title={assignedTags.length ? `Tags: ${assignedTags.map((t) => t.name).join(", ")}` : "No active tags assigned — click to manage"}
           >
             <Tag className="w-3.5 h-3.5 text-gray-400" />
-            <span className="text-xs font-mono text-gray-600 truncate max-w-[120px]">
-              {assistantTag ? `${assistantTag.slice(0, 6)}…${assistantTag.slice(-4)}` : "No ID"}
+            <span className="text-xs font-medium text-gray-600 truncate max-w-[140px]">
+              {assignedTags.length === 0
+                ? "No tags"
+                : assignedTags.length === 1
+                  ? assignedTags[0].name
+                  : `${assignedTags[0].name} +${assignedTags.length - 1}`}
             </span>
             <div className="border-l border-gray-200 pl-1.5 ml-0.5">
               <Settings className="w-3 h-3 text-gray-400" />

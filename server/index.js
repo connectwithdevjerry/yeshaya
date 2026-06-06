@@ -14,6 +14,7 @@ const appointmentRoutes = require("./route/appointment.route");
 const templateRoutes = require("./route/template.route");
 const apiKeyRoutes = require("./route/apikey.route");
 const publicApiRoutes = require("./route/publicApi.route");
+const activeTagRoutes = require("./route/activeTag.route");
 const cookieParser = require("cookie-parser");
 const { verifyAccessToken } = require("./jwt_helpers");
 const { stripeWebhook } = require("./controller/payments.controller");
@@ -64,6 +65,7 @@ app.use("/appointments", appointmentRoutes);
 app.use("/templates", templateRoutes);
 app.use("/integrations/api-keys", apiKeyRoutes);
 app.use("/api/v1", publicApiRoutes);
+app.use("/active-tags", activeTagRoutes);
 
 app.get("/", (req, res) => {
   res.send("homepage");

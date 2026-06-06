@@ -1,8 +1,9 @@
 // src/components/components-ui/Integration/Webhooks.jsx
-import React, { useState } from "react";
-import { Info, Loader2 } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Info, Loader2, Copy, Send, KeyRound } from "lucide-react";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
+import apiClient from "../../../store/api/config";
 
 /* ── Indigo gradient toggle ── */
 const Toggle = ({ value, onChange }) => (
@@ -20,31 +21,67 @@ const Toggle = ({ value, onChange }) => (
 );
 
 const EVENTS = [
-  { key: "oauth",    name: "OAuth Events",   description: "Fired when a user connects or disconnects an OAuth integration."    },
-  { key: "call",     name: "Call Events",    description: "Fired at the start, end, and during AI voice call sessions."        },
-  { key: "message",  name: "Message Events", description: "Fired when an AI chat message is sent or received."                 },
-  { key: "payment",  name: "Payment Events", description: "Fired on successful charges, refunds, and subscription changes."    },
+  { key: "calls",    name: "Call Events",     description: "Fired when an AI voice call completes."                              },
+  { key: "payments", name: "Payment Events",  description: "Fired on successful charges and low-balance alerts."                },
+  { key: "contacts", name: "Contact Events",  description: "Fired when a new contact is created."                               },
+  { key: "account",  name: "Account Events",  description: "Assistants, knowledge bases, numbers and sub-accounts."             },
+  { key: "all",      name: "All Events",      description: "Catch-all — receive every event regardless of the toggles above."   },
 ];
 
 const WebhooksContent = () => {
   const [endpointUrl, setEndpointUrl] = useState("");
-  const [events,      setEvents]      = useState({ oauth: false, call: false, message: false, payment: false });
+  const [events,      setEvents]      = useState({ calls: false, payments: false, contacts: false, account: false, all: false });
+  const [secret,      setSecret]      = useState("");
   const [saving,      setSaving]      = useState(false);
+  const [testing,     setTesting]     = useState(false);
+  const [loading,     setLoading]     = useState(true);
+
+  useEffect(() => {
+    apiClient.get("/integrations/webhook")
+      .then((res) => {
+        if (res.data.status && res.data.data) {
+          const d = res.data.data;
+          setEndpointUrl(d.endpointUrl || "");
+          setSecret(d.secret || "");
+          setEvents({
+            calls: !!d.events?.calls, payments: !!d.events?.payments, contacts: !!d.events?.contacts,
+            account: !!d.events?.account, all: !!d.events?.all,
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   const toggleEvent = (key) => setEvents((p) => ({ ...p, [key]: !p[key] }));
 
   const handleSave = async () => {
-    if (!endpointUrl.trim()) {
-      toast.error("Please enter an endpoint URL");
-      return;
-    }
+    if (!endpointUrl.trim()) { toast.error("Please enter an endpoint URL"); return; }
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 900)); // stub — wire to real API when available
-    setSaving(false);
-    toast.success("Webhook settings saved");
+    try {
+      const res = await apiClient.post("/integrations/webhook", { endpointUrl: endpointUrl.trim(), events, active: true });
+      if (res.data.status) {
+        setSecret(res.data.data?.secret || secret);
+        toast.success("Webhook settings saved");
+      } else toast.error(res.data.message || "Failed to save");
+    } catch (e) { toast.error(e.response?.data?.message || "Failed to save"); }
+    finally { setSaving(false); }
   };
 
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      const res = await apiClient.post("/integrations/webhook/test");
+      res.data.status ? toast.success(res.data.message) : toast.error(res.data.message || "Test failed");
+    } catch (e) { toast.error(e.response?.data?.message || "Test failed"); }
+    finally { setTesting(false); }
+  };
+
+  const copySecret = () => navigator.clipboard.writeText(secret).then(() => toast.success("Secret copied")).catch(() => {});
+
   const activeCount = Object.values(events).filter(Boolean).length;
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-indigo-400" /></div>;
 
   return (
     <div className="space-y-6">
@@ -96,16 +133,38 @@ const WebhooksContent = () => {
         ))}
       </div>
 
+      {/* Signing secret */}
+      {secret && (
+        <div className="space-y-1.5">
+          <label className="flex items-center gap-1.5 text-sm font-semibold text-gray-800"><KeyRound className="w-3.5 h-3.5 text-gray-400" /> Signing secret</label>
+          <p className="text-xs text-gray-500">Each payload is signed with HMAC-SHA256 in the <span className="font-mono">X-Webhook-Signature</span> header. Verify it with this secret.</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-700 truncate">{secret}</code>
+            <button onClick={copySecret} className="px-3 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+              <Copy className="w-3.5 h-3.5" /> Copy
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Info note */}
       <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-indigo-50 border border-indigo-100">
         <Info className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
         <p className="text-xs text-indigo-700 leading-relaxed">
-          Webhook payloads are signed with a secret header for verification. See the docs for payload format details.
+          Payloads are JSON with <span className="font-mono">event</span>, <span className="font-mono">data</span>, and <span className="font-mono">timestamp</span> fields, POSTed to your endpoint. Save first, then send a test to verify delivery.
         </p>
       </div>
 
-      {/* Save */}
-      <div className="flex justify-end pt-1 border-t border-gray-100">
+      {/* Actions */}
+      <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+        <button
+          onClick={handleTest}
+          disabled={testing || !endpointUrl.trim()}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
+        >
+          {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+          Send test event
+        </button>
         <button
           onClick={handleSave}
           disabled={saving}

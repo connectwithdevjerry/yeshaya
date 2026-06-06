@@ -2067,6 +2067,86 @@ const getByoNumbers = async (req, res) => {
   }
 };
 
+// ─── Webhooks: configure + test ────────────────────────────────────────────────
+const webhookModel = require("../model/webhook.model");
+const { signPayload } = require("../helpers/webhookDispatch");
+
+const getWebhookConfig = async (req, res) => {
+  try {
+    const cfg = await webhookModel.findOne({ userId: req.user }).lean();
+    return res.send({
+      status: true,
+      data: cfg || {
+        endpointUrl: "", active: true, secret: "",
+        events: { calls: false, payments: false, contacts: false, account: false, all: false },
+      },
+    });
+  } catch (e) {
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+const saveWebhookConfig = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { endpointUrl, events, active } = req.body;
+    if (endpointUrl && !/^https?:\/\/.+/i.test(endpointUrl)) {
+      return res.send({ status: false, message: "Endpoint URL must be a valid http(s) URL" });
+    }
+
+    const existing = await webhookModel.findOne({ userId });
+    const secret = existing?.secret || `whsec_${crypto.randomBytes(24).toString("hex")}`;
+
+    const doc = await webhookModel.findOneAndUpdate(
+      { userId },
+      {
+        $set: {
+          endpointUrl: endpointUrl || "",
+          active: active !== undefined ? !!active : true,
+          secret,
+          events: {
+            calls:    !!events?.calls,
+            payments: !!events?.payments,
+            contacts: !!events?.contacts,
+            account:  !!events?.account,
+            all:      !!events?.all,
+          },
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    return res.send({ status: true, data: doc, message: "Webhook settings saved" });
+  } catch (e) {
+    console.error("saveWebhookConfig error:", e.message);
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+const testWebhook = async (req, res) => {
+  try {
+    const cfg = await webhookModel.findOne({ userId: req.user });
+    if (!cfg || !cfg.endpointUrl) {
+      return res.send({ status: false, message: "Save an endpoint URL first." });
+    }
+    const body = JSON.stringify({
+      event: "test", group: "test", title: "Test event",
+      message: "This is a test webhook from your dashboard.",
+      data: { ok: true }, timestamp: new Date().toISOString(),
+    });
+    const resp = await axios.post(cfg.endpointUrl, body, {
+      headers: {
+        "Content-Type": "application/json",
+        "X-Webhook-Event": "test",
+        "X-Webhook-Signature": signPayload(body, cfg.secret),
+      },
+      timeout: 8000,
+    });
+    return res.send({ status: true, message: `Test delivered (HTTP ${resp.status})` });
+  } catch (e) {
+    return res.send({ status: false, message: `Delivery failed: ${e.response?.status || e.message}` });
+  }
+};
+
 // ─── Per-number settings (Edit Account / Limits / Permissions / Rename) ────────
 const numberSettingModel = require("../model/numberSetting.model");
 
@@ -2124,6 +2204,9 @@ module.exports = {
   ghlOauthCallback,
   getNumberSettings,
   saveNumberSettings,
+  getWebhookConfig,
+  saveWebhookConfig,
+  testWebhook,
   importByoNumber,
   getByoNumbers,
   reassignNumberAssistant,

@@ -5,6 +5,9 @@ const {
   ghlOauthCallback,
   getNumberSettings,
   saveNumberSettings,
+  getWebhookConfig,
+  saveWebhookConfig,
+  testWebhook,
   importByoNumber,
   getByoNumbers,
   reassignNumberAssistant,
@@ -144,6 +147,9 @@ router.get("/number-settings",    verifyAccessToken, getNumberSettings);
 router.post("/number-settings",   verifyAccessToken, saveNumberSettings);
 router.post("/import-byo-number", verifyAccessToken, importByoNumber);
 router.get("/byo-numbers",        verifyAccessToken, getByoNumbers);
+router.get("/webhook",            verifyAccessToken, getWebhookConfig);
+router.post("/webhook",           verifyAccessToken, saveWebhookConfig);
+router.post("/webhook/test",      verifyAccessToken, testWebhook);
 router.post("/reassign-number",   verifyAccessToken, reassignNumberAssistant);
 
 module.exports = router;

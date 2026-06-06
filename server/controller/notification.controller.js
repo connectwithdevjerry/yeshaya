@@ -4,6 +4,11 @@ const notificationModel = require("../model/notification.model");
 const createNotification = async ({ userId, type, title, message, metadata = {} }) => {
   try {
     await notificationModel.create({ userId, type, title, message, metadata });
+    // Fire a webhook for this event (best-effort, non-blocking)
+    try {
+      const { dispatchWebhook } = require("../helpers/webhookDispatch");
+      dispatchWebhook(userId, { type, title, message, metadata }).catch(() => {});
+    } catch (_) {}
   } catch (err) {
     console.error("Failed to create notification:", err.message);
   }

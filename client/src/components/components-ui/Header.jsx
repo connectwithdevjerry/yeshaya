@@ -1,13 +1,15 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useMemo } from "react";
 import { useState } from "react";
 import {
   Search, Link2, Bell, CheckCheck, Trash2, X,
   Phone, CreditCard, AlertTriangle, UserPlus,
-  BookOpen, Bot, RefreshCw
+  BookOpen, Bot, RefreshCw, CornerDownLeft,
+  Users, CalendarClock, PhoneCall, Smartphone, Layers, Tag, HelpCircle, Settings,
 } from "lucide-react";
 import OauthConnectionPopup from "./OauthConnection";
 import { AnimatePresence, motion } from "framer-motion";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import {
   fetchNotifications,
   fetchUnreadCount,
@@ -16,7 +18,21 @@ import {
   deleteNotification,
   clearAllNotifications,
 } from "../../store/slices/notificationSlice";
+import { getIntegrationStatus } from "../../store/slices/integrationSlice";
 import { formatDistanceToNow } from "date-fns";
+
+const DESTINATIONS = [
+  { label: "Assistants",      route: "/assistants",  icon: Bot,          keywords: "bot ai agent" },
+  { label: "Contacts",        route: "/contacts",    icon: Users,        keywords: "people crm leads" },
+  { label: "Appointments",    route: "/appointments",icon: CalendarClock,keywords: "calendar booking schedule" },
+  { label: "Call Center",     route: "/call",        icon: PhoneCall,    keywords: "calls logs analytics" },
+  { label: "Knowledge Bases", route: "/knowledge",   icon: BookOpen,     keywords: "kb docs files faq" },
+  { label: "Numbers",         route: "/numbers",     icon: Smartphone,   keywords: "phone twilio sip" },
+  { label: "Number Pools",    route: "/pools",       icon: Layers,       keywords: "rotation" },
+  { label: "Active Tags",     route: "/activetags",  icon: Tag,          keywords: "tag segment" },
+  { label: "Help Center",     route: "/helps",       icon: HelpCircle,   keywords: "support docs guide" },
+  { label: "Settings",        route: "/ghl_settings",icon: Settings,     keywords: "account profile" },
+];
 
 // ─── Icon & colour per notification type ──────────────────────────────────────
 const TYPE_CONFIG = {
@@ -92,14 +108,68 @@ function NotificationItem({ notification, onRead, onDelete }) {
 }
 
 export function Header({ title }) {
-  const [isOpen, setIsOpen]         = useState(false);
+  const [isOpen, setIsOpen]           = useState(false);
   const [activePopup, setActivePopup] = useState();
-  const panelRef = useRef(null);
-  const dispatch = useDispatch();
+  const [query, setQuery]             = useState("");
+  const [searchOpen, setSearchOpen]   = useState(false);
+  const [activeIdx, setActiveIdx]     = useState(0);
+  const panelRef  = useRef(null);
+  const searchRef = useRef(null);
+  const dispatch  = useDispatch();
+  const navigate       = useNavigate();
+  const [searchParams] = useSearchParams();
+  const location       = useLocation();
 
   const { items: notifications, unreadCount, loading } = useSelector(
     (state) => state.notifications
   );
+  const { goHighLevel, openAI, stripe } = useSelector((s) => s.integrations || {});
+
+  useEffect(() => { dispatch(getIntegrationStatus()); }, [dispatch]);
+
+  // Integration status rows
+  const ghlExpired = goHighLevel?.expiryDate && new Date(goHighLevel.expiryDate) < new Date();
+  const statusItems = [
+    { name: "GoHighLevel", connected: !!goHighLevel?.connected && !ghlExpired, detail: ghlExpired ? "Token expired — reconnect" : "OAuth connection" },
+    { name: "OpenAI",      connected: !!openAI?.connected, detail: openAI?.connected ? "API key valid" : (openAI?.message || "Not connected") },
+    { name: "Stripe",      connected: !!stripe?.connected, detail: stripe?.presence ? "Account connected" : "Not connected" },
+  ];
+  const downCount = statusItems.filter((i) => !i.connected).length;
+
+  // Search
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return DESTINATIONS.filter((d) => d.label.toLowerCase().includes(q) || (d.keywords || "").includes(q)).slice(0, 7);
+  }, [query]);
+  useEffect(() => { setActiveIdx(0); }, [query]);
+  useEffect(() => {
+    const h = (e) => { if (searchRef.current && !searchRef.current.contains(e.target)) setSearchOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const go = (route) => {
+    setQuery(""); setSearchOpen(false);
+    if (location.pathname === "/app") {
+      const p = new URLSearchParams({
+        agencyid:   searchParams.get("agencyid")   || "",
+        subaccount: searchParams.get("subaccount") || "",
+        allow:      searchParams.get("allow")      || "",
+        myname:     searchParams.get("myname")     || "",
+        myemail:    searchParams.get("myemail")    || "",
+        route,
+      });
+      navigate(`/app?${p.toString()}`);
+    } else { navigate(route); }
+  };
+  const onSearchKey = (e) => {
+    if (!results.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx((i) => (i + 1) % results.length); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx((i) => (i - 1 + results.length) % results.length); }
+    else if (e.key === "Enter") { e.preventDefault(); go(results[activeIdx].route); }
+    else if (e.key === "Escape") { setSearchOpen(false); }
+  };
 
   // ── Fetch on mount + poll every 60s ──────────────────────────────────────
   const loadNotifications = useCallback(() => {
@@ -141,21 +211,68 @@ export function Header({ title }) {
 
         <div className="flex items-center space-x-2">
           {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <div className="relative" ref={searchRef}>
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search for anything..."
-              className="pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 w-64"
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }}
+              onFocus={() => setSearchOpen(true)}
+              onKeyDown={onSearchKey}
+              placeholder="Search pages…"
+              className="pl-10 pr-9 py-2.5 bg-gray-50 border border-transparent rounded-xl text-sm transition-all duration-200 focus:outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 w-72 placeholder:text-gray-400"
             />
+            {query && (
+              <button onClick={() => { setQuery(""); setSearchOpen(false); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <AnimatePresence>
+              {searchOpen && query.trim() && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-gray-200/60 z-50 overflow-hidden"
+                >
+                  <div className="px-3 pt-2.5 pb-1.5"><span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Pages</span></div>
+                  {results.length === 0 ? (
+                    <p className="px-4 py-4 text-xs text-gray-400">No matches for "<span className="text-gray-600 font-medium">{query}</span>"</p>
+                  ) : (
+                    <div className="px-1.5 pb-2 space-y-0.5">
+                      {results.map((r, i) => {
+                        const RIcon = r.icon; const active = i === activeIdx;
+                        return (
+                          <button key={r.route} onMouseEnter={() => setActiveIdx(i)} onClick={() => go(r.route)}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${active ? "bg-indigo-50 text-indigo-700" : "text-gray-700 hover:bg-gray-50"}`}>
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${active ? "bg-indigo-100" : "bg-gray-100"}`}>
+                              <RIcon className={`w-3.5 h-3.5 ${active ? "text-indigo-600" : "text-gray-500"}`} />
+                            </div>
+                            <span className="flex-1 text-left font-medium">{r.label}</span>
+                            {active && <CornerDownLeft className="w-3 h-3 text-indigo-400" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="px-4 py-2 border-t border-gray-50 flex items-center gap-3 text-[10px] text-gray-400">
+                    <span className="flex items-center gap-1"><kbd className="px-1 bg-gray-100 rounded">↑</kbd><kbd className="px-1 bg-gray-100 rounded">↓</kbd> navigate</span>
+                    <span className="flex items-center gap-1"><kbd className="px-1 bg-gray-100 rounded">↵</kbd> open</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Link popup */}
           <button
-            className="p-2 text-gray-500 hover:text-indigo-600 rounded-xl hover:bg-indigo-50 transition-all duration-200 relative"
+            className={`p-2.5 rounded-xl transition-all relative ${downCount ? "text-amber-500 bg-amber-50 hover:bg-amber-100" : "text-gray-500 hover:text-indigo-600 hover:bg-indigo-50"}`}
             onClick={() => togglePopup("oauth")}
+            title="Integration connections"
           >
             <Link2 className="w-5 h-5" />
+            {downCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-amber-500 text-white text-[10px] font-bold rounded-full">{downCount}</span>
+            )}
           </button>
 
           {/* Bell */}
@@ -176,15 +293,22 @@ export function Header({ title }) {
       {/* OAuth popup */}
       <AnimatePresence>
         {activePopup === "oauth" && (
-          <motion.div
-            initial={{ opacity: 0, y: -8, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.97 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="absolute right-20 top-full mt-1 z-50"
-          >
-            <OauthConnectionPopup onClose={() => setActivePopup(null)} />
-          </motion.div>
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setActivePopup(null)} />
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="absolute right-16 top-full mt-2 z-50"
+            >
+              <OauthConnectionPopup
+                items={statusItems}
+                onRefresh={() => dispatch(getIntegrationStatus())}
+                onClose={() => setActivePopup(null)}
+              />
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 
