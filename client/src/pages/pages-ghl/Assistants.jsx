@@ -6,7 +6,7 @@ import {
   ChevronRight, Sparkles, X,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchAssistants, deleteAssistant } from "../../store/slices/assistantsSlice";
+import { fetchAssistants, deleteAssistant, setAssistantMeta } from "../../store/slices/assistantsSlice";
 import { motion, AnimatePresence } from "framer-motion";
 import CreateFolderModal    from "../../components/components-ghl/Assistants/CreateFolderModal";
 import CreateAssistantModal from "../../components/components-ghl/Assistants/CreateAssistantModal";
@@ -85,7 +85,7 @@ const EmptyState = ({ filtered, onAdd, onClear }) => (
 );
 
 /* ── assistant card ── */
-const AssistantCard = ({ assistant, onOpen, onDelete, idx }) => {
+const AssistantCard = ({ assistant, onOpen, onDelete, onFavorite, onArchive, idx }) => {
   const grad = getGrad(assistant.model);
   const initials = (assistant.name || "A").slice(0, 2).toUpperCase();
   const model    = assistant.model?.model || "N/A";
@@ -118,12 +118,29 @@ const AssistantCard = ({ assistant, onOpen, onDelete, idx }) => {
             <Cpu className="w-2.5 h-2.5" /> {model}
           </span>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(e, assistant); }}
-          className="p-1.5 rounded-lg text-gray-200 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-0.5 flex-shrink-0">
+          <button
+            onClick={(e) => onFavorite(e, assistant)}
+            title={assistant.favorite ? "Remove from favorites" : "Add to favorites"}
+            className={`p-1.5 rounded-lg transition-colors ${assistant.favorite ? "text-amber-400 hover:bg-amber-50" : "text-gray-200 hover:text-amber-400 hover:bg-amber-50 opacity-0 group-hover:opacity-100"}`}
+          >
+            <Star className="w-3.5 h-3.5" fill={assistant.favorite ? "currentColor" : "none"} />
+          </button>
+          <button
+            onClick={(e) => onArchive(e, assistant)}
+            title={assistant.archived ? "Unarchive" : "Archive"}
+            className={`p-1.5 rounded-lg transition-colors ${assistant.archived ? "text-indigo-500 hover:bg-indigo-50" : "text-gray-200 hover:text-indigo-500 hover:bg-indigo-50 opacity-0 group-hover:opacity-100"}`}
+          >
+            <Archive className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(e, assistant); }}
+            title="Delete"
+            className="p-1.5 rounded-lg text-gray-200 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Dates */}
@@ -158,7 +175,7 @@ const AssistantCard = ({ assistant, onOpen, onDelete, idx }) => {
 };
 
 /* ── table row ── */
-const AssistantRow = ({ assistant, onOpen, onDelete, idx }) => {
+const AssistantRow = ({ assistant, onOpen, onDelete, onFavorite, onArchive, idx }) => {
   const grad = getGrad(assistant.model);
   const initials = (assistant.name || "A").slice(0, 2).toUpperCase();
 
@@ -193,12 +210,29 @@ const AssistantRow = ({ assistant, onOpen, onDelete, idx }) => {
         </span>
       </td>
       <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={(e) => onDelete(e, assistant)}
-          className="p-1.5 text-gray-200 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center justify-end gap-0.5">
+          <button
+            onClick={(e) => onFavorite(e, assistant)}
+            title={assistant.favorite ? "Remove from favorites" : "Add to favorites"}
+            className={`p-1.5 rounded-lg transition-all ${assistant.favorite ? "text-amber-400 hover:bg-amber-50" : "text-gray-200 hover:text-amber-400 hover:bg-amber-50 opacity-0 group-hover:opacity-100"}`}
+          >
+            <Star className="w-3.5 h-3.5" fill={assistant.favorite ? "currentColor" : "none"} />
+          </button>
+          <button
+            onClick={(e) => onArchive(e, assistant)}
+            title={assistant.archived ? "Unarchive" : "Archive"}
+            className={`p-1.5 rounded-lg transition-all ${assistant.archived ? "text-indigo-500 hover:bg-indigo-50" : "text-gray-200 hover:text-indigo-500 hover:bg-indigo-50 opacity-0 group-hover:opacity-100"}`}
+          >
+            <Archive className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={(e) => onDelete(e, assistant)}
+            title="Delete"
+            className="p-1.5 text-gray-200 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </td>
     </motion.tr>
   );
@@ -259,12 +293,40 @@ const Assistants = () => {
     }
   };
 
-  const filtered = useMemo(() =>
-    assistants.filter((a) => !search || a.name?.toLowerCase().includes(search.toLowerCase())),
-    [assistants, search]
-  );
+  const handleToggleFavorite = (e, a) => {
+    e.stopPropagation();
+    dispatch(setAssistantMeta({ subaccountId, assistantId: a.id, favorite: !a.favorite }))
+      .unwrap()
+      .then(() => toast.success(a.favorite ? "Removed from favorites" : "Added to favorites"))
+      .catch((err) => toast.error(err || "Failed"));
+  };
 
-  const counts = { all: assistants.length, favorites: 0, imported: 0, archived: 0 };
+  const handleToggleArchive = (e, a) => {
+    e.stopPropagation();
+    dispatch(setAssistantMeta({ subaccountId, assistantId: a.id, archived: !a.archived }))
+      .unwrap()
+      .then(() => toast.success(a.archived ? "Unarchived" : "Archived"))
+      .catch((err) => toast.error(err || "Failed"));
+  };
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return assistants.filter((a) => {
+      const matchSearch = !q || a.name?.toLowerCase().includes(q);
+      if (!matchSearch) return false;
+      if (activeTab === "favorites") return a.favorite && !a.archived;
+      if (activeTab === "archived")  return a.archived;
+      // "all" (and any other tab) → everything except archived
+      return !a.archived;
+    });
+  }, [assistants, search, activeTab]);
+
+  const counts = {
+    all:       assistants.filter((a) => !a.archived).length,
+    favorites: assistants.filter((a) => a.favorite && !a.archived).length,
+    imported:  0,
+    archived:  assistants.filter((a) => a.archived).length,
+  };
 
   /* stats */
   const uniqueModels  = [...new Set(assistants.map((a) => a.model?.model).filter(Boolean))].length;
@@ -410,6 +472,8 @@ const Assistants = () => {
                         idx={idx}
                         onOpen={() => handleOpen(a)}
                         onDelete={openDeleteModal}
+                        onFavorite={handleToggleFavorite}
+                        onArchive={handleToggleArchive}
                       />
                     ))}
                   </div>
@@ -450,6 +514,8 @@ const Assistants = () => {
                             idx={idx}
                             onOpen={() => handleOpen(a)}
                             onDelete={openDeleteModal}
+                            onFavorite={handleToggleFavorite}
+                            onArchive={handleToggleArchive}
                           />
                         ))}
                       </AnimatePresence>

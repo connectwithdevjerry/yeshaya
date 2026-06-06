@@ -6,20 +6,26 @@ import { Info, ChevronDown, Check, AlertCircle, Loader2, Send } from "lucide-rea
 import { updateAssistant } from "../../../../../store/slices/assistantsSlice";
 import { getSubaccountIdFromUrl, getAssistantIdFromUrl } from "../../../../../utils/urlUtils";
 
+// Vapi natively supports only "off" and "office" (or a hosted audio URL)
 const BACKGROUND_NOISE_OPTIONS = [
-  { value: "off",          label: "None (Clear Voice)"  },
-  { value: "office",       label: "Busy Office"          },
-  { value: "coffee_shop",  label: "Coffee Shop"          },
-  { value: "street",       label: "City Street"          },
-  { value: "rain",         label: "Soft Rain"            },
-  { value: "white_noise",  label: "White Noise"          },
+  { value: "off",    label: "None (Clear Voice)" },
+  { value: "office", label: "Busy Office"        },
 ];
 
 const RULES_OF_ENGAGEMENT_OPTIONS = [
-  { value: "assistant_first", label: "AI Initiates (Dynamic Greeting)" },
+  { value: "assistant_first", label: "AI Initiates (Speaks First)"     },
   { value: "human_first",     label: "Human Initiates (Wait for User)" },
   { value: "instant",         label: "Instant Connect (No Greeting)"   },
 ];
+
+// Rules of engagement → Vapi firstMessageMode
+const ROE_TO_MODE = {
+  assistant_first: "assistant-speaks-first",
+  human_first:     "assistant-waits-for-user",
+  instant:         "assistant-waits-for-user",
+};
+const MODE_TO_ROE = (mode) =>
+  mode === "assistant-waits-for-user" ? "human_first" : "assistant_first";
 
 // ── Shared input / select ────────────────────────────────────────────────────
 const SettingInput = ({ label, name, value, onChange, unit, description, isDropdown = false, type = "text", options = [] }) => (
@@ -100,8 +106,8 @@ export const CallSettingsPanel = () => {
   const [settings, setSettings] = useState({
     recordingOptOut:    false,
     maxCallTime:        30,
-    silenceTimeout:     15000,
-    backgroundNoise:    "coffee_shop",
+    silenceTimeout:     30,
+    backgroundNoise:    "off",
     noiseLevel:         70,
     rulesOfEngagement:  "assistant_first",
     voicemailDetection: true,
@@ -115,15 +121,17 @@ export const CallSettingsPanel = () => {
 
   useEffect(() => {
     if (selectedAssistant) {
+      const a = selectedAssistant;
       setSettings({
-        recordingOptOut:    selectedAssistant.metadata?.recordingOptOut         || false,
-        maxCallTime:        selectedAssistant.metadata?.maxCallTimeMinutes       || 30,
-        silenceTimeout:     selectedAssistant.metadata?.silenceTimeoutSeconds    || 15000,
-        backgroundNoise:    selectedAssistant.metadata?.backgroundNoise          || "coffee_shop",
-        noiseLevel:         selectedAssistant.metadata?.noiseLevel               || 70,
-        rulesOfEngagement:  selectedAssistant.metadata?.rulesOfEngagement        || "assistant_first",
-        voicemailDetection: selectedAssistant.metadata?.voicemailDetection       ?? true,
-        serverUrl:          selectedAssistant.server?.url                        || "",
+        // recording is ON unless artifactPlan explicitly disabled it
+        recordingOptOut:    a.artifactPlan?.recordingEnabled === false,
+        maxCallTime:        a.maxDurationSeconds ? Math.round(a.maxDurationSeconds / 60) : 30,
+        silenceTimeout:     a.silenceTimeoutSeconds || 30,
+        backgroundNoise:    a.backgroundSound === "office" ? "office" : "off",
+        noiseLevel:         a.metadata?.noiseLevel ?? 70,
+        rulesOfEngagement:  MODE_TO_ROE(a.firstMessageMode),
+        voicemailDetection: !!a.voicemailDetection,
+        serverUrl:          a.server?.url || "",
       });
       initialLoadRef.current = false;
     }
@@ -133,21 +141,23 @@ export const CallSettingsPanel = () => {
     if (!subaccountId || !assistantId || initialLoadRef.current) return;
     setSaveStatus("saving");
     try {
-      await dispatch(updateAssistant({
-        subaccountId, assistantId,
-        updateData: {
-          metadata: { ...selectedAssistant?.metadata,
-            recordingOptOut:       updated.recordingOptOut,
-            maxCallTimeMinutes:    updated.maxCallTime,
-            silenceTimeoutSeconds: updated.silenceTimeout,
-            backgroundNoise:       updated.backgroundNoise,
-            noiseLevel:            updated.noiseLevel,
-            rulesOfEngagement:     updated.rulesOfEngagement,
-            voicemailDetection:    updated.voicemailDetection,
-          },
-          server: { ...selectedAssistant?.server, url: updated.serverUrl },
-        },
-      })).unwrap();
+      const clampSilence = Math.min(3600, Math.max(10, Number(updated.silenceTimeout) || 30));
+      const updateData = {
+        maxDurationSeconds:    Math.max(10, (Number(updated.maxCallTime) || 30) * 60),
+        silenceTimeoutSeconds: clampSilence,
+        backgroundSound:       updated.backgroundNoise === "office" ? "office" : "off",
+        firstMessageMode:      ROE_TO_MODE[updated.rulesOfEngagement] || "assistant-speaks-first",
+        artifactPlan:          { ...selectedAssistant?.artifactPlan, recordingEnabled: !updated.recordingOptOut },
+        server:                { ...selectedAssistant?.server, url: updated.serverUrl },
+        // noiseLevel has no native Vapi equivalent — kept as a stored preference
+        metadata:              { ...selectedAssistant?.metadata, noiseLevel: updated.noiseLevel },
+      };
+      // Voicemail detection: enable with Vapi provider, or turn off
+      updateData.voicemailDetection = updated.voicemailDetection ? { provider: "vapi" } : null;
+      // Instant connect = no greeting
+      if (updated.rulesOfEngagement === "instant") updateData.firstMessage = "";
+
+      await dispatch(updateAssistant({ subaccountId, assistantId, updateData })).unwrap();
       setSaveStatus("success");
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => setSaveStatus(""), 2000);
@@ -200,14 +210,14 @@ export const CallSettingsPanel = () => {
         description="Maximum length of a call in minutes." />
 
       <SettingInput label="Silence Timeout" name="silenceTimeout" value={settings.silenceTimeout}
-        onChange={handleInputChange} type="number" unit="ms"
-        description="Milliseconds of silence before the call ends." />
+        onChange={handleInputChange} type="number" unit="sec"
+        description="Seconds of silence before the call ends (10–3600)." />
 
       {/* Background noise */}
       <div className="space-y-2">
         <SettingInput label="Background Noise" name="backgroundNoise" value={settings.backgroundNoise}
           onChange={handleInputChange} isDropdown options={BACKGROUND_NOISE_OPTIONS}
-          description="Background noise profile to enhance realism." />
+          description="Ambient sound played during the call (Vapi supports Off or Office)." />
         <div className="flex items-center gap-3">
           <span className="text-[10px] font-bold text-gray-400 uppercase w-14 flex-shrink-0">Volume</span>
           <input

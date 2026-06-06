@@ -8,8 +8,11 @@ import { CallSettingsPanel } from "./Sidebar/CallSettingsPanel";
 import { ToolsAndAPIsModal } from "./Sidebar/ToolsAndAPIsModal";
 import { CalendarModal } from "./Sidebar/CalendarModal";
 import { KnowledgeBaseSettings } from "./Sidebar/KnowledgeBaseSettings";
+import { MapCustomFieldsPanel } from "./Sidebar/MapCustomFieldsPanel";
+import { FindReplacePanel } from "./Sidebar/FindReplacePanel";
+import { TeamNotesPanel } from "./Sidebar/TeamNotesPanel";
 
-const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal, openCalendarModal }) => {
+const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal, openCalendarModal, promptContent, setPromptContent }) => {
   const Icon = item.icon;
 
   const handleClick = () => {
@@ -26,6 +29,9 @@ const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal, openCalendarM
     if (item.title === "Chat Settings")           return <ChatSettingsPanel />;
     if (item.title === "Call Settings")           return <CallSettingsPanel />;
     if (item.title === "Knowledge Base Settings") return <KnowledgeBaseSettings />;
+    if (item.title === "Map Custom Fields")       return <MapCustomFieldsPanel />;
+    if (item.title === "Find & Replace")          return <FindReplacePanel promptContent={promptContent} setPromptContent={setPromptContent} />;
+    if (item.title === "Team Notes")              return <TeamNotesPanel />;
     return null;
   };
 
@@ -90,7 +96,7 @@ const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal, openCalendarM
   );
 };
 
-export const ToolkitSidebar = ({ isOpen, onToggle, activeTab }) => {
+export const ToolkitSidebar = ({ isOpen, onToggle, activeTab, promptContent, setPromptContent }) => {
   const [expandedItem,       setExpandedItem]       = useState(null);
   const [isToolsModalOpen,   setIsToolsModalOpen]   = useState(false);
   const [isCalendarModalOpen,setIsCalendarModalOpen]= useState(false);
@@ -148,6 +154,8 @@ export const ToolkitSidebar = ({ isOpen, onToggle, activeTab }) => {
                   onSelect={handleItemSelect}
                   openToolsModal={() => setIsToolsModalOpen(true)}
                   openCalendarModal={() => setIsCalendarModalOpen(true)}
+                  promptContent={promptContent}
+                  setPromptContent={setPromptContent}
                 />
               ))}
             </div>

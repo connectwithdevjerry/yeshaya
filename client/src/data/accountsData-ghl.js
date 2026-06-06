@@ -40,6 +40,11 @@ export const navigationGHLItems = [
     link: "/call",
   },
   {
+    name: "Appointments",
+    icon: "appointments",
+    link: "/appointments",
+  },
+  {
     name: "Contacts",
     icon: "contacts",
     link: "/contacts",

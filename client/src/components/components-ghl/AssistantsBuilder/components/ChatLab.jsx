@@ -39,10 +39,11 @@ export const ChatLabView = () => {
         updated[updated.length - 1] = { role: "assistant", isLoading: false, name: assistantName, content: botReply };
         return updated;
       });
-    } catch {
+    } catch (err) {
+      const reason = typeof err === "string" ? err : (err?.message || "Something went wrong. Please try again.");
       setMessages((p) => {
         const updated = [...p];
-        updated[updated.length - 1] = { role: "assistant", isLoading: false, name: assistantName, content: "Something went wrong. Please try again." };
+        updated[updated.length - 1] = { role: "assistant", isLoading: false, name: assistantName, content: reason };
         return updated;
       });
     }

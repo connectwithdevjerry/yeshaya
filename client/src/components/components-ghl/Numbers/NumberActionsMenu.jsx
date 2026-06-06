@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import {
   Star, ExternalLink, Pencil, Scale, Eye,
-  Loader2, XCircle, Wifi, WifiOff, Phone,
+  Loader2, XCircle, Wifi, WifiOff, Phone, Copy, Hash, Info, Bot,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -34,7 +34,7 @@ const MenuItem = ({ icon: Icon, label, onClick, disabled, loading, variant = "de
   </motion.button>
 );
 
-const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position }) => {
+const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position, onAction }) => {
   const menuRef       = useRef(null);
   const navigate      = useNavigate();
   const location      = useLocation();
@@ -61,6 +61,14 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position }) =
   }, [onClose, anchorRef]);
 
   if (!isOpen || !account || !position) return null;
+
+  const act = (sectionName) => { onAction?.(sectionName, account); onClose(); };
+  const copy = (text, label) => {
+    navigator.clipboard.writeText(text)
+      .then(() => toast.success(`${label} copied`))
+      .catch(() => toast.error("Copy failed"));
+    onClose();
+  };
 
   const handleConnect = async () => {
     if (!account.companyId || !account.assistantId || !account.phoneNumber || !account.id) {
@@ -103,6 +111,9 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position }) =
   return (
     <AnimatePresence>
       {isOpen && (
+        <>
+        {/* Click-catching backdrop — closes the menu on any outside click */}
+        <div className="fixed inset-0 z-40" onClick={onClose} />
         <motion.div
           ref={menuRef}
           initial={{ opacity: 0, scale: 0.95, y: -6 }}
@@ -141,10 +152,16 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position }) =
           </div>
 
           <div className="px-2 space-y-0.5">
-            <MenuItem icon={Star}   label="Rename"          onClick={onClose} />
-            <MenuItem icon={Pencil} label="Edit Account"    onClick={onClose} />
-            <MenuItem icon={Scale}  label="Manage Limits"   onClick={onClose} />
-            <MenuItem icon={Eye}    label="Edit Permissions" onClick={onClose} />
+            <MenuItem icon={Star}   label="Rename"           onClick={() => act("rename")} />
+            <MenuItem icon={Pencil} label="Edit Account"     onClick={() => act("account")} />
+            <MenuItem icon={Scale}  label="Manage Limits"    onClick={() => act("limits")} />
+            <MenuItem icon={Bot}    label="Change Assistant" onClick={() => act("assistant")} />
+
+            <div className="my-1 border-t border-gray-100" />
+
+            <MenuItem icon={Info} label="View Details" onClick={() => act("details")} />
+            <MenuItem icon={Copy} label="Copy Number"  onClick={() => copy(account.phoneNumber, "Number")} />
+            <MenuItem icon={Hash} label="Copy SID"     onClick={() => copy(account.id, "SID")} />
 
             <div className="my-1 border-t border-gray-100" />
 
@@ -158,7 +175,7 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position }) =
             ) : isConnectedToVapi ? (
               <MenuItem
                 icon={XCircle}
-                label="Disconnect Vapi"
+                label="Disconnect"
                 onClick={handleDisconnect}
                 loading={isDisconnecting}
                 disabled={isDisconnecting}
@@ -167,7 +184,7 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position }) =
             ) : (
               <MenuItem
                 icon={ExternalLink}
-                label="Connect to Vapi"
+                label="Connect"
                 onClick={handleConnect}
                 loading={isConnecting}
                 disabled={isConnecting}
@@ -175,6 +192,7 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position }) =
             )}
           </div>
         </motion.div>
+        </>
       )}
     </AnimatePresence>
   );

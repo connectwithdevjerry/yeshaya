@@ -75,12 +75,23 @@ const userSchema = mongoose.Schema({
         {
           assistantId: String,
           description: String,
+          favorite: { type: Boolean, default: false },
+          archived: { type: Boolean, default: false },
           calendar: { type: String, required: false },
           teamNotes: { type: String, required: false },
           inboundDynamicMessage: { type: String, required: false },
           outboundDynamicMessage: { type: String, required: false },
           knowledgeBaseToolIds: [String],
           connectedTools: [String],
+          customFieldMap: [
+            {
+              id: String,         // GHL custom field id
+              name: String,
+              fieldKey: String,
+              dataType: String,
+              instruction: String,
+            },
+          ],
           numberDetails: [
             {
               phoneNum: String,
@@ -88,6 +99,17 @@ const userSchema = mongoose.Schema({
               phoneSid: String,
             },
           ],
+        },
+      ],
+      // External (BYO/SIP) numbers imported into Vapi — live at the sub-account level
+      byoNumbers: [
+        {
+          phoneNumber: String,
+          vapiPhoneNumId: String,
+          credentialId: String,
+          terminationUri: String,
+          friendlyName: String,
+          createdAt: { type: Date, default: Date.now },
         },
       ],
     },

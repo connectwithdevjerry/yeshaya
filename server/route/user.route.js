@@ -13,6 +13,9 @@ const {
   updateCompanyDetails,
   getUserDetails,
   updateUserProfile,
+  requestEmailChange,
+  confirmEmailChange,
+  changePassword,
   getDomainSettings,
   saveDomainSettings,
   verifyDomain,
@@ -34,6 +37,9 @@ const {
   UPDATE_COMPANY_DETAILS,
   GET_USER_DETAILS,
   UPDATE_USER_PROFILE,
+  REQUEST_EMAIL_CHANGE,
+  CONFIRM_EMAIL_CHANGE,
+  CHANGE_PASSWORD,
   GET_DOMAIN_SETTINGS,
   SAVE_DOMAIN_SETTINGS,
   VERIFY_DOMAIN,
@@ -63,6 +69,9 @@ router.put(UPDATE_USER_PROFILE,  (req, res, next) => {
   console.log("📥 PUT /auth/update-profile hit — auth header present:", !!req.headers["authorization"]);
   next();
 }, verifyAccessToken, updateUserProfile);
+router.post(REQUEST_EMAIL_CHANGE, verifyAccessToken, requestEmailChange);
+router.get(CONFIRM_EMAIL_CHANGE,  confirmEmailChange); // public — token-gated
+router.post(CHANGE_PASSWORD,      verifyAccessToken, changePassword);
 router.post(
   REGISTER_COMPANY,
   verifyAccessToken,

@@ -101,6 +101,47 @@ export const updateAssistant = createAsyncThunk(
   },
 );
 
+// Team notes — fetch & save
+export const fetchTeamNotes = createAsyncThunk(
+  "assistants/fetchTeamNotes",
+  async ({ subaccountId, assistantId }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.get(`/assistants/get-team-notes?subaccountId=${subaccountId}&assistantId=${assistantId}`);
+      if (!res.data.status) return rejectWithValue(res.data.message || "Failed to load notes");
+      return res.data.data?.teamNotes || "";
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to load team notes");
+    }
+  },
+);
+
+export const saveTeamNotes = createAsyncThunk(
+  "assistants/saveTeamNotes",
+  async ({ subaccountId, assistantId, teamNotes }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.put("/assistants/update-team-notes", { subaccountId, assistantId, teamNotes });
+      if (!res.data.status) return rejectWithValue(res.data.message || "Failed to save");
+      return res.data.data?.teamNotes ?? teamNotes;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to save team notes");
+    }
+  },
+);
+
+// Toggle favorite / archived on an assistant
+export const setAssistantMeta = createAsyncThunk(
+  "assistants/setMeta",
+  async ({ subaccountId, assistantId, favorite, archived }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.post("/assistants/assistant-meta", { subaccountId, assistantId, favorite, archived });
+      if (!res.data.status) return rejectWithValue(res.data.message || "Failed to update");
+      return { assistantId, favorite, archived };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to update assistant");
+    }
+  },
+);
+
 // ✅ Delete assistant
 export const deleteAssistant = createAsyncThunk(
   "assistants/delete",
@@ -216,7 +257,13 @@ export const addKnowledgeBase = createAsyncThunk(
 
       formData.append("title", title);
       formData.append("type", type);
-      formData.append("knowledgeBaseUrl", knowledgeBaseUrl);
+      // FAQ sends an array of {q,a}; files send a File; others send a string.
+      // Serialize non-string, non-File payloads as JSON so the server can parse.
+      const isFile = typeof File !== "undefined" && knowledgeBaseUrl instanceof File;
+      formData.append(
+        "knowledgeBaseUrl",
+        (typeof knowledgeBaseUrl === "string" || isFile) ? knowledgeBaseUrl : JSON.stringify(knowledgeBaseUrl),
+      );
       if (subaccountId) formData.append("subaccountId", subaccountId);
 
       const response = await apiClient.post(
@@ -343,6 +390,9 @@ export const fetchKnowledgeBases = createAsyncThunk(
           sourcesCount: Array.isArray(kb.fileIds) ? kb.fileIds.length : 0,
           isVoiceEnabled: false,
           fileIds: Array.isArray(kb.fileIds) ? kb.fileIds : [],
+          // Phase A/B persisted metadata (null for legacy uploads pre-feature)
+          type: item.meta?.type || undefined,
+          meta: item.meta || null,
         };
       });
     } catch (err) {
@@ -565,6 +615,131 @@ export const addToolToAssistant = createAsyncThunk(
   },
 );
 
+// Fetch the tools currently attached to an assistant (for "Added" state)
+export const fetchAssistantTools = createAsyncThunk(
+  "assistants/fetchTools",
+  async (assistantId, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/assistants/get-tools?assistantId=${assistantId}`);
+      if (!response.data.status) {
+        return rejectWithValue(response.data.message || "Failed to fetch tools");
+      }
+      return response.data.data || [];
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Error fetching tools");
+    }
+  },
+);
+
+// Fetch a location's GHL custom fields + the assistant's saved mapping
+export const fetchGhlCustomFields = createAsyncThunk(
+  "assistants/fetchGhlCustomFields",
+  async ({ subaccountId, assistantId }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.get(
+        `/assistants/ghl-custom-fields?subaccountId=${subaccountId}&assistantId=${assistantId}`,
+      );
+      if (res.data?.reconnectRequired) return rejectWithValue("Reconnect GoHighLevel to load custom fields.");
+      if (!res.data.status) return rejectWithValue(res.data.message || "Failed to load custom fields");
+      return { fields: res.data.fields || [], map: res.data.map || [] };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Error loading custom fields");
+    }
+  },
+);
+
+// Save which custom fields this assistant should collect
+export const saveCustomFieldMap = createAsyncThunk(
+  "assistants/saveCustomFieldMap",
+  async ({ subaccountId, assistantId, map }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.post("/assistants/custom-field-map", { subaccountId, assistantId, map });
+      if (!res.data.status) return rejectWithValue(res.data.message || "Failed to save");
+      return map;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Error saving mapping");
+    }
+  },
+);
+
+// Search a knowledge base's stored text (embedding playground)
+export const searchKnowledgeBase = createAsyncThunk(
+  "assistants/searchKnowledgeBase",
+  async ({ toolId, query }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.get(
+        `/assistants/kb-search?toolId=${encodeURIComponent(toolId)}&query=${encodeURIComponent(query)}`,
+      );
+      if (!res.data.status) return rejectWithValue(res.data.message || "Search failed");
+      return { results: res.data.results || [], message: res.data.message };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Error searching knowledge base");
+    }
+  },
+);
+
+// Import an existing Vapi tool by ID
+export const importToolToAssistant = createAsyncThunk(
+  "assistants/importTool",
+  async ({ assistantId, toolId }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post("/assistants/import-tool", { assistantId, toolId });
+      if (!response.data.status) return rejectWithValue(response.data.message || "Failed to import tool");
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Error importing tool");
+    }
+  },
+);
+
+// Create a custom webhook (function) tool
+export const createCustomTool = createAsyncThunk(
+  "assistants/createCustomTool",
+  async ({ assistantId, name, description, serverUrl }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post("/assistants/create-custom-tool", { assistantId, name, description, serverUrl });
+      if (!response.data.status) return rejectWithValue(response.data.message || "Failed to create tool");
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Error creating tool");
+    }
+  },
+);
+
+// Remove a tool from an assistant
+export const removeToolFromAssistant = createAsyncThunk(
+  "assistants/removeTool",
+  async ({ accountId, assistantId, toolId }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.delete("/assistants/delete-tool", {
+        data: { accountId, assistantId, toolId },
+      });
+      if (!response.data.status) {
+        return rejectWithValue(response.data.message || "Failed to remove tool");
+      }
+      return { toolId };
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Error removing tool");
+    }
+  },
+);
+
+// Unlink the calendar from an assistant
+export const removeCalendarFromAssistant = createAsyncThunk(
+  "assistants/removeCalendar",
+  async ({ accountId, assistantId }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post("/assistants/remove-calendar", { accountId, assistantId });
+      if (!response.data.status) {
+        return rejectWithValue(response.data.message || "Failed to unlink calendar");
+      }
+      return true;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Error unlinking calendar");
+    }
+  },
+);
+
 // ✅ 14. Send Chat Message
 export const sendChatMessage = createAsyncThunk(
   "assistants/sendChatMessage",
@@ -586,8 +761,11 @@ export const sendChatMessage = createAsyncThunk(
 
       // Your API structure uses .status and .reply
       if (!response.data.status) {
+        // Surface the real reason — e.g. wallet-too-low comes back in `reply`,
+        // Vapi errors come back in `message`.
+        const replyMsg = response.data.reply?.[0]?.content;
         return rejectWithValue(
-          response.data.message || "Failed to send message",
+          response.data.message || replyMsg || "Failed to send message",
         );
       }
 
@@ -896,6 +1074,8 @@ const assistantsSlice = createSlice({
     calendarError: null,
     calendarReconnectRequired: false,
     linkingCalendar: false,
+    assistantTools: [],
+    fetchingAssistantTools: false,
     connectedCalendar: null,
     fetchingConnectedCalendar: false,
     addingTool: false,
@@ -1041,6 +1221,19 @@ const assistantsSlice = createSlice({
       .addCase(updateAssistant.rejected, (state, action) => {
         state.updating = false;
         state.updateError = action.payload;
+      })
+
+      .addCase(setAssistantMeta.fulfilled, (state, action) => {
+        const { assistantId, favorite, archived } = action.payload;
+        const a = state.data.find((x) => x.id === assistantId || x.assistantId === assistantId);
+        if (a) {
+          if (favorite !== undefined) a.favorite = favorite;
+          if (archived !== undefined) a.archived = archived;
+        }
+        if (state.selectedAssistant && (state.selectedAssistant.id === assistantId)) {
+          if (favorite !== undefined) state.selectedAssistant.favorite = favorite;
+          if (archived !== undefined) state.selectedAssistant.archived = archived;
+        }
       })
 
       // 🔹 Add Dynamic Message
@@ -1221,6 +1414,24 @@ const assistantsSlice = createSlice({
       .addCase(addCalendarToAssistant.rejected, (state, action) => {
         state.linkingCalendar = false;
         state.calendarError = action.payload;
+      })
+
+      // assistant tools (for toolkit "Added" state)
+      .addCase(fetchAssistantTools.pending, (state) => {
+        state.fetchingAssistantTools = true;
+      })
+      .addCase(fetchAssistantTools.fulfilled, (state, action) => {
+        state.fetchingAssistantTools = false;
+        state.assistantTools = action.payload;
+      })
+      .addCase(fetchAssistantTools.rejected, (state) => {
+        state.fetchingAssistantTools = false;
+        state.assistantTools = [];
+      })
+      .addCase(removeToolFromAssistant.fulfilled, (state, action) => {
+        state.assistantTools = state.assistantTools.filter(
+          (t) => t.id !== action.payload.toolId,
+        );
       })
 
       //get ghl calendars

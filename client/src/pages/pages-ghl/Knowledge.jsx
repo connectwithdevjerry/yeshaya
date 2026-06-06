@@ -11,6 +11,8 @@ import { fetchKnowledgeBases, deleteKnowledgeBase, getFileDetails } from "../../
 import { toast } from "react-hot-toast";
 import ConfirmDeleteModal from "../../components/components-ghl/ConfirmDeleteModal";
 import UploadModal from "../../components/components-ghl/Knowledge/UploadModal";
+import EmbeddingPlaygroundModal from "../../components/components-ghl/Knowledge/EmbeddingPlaygroundModal";
+import { FlaskConical } from "lucide-react";
 import { getSubaccountIdFromUrl } from "../../utils/urlUtils";
 import { useSearchParams } from "react-router-dom";
 
@@ -25,6 +27,13 @@ const getTypeMeta = (base) => {
   if (base.type) return TYPE_META[base.type] || TYPE_META.text;
   if (base.isVoiceEnabled) return TYPE_META.text;
   return TYPE_META.text;
+};
+
+const fmtBytes = (n) => {
+  if (!n) return null;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 };
 
 const TABS = [
@@ -68,9 +77,12 @@ const EmptyState = ({ onAdd }) => (
 );
 
 /* ── knowledge base card ── */
-const KBCard = ({ base, onView, onDelete, isDetailsLoading, idx }) => {
+const KBCard = ({ base, onView, onTest, onDelete, isDetailsLoading, idx }) => {
   const meta    = getTypeMeta(base);
   const Icon    = meta.icon;
+  const m        = base.meta || null;
+  const sizeStr  = fmtBytes(m?.sizeBytes);
+  const charsStr = m?.extractedChars ? `${m.extractedChars.toLocaleString()} chars` : null;
 
   return (
     <motion.div
@@ -125,18 +137,39 @@ const KBCard = ({ base, onView, onDelete, isDetailsLoading, idx }) => {
         </div>
       </div>
 
-      {/* View button */}
-      <button
-        onClick={() => onView(base)}
-        disabled={isDetailsLoading}
-        className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-gray-100 text-xs font-medium text-gray-500 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50/50 disabled:opacity-40 transition-all"
-      >
-        {isDetailsLoading
-          ? <Loader2 className="w-3 h-3 animate-spin" />
-          : <ExternalLink className="w-3 h-3" />
-        }
-        {isDetailsLoading ? "Loading…" : "View Content"}
-      </button>
+      {/* File metadata (Phase A/B) */}
+      {(m?.originalName || sizeStr || charsStr || (m?.version > 1)) && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3 -mt-1">
+          {m?.originalName && (
+            <span className="text-[10px] text-gray-500 truncate max-w-full" title={m.originalName}>{m.originalName}</span>
+          )}
+          {sizeStr && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-500">{sizeStr}</span>}
+          {charsStr && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-500">{charsStr}</span>}
+          {m?.version > 1 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600">v{m.version}</span>}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onView(base)}
+          disabled={isDetailsLoading}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-gray-100 text-xs font-medium text-gray-500 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50/50 disabled:opacity-40 transition-all"
+        >
+          {isDetailsLoading
+            ? <Loader2 className="w-3 h-3 animate-spin" />
+            : <ExternalLink className="w-3 h-3" />
+          }
+          {isDetailsLoading ? "Loading…" : "View"}
+        </button>
+        <button
+          onClick={() => onTest(base)}
+          title="Test this knowledge base"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-indigo-100 bg-indigo-50/60 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 transition-all"
+        >
+          <FlaskConical className="w-3 h-3" /> Test
+        </button>
+      </div>
     </motion.div>
   );
 };
@@ -150,14 +183,31 @@ const KnowledgePage = () => {
   const [activeTab,        setActiveTab]        = useState("all");
   const [deleteModal,      setDeleteModal]      = useState({ isOpen: false, base: null });
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
+  const [textPreview,      setTextPreview]      = useState(null); // { title, content }
+  const [playground,       setPlayground]       = useState(null); // { toolId, name }
 
   const { knowledgeBasesData = [], fetchingKnowledgeBases } = useSelector((s) => s.assistants);
 
   useEffect(() => { dispatch(fetchKnowledgeBases(subaccountId)); }, [dispatch, subaccountId]);
 
   const handleViewContent = async (base) => {
+    const m = base.meta;
+
+    // Phase B preview: inline text for text/faq/url, Cloudinary original for files
+    if (m) {
+      if (["text", "faq", "url"].includes(m.type) && m.sourceText) {
+        setTextPreview({ title: base.name, content: m.sourceText, sourceUrl: m.sourceUrl });
+        return;
+      }
+      if (m.type === "file" && m.cloudinaryUrl) {
+        window.open(m.cloudinaryUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+    }
+
+    // Fallback: legacy KBs (pre-feature) → Vapi file URL
     const fileId = base.fileIds?.[0];
-    if (!fileId) { toast.error("No file associated with this knowledge base"); return; }
+    if (!fileId) { toast.error("No content available to preview"); return; }
     setIsDetailsLoading(true);
     try {
       const result = await dispatch(getFileDetails({ fileId })).unwrap();
@@ -302,6 +352,7 @@ const KnowledgePage = () => {
                       base={base}
                       idx={idx}
                       onView={handleViewContent}
+                      onTest={(b) => setPlayground({ toolId: b.id, name: b.name })}
                       onDelete={openDeleteModal}
                       isDetailsLoading={isDetailsLoading}
                     />
@@ -331,6 +382,49 @@ const KnowledgePage = () => {
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); dispatch(fetchKnowledgeBases(subaccountId)); }}
       />
+
+      <EmbeddingPlaygroundModal
+        isOpen={!!playground}
+        toolId={playground?.toolId}
+        knowledgeBaseName={playground?.name}
+        onClose={() => setPlayground(null)}
+      />
+
+      {/* ── Inline text/FAQ/URL preview ── */}
+      <AnimatePresence>
+        {textPreview && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setTextPreview(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-2xl max-h-[85vh] flex flex-col"
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-4 h-4 text-indigo-500" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-gray-800 truncate">{textPreview.title}</h3>
+                </div>
+                <button onClick={() => setTextPreview(null)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 flex-shrink-0 text-lg leading-none">×</button>
+              </div>
+              {textPreview.sourceUrl && (
+                <a href={textPreview.sourceUrl} target="_blank" rel="noopener noreferrer"
+                  className="px-5 py-2 text-xs text-indigo-600 hover:underline flex items-center gap-1 border-b border-gray-50">
+                  <Globe className="w-3 h-3" /> {textPreview.sourceUrl}
+                </a>
+              )}
+              <pre className="flex-1 overflow-y-auto px-5 py-4 text-xs text-gray-600 whitespace-pre-wrap font-sans leading-relaxed">
+                {textPreview.content}
+              </pre>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

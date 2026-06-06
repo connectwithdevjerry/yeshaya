@@ -22,6 +22,7 @@ import IssuesModal from "./IssuesModal";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { getAssistantById } from "../../../../store/slices/assistantsSlice";
+import { auditAssistant } from "../../../../utils/assistantAudit";
 import { useCurrentAccount } from "../../../../hooks/useCurrentAccount";
 import { LogsModal } from "./LogsModal";
 import { ExperimentsDropdown } from "./ExperimentsDropdown";
@@ -78,9 +79,11 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
   const [isUsersOpen,        setIsUsersOpen]        = useState(false);
   const [saving,             setSaving]             = useState(false);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const navigate     = useNavigate();
   const dispatch     = useDispatch();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const account      = useCurrentAccount();
 
   const { selectedAssistant, loading } = useSelector((s) => s.assistants);
@@ -102,6 +105,25 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
         .then(() => toast.success("Assistant ID copied!"))
         .catch(() => toast.error("Failed to copy ID"));
     }
+  };
+
+  const handleRefresh = async () => {
+    if (!assistantId || !subaccountId) return;
+    setRefreshing(true);
+    try {
+      await dispatch(getAssistantById({ subaccountId, assistantId })).unwrap();
+      toast.success("Assistant reloaded");
+    } catch {
+      toast.error("Failed to reload assistant");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleOpenTestingLab = () => {
+    const params = new URLSearchParams(searchParams);
+    params.set("tab", "Chat Lab");
+    setSearchParams(params);
   };
 
   const handleSave = async () => {
@@ -132,6 +154,7 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
     }
   };
 
+  const { checks, issueCount } = auditAssistant(selectedAssistant);
   const name         = selectedAssistant?.name || "New Blank Assistant";
   const model        = selectedAssistant?.model;
   const modelDisplay = formatModelDisplay(model);
@@ -237,9 +260,9 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
             />
           </div>
 
-          <IconButton icon={Rocket}   tooltip="Testing Lab" />
+          <IconButton icon={Rocket}   tooltip="Open Testing Lab (Chat)" onClick={handleOpenTestingLab} />
           <IconButton icon={Sparkles} tooltip="Logs" active={isLogsModalOpen} onClick={() => setIsLogsModalOpen((p) => !p)} />
-          <IconButton icon={RotateCcw} tooltip="Refresh" />
+          <IconButton icon={RotateCcw} tooltip="Reload assistant" active={refreshing} onClick={handleRefresh} />
         </div>
       </div>
 
@@ -247,10 +270,14 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
       <div className="flex items-center gap-2">
         <button
           onClick={() => setIsIssuesModalOpen((p) => !p)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-gray-500 hover:text-amber-600 hover:bg-amber-50 border border-transparent hover:border-amber-100 transition-all"
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-transparent transition-all ${
+            issueCount > 0
+              ? "text-amber-600 bg-amber-50 hover:bg-amber-100 border-amber-100"
+              : "text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-100"
+          }`}
         >
           <AlertTriangle className="w-3.5 h-3.5" />
-          0 Issues
+          {issueCount} {issueCount === 1 ? "Issue" : "Issues"}
         </button>
 
         <motion.button
@@ -272,8 +299,8 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
       {/* Modals */}
       <AIModelModal         isOpen={isModelModalOpen}  onClose={() => setIsModelModalOpen(false)} />
       <RenameAssistantModal isOpen={isRenameModalOpen} onClose={() => setIsRenameModalOpen(false)} />
-      <IssuesModal          isOpen={isIssuesModalOpen} onClose={() => setIsIssuesModalOpen(false)} />
-      <LogsModal            isOpen={isLogsModalOpen}   onClose={() => setIsLogsModalOpen(false)} />
+      <IssuesModal          isOpen={isIssuesModalOpen} onClose={() => setIsIssuesModalOpen(false)} checks={checks} />
+      <LogsModal            isOpen={isLogsModalOpen}   onClose={() => setIsLogsModalOpen(false)} assistantId={assistantId} subaccountId={subaccountId} />
     </header>
   );
 };

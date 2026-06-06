@@ -72,7 +72,11 @@ const refreshTokens = async () => {
       throw new Error("Token exchange failed");
     }
   } catch (error) {
-    console.error("❌ Token refresh failed:", error);
+    console.error("❌ Token refresh failed:", {
+      message: error?.message,
+      status: error?.response?.status,
+      data: error?.response?.data,
+    });
     throw error;
   }
 };
@@ -194,7 +198,12 @@ apiClient.interceptors.response.use(
         isRefreshing = false;
         return apiClient(originalRequest);
       } catch (err) {
-        console.error("❌ Token refresh failed in response interceptor:", err);
+        console.error("❌ Token refresh failed in response interceptor:", {
+          message: err?.message,
+          status: err?.response?.status,
+          data: err?.response?.data,
+          url: `${API_BASE_URL}/auth/exchange-token`,
+        });
         processQueue(err, null);
         isRefreshing = false;
         

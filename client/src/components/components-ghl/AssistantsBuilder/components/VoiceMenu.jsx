@@ -150,7 +150,11 @@ export const VoiceMenuDrawer = ({ isOpen, onClose }) => {
 
   const [searchQuery,       setSearchQuery]       = useState("");
   const [selectedProvider,  setSelectedProvider]  = useState("All");
+  const [selectedGender,    setSelectedGender]    = useState("All");
+  const [selectedAccent,    setSelectedAccent]    = useState("All");
   const [savingVoiceId,     setSavingVoiceId]     = useState(null);
+
+  const hasTag = (v, t) => v.tags.some((tag) => tag.toLowerCase() === t.toLowerCase());
 
   const [isCopyVoiceModalOpen,        setIsCopyVoiceModalOpen]        = useState(false);
   const [isElevenLabsImportModalOpen, setIsElevenLabsImportModalOpen] = useState(false);
@@ -160,8 +164,10 @@ export const VoiceMenuDrawer = ({ isOpen, onClose }) => {
     const matchSearch   = v.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           v.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchProvider = selectedProvider === "All" || v.provider.toLowerCase() === selectedProvider.toLowerCase();
-    return matchSearch && matchProvider;
-  }), [searchQuery, selectedProvider]);
+    const matchGender   = selectedGender === "All" || hasTag(v, selectedGender);
+    const matchAccent   = selectedAccent === "All" || hasTag(v, selectedAccent);
+    return matchSearch && matchProvider && matchGender && matchAccent;
+  }), [searchQuery, selectedProvider, selectedGender, selectedAccent]);
 
   const handleAddVoice = async (voice) => {
     if (!subaccountId || !assistantId) { toast.error("Missing IDs"); return; }
@@ -239,14 +245,18 @@ export const VoiceMenuDrawer = ({ isOpen, onClose }) => {
                     value={selectedProvider}
                     onChange={setSelectedProvider}
                   />
-                  {["Age", "Gender", "Accent"].map((f) => (
-                    <button
-                      key={f}
-                      className="flex items-center gap-1 px-3 py-2 rounded-xl border border-gray-100 text-xs text-gray-300 cursor-not-allowed"
-                    >
-                      {f} <ChevronDown className="w-3 h-3" />
-                    </button>
-                  ))}
+                  <FilterDropdown
+                    label="Gender"
+                    options={["All", "Female", "Male"]}
+                    value={selectedGender}
+                    onChange={setSelectedGender}
+                  />
+                  <FilterDropdown
+                    label="Accent"
+                    options={["All", "American", "British", "Australian", "Japanese"]}
+                    value={selectedAccent}
+                    onChange={setSelectedAccent}
+                  />
                 </div>
               </div>
 
@@ -279,7 +289,7 @@ export const VoiceMenuDrawer = ({ isOpen, onClose }) => {
                     </div>
                     <p className="text-sm font-medium text-gray-500">No voices match your filters</p>
                     <button
-                      onClick={() => { setSearchQuery(""); setSelectedProvider("All"); }}
+                      onClick={() => { setSearchQuery(""); setSelectedProvider("All"); setSelectedGender("All"); setSelectedAccent("All"); }}
                       className="text-xs text-indigo-500 hover:text-indigo-700 font-medium"
                     >
                       Reset filters

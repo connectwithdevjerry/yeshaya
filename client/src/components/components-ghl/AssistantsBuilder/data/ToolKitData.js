@@ -5,7 +5,7 @@ export const toolkitItems = [
     { title: "Chat Settings", icon: Settings, type: "panel" },
     { title: "Call Settings", icon: Settings, type: "panel" },
     { title: "Tools & APIs", icon: ToolCase, type: "modal" }, 
-    { title: "Map Custom Fields", icon: MapPin, type: "panel" },
+    // { title: "Map Custom Fields", icon: MapPin, type: "panel" }, // hidden until GHL custom-fields scope is approved
     { title: "Knowledge Base Settings", icon: Book, type: "panel" },
     { title: "Calendars", icon: Calendar, type: "modal" },
     { title: "Find & Replace", icon: Search, type: "panel" },

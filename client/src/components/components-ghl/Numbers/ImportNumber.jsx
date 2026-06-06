@@ -1,24 +1,59 @@
 // src/components/components-ghl/Numbers/ImportNumber.jsx
 import React, { useState } from "react";
-import { X, Upload, Phone, Link2, HelpCircle, ArrowRight } from "lucide-react";
+import { X, Upload, Phone, Link2, HelpCircle, ArrowRight, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSearchParams } from "react-router-dom";
+import toast from "react-hot-toast";
+import apiClient from "../../../store/api/config";
+import { getSubaccountIdFromUrl } from "../../../utils/urlUtils";
 
 const inputCls =
   "w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 placeholder:text-gray-300";
 
-const ImportNumberModal = ({ isOpen, onClose }) => {
+const ImportNumberModal = ({ isOpen, onClose, onImported }) => {
+  const [searchParams] = useSearchParams();
+  const subaccountId = getSubaccountIdFromUrl(searchParams);
+
   const [number,         setNumber]         = useState("");
   const [terminationUri, setTerminationUri] = useState("");
+  const [sipUsername,    setSipUsername]    = useState("");
+  const [sipPassword,    setSipPassword]    = useState("");
   const [showAuth,       setShowAuth]       = useState(false);
+  const [importing,      setImporting]      = useState(false);
 
-  const canImport = number.trim() && terminationUri.trim();
+  const canImport = number.trim() && terminationUri.trim() && !importing;
 
-  const handleImport = () => {
-    console.log("Importing:", { number, terminationUri });
-    onClose();
-    setNumber("");
-    setTerminationUri("");
-    setShowAuth(false);
+  const reset = () => {
+    setNumber(""); setTerminationUri(""); setSipUsername(""); setSipPassword(""); setShowAuth(false);
+  };
+
+  const handleImport = async () => {
+    if (!/^\+\d{7,15}$/.test(number.trim())) {
+      toast.error("Enter the number in E.164 format, e.g. +12125551234");
+      return;
+    }
+    setImporting(true);
+    try {
+      const res = await apiClient.post("/integrations/import-byo-number", {
+        subaccountId,
+        number: number.trim(),
+        terminationUri: terminationUri.trim(),
+        sipUsername: showAuth ? sipUsername.trim() : undefined,
+        sipPassword: showAuth ? sipPassword : undefined,
+      });
+      if (res.data.status) {
+        toast.success("Number imported successfully");
+        reset();
+        onImported?.();
+        onClose();
+      } else {
+        toast.error(res.data.message || "Failed to import number");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to import number");
+    } finally {
+      setImporting(false);
+    }
   };
 
   return (
@@ -115,11 +150,11 @@ const ImportNumberModal = ({ isOpen, onClose }) => {
                   >
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Username</label>
-                      <input type="text" placeholder="sip-username" className={inputCls} />
+                      <input type="text" value={sipUsername} onChange={(e) => setSipUsername(e.target.value)} placeholder="sip-username" className={inputCls} />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Password</label>
-                      <input type="password" placeholder="••••••••" className={inputCls} />
+                      <input type="password" value={sipPassword} onChange={(e) => setSipPassword(e.target.value)} placeholder="••••••••" className={inputCls} />
                     </div>
                   </motion.div>
                 )}
@@ -141,7 +176,7 @@ const ImportNumberModal = ({ isOpen, onClose }) => {
                 whileTap={canImport ? { scale: 0.98 } : {}}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 text-white text-sm font-semibold shadow-md shadow-sky-500/20 hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Upload className="w-3.5 h-3.5" /> Import Number
+                {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Import Number
               </motion.button>
             </div>
           </motion.div>

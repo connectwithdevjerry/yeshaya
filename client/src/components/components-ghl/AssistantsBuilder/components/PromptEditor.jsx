@@ -32,6 +32,7 @@ import { VoiceSettingsDropdown } from "./VoiceMenuModals/VoiceSettingsDropdown";
 import { PromptSnippetsDropdown } from "./PromptSnippetsModal";
 import { toast } from "react-hot-toast";
 import { generateOutboundCallUrl } from "../../../../store/slices/assistantsSlice";
+import { fetchPurchasedNumbers } from "../../../../store/slices/numberSlice";
 
 const TABS = [
   { id: "Builder",   label: "Builder",   icon: Wrench },
@@ -78,7 +79,15 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
   const navigate    = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const [activeTab,                   setActiveTab]                   = useState("Builder");
+  const [activeTab,                   setActiveTab]                   = useState(
+    () => searchParams.get("tab") || "Builder",
+  );
+
+  // Honor ?tab= from the URL (e.g. the header's "Testing Lab" button)
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t && TABS.some((tab) => tab.id === t) && t !== activeTab) setActiveTab(t);
+  }, [searchParams]);
   const [isToolkitOpen,               setIsToolkitOpen]               = useState(true);
   const [isGeneratePromptModalOpen,   setIsGeneratePromptModalOpen]   = useState(false);
   const [isDynamicGreetingModalOpen,  setIsDynamicGreetingModalOpen]  = useState(false);
@@ -94,7 +103,7 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
 
   const { selectedAssistant } = useSelector((s) => s.assistants);
   const [voiceDisplay,  setVoiceDisplay]  = useState("Select Voice");
-  const [phoneNumber,   setPhoneNumber]   = useState("+1222342743");
+  const [phoneNumber,   setPhoneNumber]   = useState("No number");
   const [assistantTag,  setAssistantTag]  = useState("");
 
   const formatVoiceDisplay = (voice) => {
@@ -110,11 +119,28 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
     if (selectedAssistant && !promptContent) {
       const systemPrompt = selectedAssistant.model?.systemPrompt || "";
       setPromptContent(systemPrompt);
-      if (selectedAssistant.voice)       setVoiceDisplay(formatVoiceDisplay(selectedAssistant.voice));
-      if (selectedAssistant.id)          setAssistantTag(selectedAssistant.id);
-      if (selectedAssistant.phoneNumber) setPhoneNumber(selectedAssistant.phoneNumber);
+      if (selectedAssistant.id) setAssistantTag(selectedAssistant.id);
     }
   }, [selectedAssistant]);
+
+  // Resolve the phone number actually connected to this assistant
+  useEffect(() => {
+    const subaccountId = searchParams.get("subaccount");
+    const assistantId  = selectedAssistant?.id;
+    if (!subaccountId || !assistantId) return;
+    dispatch(fetchPurchasedNumbers({ subaccountId, assistantId })).unwrap()
+      .then((list) => {
+        const first = (list || []).find((n) => n?.phoneNumberDetails?.phoneNumber);
+        setPhoneNumber(first?.phoneNumberDetails?.phoneNumber || "No number");
+      })
+      .catch(() => setPhoneNumber("No number"));
+  }, [dispatch, searchParams, selectedAssistant?.id]);
+
+  // Keep the voice pill in sync whenever the selected voice changes (e.g. after
+  // picking one in the Voice Library) — not gated by promptContent.
+  useEffect(() => {
+    setVoiceDisplay(formatVoiceDisplay(selectedAssistant?.voice));
+  }, [selectedAssistant?.voice?.voiceId, selectedAssistant?.voice?.provider]);
 
   useEffect(() => {
     if (activeTab !== "Builder") setIsToolkitOpen(false);
@@ -247,6 +273,8 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
         isOpen={isToolkitOpen}
         onToggle={setIsToolkitOpen}
         activeTab={activeTab}
+        promptContent={promptContent}
+        setPromptContent={setPromptContent}
       />
     </div>
   );
@@ -281,10 +309,11 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
             </div>
           </div>
 
-          {/* Phone pill */}
+          {/* Phone pill — shows the connected number; opens the Call Center */}
           <div
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 bg-white cursor-pointer hover:border-indigo-200 hover:bg-indigo-50 transition-all"
             onClick={() => navigate(getContextualPath("/call"))}
+            title={phoneNumber === "No number" ? "No phone number connected" : `Connected number: ${phoneNumber}`}
           >
             <Phone className="w-3.5 h-3.5 text-gray-400" />
             <span className="text-xs font-mono text-gray-600">{phoneNumber}</span>
@@ -355,6 +384,8 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
       <GeneratePromptModal
         isOpen={isGeneratePromptModalOpen}
         onClose={() => setIsGeneratePromptModalOpen(false)}
+        onPromptGenerated={(p) => setPromptContent(p)}
+        currentPrompt={promptContent}
       />
       <DynamicGreetingModal
         isOpen={isDynamicGreetingModalOpen}

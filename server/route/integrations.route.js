@@ -3,6 +3,11 @@ const router = express.Router();
 const {
   ghlAuthorize,
   ghlOauthCallback,
+  getNumberSettings,
+  saveNumberSettings,
+  importByoNumber,
+  getByoNumbers,
+  reassignNumberAssistant,
   testOpenAIKey,
   stripeOauthCallback,
   stripeAuthorize,
@@ -135,5 +140,10 @@ router.put(
 );
 router.post(AUTO_CARD_PAY_WEBHOOK, autoTopUpLowWalletUsers);
 router.get(GET_STRIPE_PORTAL,     verifyAccessToken, getStripePortalLink);
+router.get("/number-settings",    verifyAccessToken, getNumberSettings);
+router.post("/number-settings",   verifyAccessToken, saveNumberSettings);
+router.post("/import-byo-number", verifyAccessToken, importByoNumber);
+router.get("/byo-numbers",        verifyAccessToken, getByoNumbers);
+router.post("/reassign-number",   verifyAccessToken, reassignNumberAssistant);
 
 module.exports = router;

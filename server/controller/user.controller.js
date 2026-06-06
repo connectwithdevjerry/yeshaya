@@ -1,4 +1,5 @@
 const userModel = require("../model/user.model");
+const JWT = require("jsonwebtoken");
 const {
   signAccessToken,
   signRefreshToken,
@@ -601,6 +602,129 @@ const updateUserProfile = async (req, res) => {
   }
 };
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// ─── Request an email change → verification link to the NEW email ─────────────
+const requestEmailChange = async (req, res) => {
+  try {
+    const userId = req.actingUserId || req.user;
+    const { newEmail, password } = req.body;
+
+    if (!newEmail || !EMAIL_RE.test(newEmail.trim())) {
+      return res.status(400).json({ status: false, message: "A valid new email is required" });
+    }
+    if (!password) {
+      return res.status(400).json({ status: false, message: "Your current password is required" });
+    }
+
+    const normalized = newEmail.trim().toLowerCase();
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    if (normalized === (user.email || "").toLowerCase()) {
+      return res.status(400).json({ status: false, message: "That's already your current email" });
+    }
+
+    // Re-authenticate
+    const ok = await user.isValidPassword(password);
+    if (!ok) return res.status(401).json({ status: false, message: "Incorrect password" });
+
+    // New email must be free
+    const taken = await userModel.findOne({ email: normalized });
+    if (taken) return res.status(400).json({ status: false, message: "That email is already in use" });
+
+    // Signed token carrying who + the new email (30 min)
+    const token = JWT.sign(
+      { userId: userId.toString(), newEmail: normalized },
+      process.env.FORGOT_TOKEN_SECRET,
+      { expiresIn: "30m" },
+    );
+
+    const link = `${process.env.FRONTEND_URL}/confirm-email-change/${token}`;
+    await emailHelper(
+      normalized,
+      "Confirm your new email address",
+      `
+        <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto">
+          <h2 style="color:#111827">Confirm your email change</h2>
+          <p style="color:#6B7280">Click below to set <strong>${normalized}</strong> as your new login email. This link expires in 30 minutes.</p>
+          <a href="${link}" style="display:inline-block;background:#6366F1;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:8px">Confirm New Email</a>
+          <p style="color:#9CA3AF;font-size:12px;margin-top:24px">If you didn't request this, you can safely ignore this email.</p>
+        </div>`,
+    );
+
+    console.log(`✅ requestEmailChange → verification sent to ${normalized} for user ${userId}`);
+    return res.status(200).json({ status: true, message: `Verification sent to ${normalized}` });
+  } catch (error) {
+    console.error("❌ requestEmailChange error:", error.message);
+    return res.status(500).json({ status: false, message: "Failed to request email change" });
+  }
+};
+
+// ─── Change password (logged-in, re-auth required) ───────────────────────────
+const changePassword = async (req, res) => {
+  try {
+    const userId = req.actingUserId || req.user;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ status: false, message: "Current and new password are required" });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ status: false, message: "New password must be at least 6 characters" });
+    }
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    const ok = await user.isValidPassword(currentPassword);
+    if (!ok) return res.status(401).json({ status: false, message: "Current password is incorrect" });
+
+    if (await user.isValidPassword(newPassword)) {
+      return res.status(400).json({ status: false, message: "New password must be different from the current one" });
+    }
+
+    user.password = newPassword; // pre-save hook hashes it
+    await user.save();
+
+    console.log(`✅ changePassword → updated for user ${userId}`);
+    return res.status(200).json({ status: true, message: "Password updated successfully" });
+  } catch (error) {
+    console.error("❌ changePassword error:", error.message);
+    return res.status(500).json({ status: false, message: "Failed to change password" });
+  }
+};
+
+// ─── Confirm the email change (public — token-gated) ──────────────────────────
+const confirmEmailChange = async (req, res) => {
+  try {
+    const { token } = req.params;
+    let payload;
+    try {
+      payload = JWT.verify(token, process.env.FORGOT_TOKEN_SECRET);
+    } catch (_) {
+      return res.status(400).json({ status: false, message: "This link is invalid or has expired" });
+    }
+
+    const { userId, newEmail } = payload;
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    // Re-check it's still free
+    const taken = await userModel.findOne({ email: newEmail, _id: { $ne: userId } });
+    if (taken) return res.status(400).json({ status: false, message: "That email is now in use by another account" });
+
+    user.email = newEmail;
+    await user.save();
+
+    console.log(`✅ confirmEmailChange → user ${userId} email updated to ${newEmail}`);
+    return res.status(200).json({ status: true, message: "Your email has been updated", email: newEmail });
+  } catch (error) {
+    console.error("❌ confirmEmailChange error:", error.message);
+    return res.status(500).json({ status: false, message: "Failed to confirm email change" });
+  }
+};
+
 /* ─────────────────────────────────────────────
    DOMAIN SETTINGS
 ───────────────────────────────────────────── */
@@ -762,6 +886,9 @@ module.exports = {
   updateCompanyDetails,
   getUserDetails,
   updateUserProfile,
+  requestEmailChange,
+  confirmEmailChange,
+  changePassword,
   getDomainSettings,
   saveDomainSettings,
   verifyDomain,

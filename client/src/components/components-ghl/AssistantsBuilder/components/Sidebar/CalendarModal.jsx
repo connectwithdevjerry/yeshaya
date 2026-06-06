@@ -10,6 +10,7 @@ import {
   fetchGHLCalendars,
   addCalendarToAssistant,
   fetchConnectedCalendar,
+  removeCalendarFromAssistant,
 } from "../../../../../store/slices/assistantsSlice";
 import { authorizeGoHighLevel } from "../../../../../store/slices/integrationSlice";
 import toast from "react-hot-toast";
@@ -75,6 +76,20 @@ export const CalendarModal = ({ isOpen, onClose }) => {
   const handleSync = () => {
     dispatch(fetchGHLCalendars(subaccountId));
     dispatch(fetchConnectedCalendar({ accountId: subaccountId, assistantId }));
+  };
+
+  const handleUnlink = async () => {
+    if (!assistantId) { toast.error("Assistant ID not found"); return; }
+    setProcessingId("unlink");
+    try {
+      await dispatch(removeCalendarFromAssistant({ accountId: subaccountId, assistantId })).unwrap();
+      toast.success("Calendar unlinked");
+      await dispatch(fetchConnectedCalendar({ accountId: subaccountId, assistantId }));
+    } catch (err) {
+      toast.error(err || "Failed to unlink calendar");
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   return (
@@ -182,21 +197,30 @@ export const CalendarModal = ({ isOpen, onClose }) => {
                           <div className="min-w-0 pr-16">
                             <h3 className="font-bold text-sm text-gray-900 truncate leading-tight mb-0.5">{cal.name}</h3>
                             <p className="text-[10px] text-gray-400 font-mono tracking-tight truncate">{cal.id}</p>
-                            <a
-                              href={`https://link.growthtools.com/widget/booking/${cal.widgetSlug}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1 text-xs font-semibold text-indigo-500 mt-2 hover:text-indigo-700 transition-colors w-fit"
-                            >
-                              Booking Page <ExternalLink className="w-3 h-3" />
-                            </a>
+                            {cal.widgetSlug && (
+                              <a
+                                href={`https://api.leadconnectorhq.com/widget/booking/${cal.widgetSlug}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-1 text-xs font-semibold text-indigo-500 mt-2 hover:text-indigo-700 transition-colors w-fit"
+                              >
+                                Booking Page <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
                           </div>
                         </div>
 
                         {/* Actions */}
                         <div className="mt-auto flex items-center gap-2">
-                          <button className="p-2 border border-rose-100 rounded-xl text-rose-300 hover:text-rose-500 hover:bg-rose-50 transition-colors">
-                            <Trash2 className="w-4 h-4" />
+                          <button
+                            onClick={handleUnlink}
+                            disabled={!isConnected || !!processingId}
+                            title={isConnected ? "Unlink this calendar" : "Only the linked calendar can be unlinked"}
+                            className="p-2 border border-rose-100 rounded-xl text-rose-300 hover:text-rose-500 hover:bg-rose-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {processingId === "unlink" && isConnected
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <Trash2 className="w-4 h-4" />}
                           </button>
                           <button
                             onClick={() => !isConnected && handleSelectCalendar(cal.id)}

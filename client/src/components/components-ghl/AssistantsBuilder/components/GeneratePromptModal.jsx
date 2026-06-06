@@ -1,13 +1,15 @@
 // src/components/components-ghl/AssistantsBuilder/components/GeneratePromptModal.jsx
 import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { X, Wand2, Loader2, AlertCircle } from "lucide-react";
+import { X, Wand2, Loader2, AlertCircle, LayoutTemplate } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { generatePrompt, clearGeneratedPrompt } from "../../../../store/slices/assistantsSlice";
+import TemplatesPanel from "./TemplatesPanel";
 
-export const GeneratePromptModal = ({ isOpen, onClose, onPromptGenerated }) => {
+export const GeneratePromptModal = ({ isOpen, onClose, onPromptGenerated, currentPrompt }) => {
   const dispatch     = useDispatch();
   const [description, setDescription] = useState("");
+  const [tab, setTab] = useState("describe"); // "describe" | "templates"
 
   const { generatingPrompt, generatedPrompt, promptError } = useSelector(
     (s) => s.assistants
@@ -44,6 +46,12 @@ export const GeneratePromptModal = ({ isOpen, onClose, onPromptGenerated }) => {
     }
   };
 
+  // Template applied → set it as the prompt and close
+  const handleUseTemplate = (prompt) => {
+    onPromptGenerated?.(prompt);
+    onClose();
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -69,8 +77,8 @@ export const GeneratePromptModal = ({ isOpen, onClose, onPromptGenerated }) => {
                   <Wand2 className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-gray-900">Generate Prompt</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">Describe what your assistant should do</p>
+                  <h3 className="text-base font-bold text-gray-900">Assistant Prompt</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Generate with AI or start from a template</p>
                 </div>
               </div>
               <button
@@ -82,60 +90,65 @@ export const GeneratePromptModal = ({ isOpen, onClose, onPromptGenerated }) => {
               </button>
             </div>
 
+            {/* Tabs */}
+            <div className="flex gap-1 px-6 pt-3 border-b border-gray-100">
+              {[
+                { id: "describe",  label: "Describe", icon: Wand2 },
+                { id: "templates", label: "Templates", icon: LayoutTemplate },
+              ].map(({ id, label, icon: Icon }) => (
+                <button key={id} onClick={() => setTab(id)}
+                  className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
+                    tab === id ? "text-indigo-600" : "text-gray-500 hover:text-gray-800"
+                  }`}>
+                  <Icon className="w-3.5 h-3.5" /> {label}
+                  {tab === id && <motion.span layoutId="promptTab" className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t bg-gradient-to-r from-indigo-500 to-violet-600" />}
+                </button>
+              ))}
+            </div>
+
             {/* Body */}
-            <div className="p-6 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Description
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={10}
-                  placeholder="Explain exactly what you want in as much detail as you can. Describe the assistant's role, tone, goals, and any specific behaviors…"
-                  disabled={generatingPrompt}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-2xl text-sm bg-white outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none disabled:bg-gray-50 disabled:cursor-not-allowed font-mono leading-relaxed placeholder:text-gray-300"
-                />
+            {tab === "describe" ? (
+              <>
+                <div className="p-6 space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Description</label>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={9}
+                      placeholder="Explain exactly what you want in as much detail as you can. Describe the assistant's role, tone, goals, and any specific behaviors…"
+                      disabled={generatingPrompt}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-2xl text-sm bg-white outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none disabled:bg-gray-50 disabled:cursor-not-allowed font-mono leading-relaxed placeholder:text-gray-300"
+                    />
+                  </div>
+                  <AnimatePresence>
+                    {promptError && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                        className="flex items-center gap-2 px-3 py-2.5 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {promptError}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+                  <button onClick={handleClose} disabled={generatingPrompt}
+                    className="px-4 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-700 hover:bg-white border border-transparent hover:border-gray-200 transition-all disabled:opacity-50">
+                    Cancel
+                  </button>
+                  <motion.button onClick={handleGenerate} disabled={generatingPrompt || !description.trim()}
+                    whileHover={!generatingPrompt && description.trim() ? { scale: 1.02 } : {}}
+                    whileTap={!generatingPrompt && description.trim() ? { scale: 0.98 } : {}}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                    {generatingPrompt ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</> : <><Wand2 className="w-3.5 h-3.5" /> Generate Prompt</>}
+                  </motion.button>
+                </div>
+              </>
+            ) : (
+              <div className="p-6">
+                <TemplatesPanel onUse={handleUseTemplate} currentPrompt={currentPrompt} />
               </div>
-
-              <AnimatePresence>
-                {promptError && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="flex items-center gap-2 px-3 py-2.5 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600"
-                  >
-                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                    {promptError}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
-              <button
-                onClick={handleClose}
-                disabled={generatingPrompt}
-                className="px-4 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-700 hover:bg-white border border-transparent hover:border-gray-200 transition-all disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <motion.button
-                onClick={handleGenerate}
-                disabled={generatingPrompt || !description.trim()}
-                whileHover={!generatingPrompt && description.trim() ? { scale: 1.02 } : {}}
-                whileTap={!generatingPrompt && description.trim() ? { scale: 0.98 } : {}}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {generatingPrompt ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</>
-                ) : (
-                  <><Wand2 className="w-3.5 h-3.5" /> Generate Prompt</>
-                )}
-              </motion.button>
-            </div>
+            )}
           </motion.div>
         </motion.div>
       )}

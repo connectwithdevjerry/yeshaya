@@ -95,8 +95,11 @@ const ContactCard = ({ contact, onEdit, onDelete, idx }) => (
       <div className="flex items-center gap-3">
         <Avatar first={contact.firstName} last={contact.lastName} size="lg" />
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900 truncate">
+          <p className="text-sm font-semibold text-gray-900 truncate flex items-center gap-1.5">
             {contact.firstName} {contact.lastName}
+            {contact.source === "ghl" && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-orange-50 text-orange-600 border border-orange-100">GHL</span>
+            )}
           </p>
           {contact.company && (
             <p className="text-xs text-gray-400 truncate mt-0.5 flex items-center gap-1">
@@ -105,23 +108,25 @@ const ContactCard = ({ contact, onEdit, onDelete, idx }) => (
           )}
         </div>
       </div>
-      {/* action buttons — always visible */}
-      <div className="flex gap-1">
-        <button
-          onClick={() => onEdit(contact)}
-          className="p-1.5 rounded-lg text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
-          title="Edit"
-        >
-          <Edit3 className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => onDelete(contact)}
-          className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-          title="Delete"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      {/* action buttons — edit/delete only apply to app-saved contacts */}
+      {contact.source !== "ghl" && (
+        <div className="flex gap-1">
+          <button
+            onClick={() => onEdit(contact)}
+            className="p-1.5 rounded-lg text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
+            title="Edit"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => onDelete(contact)}
+            className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+            title="Delete"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
 
     {/* contact info rows */}
@@ -413,8 +418,11 @@ const Contacts = () => {
                               <div className="flex items-center gap-3">
                                 <Avatar first={contact?.firstName} last={contact?.lastName} />
                                 <div>
-                                  <p className="text-sm font-semibold text-gray-900">
+                                  <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
                                     {contact?.firstName} {contact?.lastName}
+                                    {contact?.source === "ghl" && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-orange-50 text-orange-600 border border-orange-100">GHL</span>
+                                    )}
                                   </p>
                                   {contact?.company && (
                                     <p className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
@@ -450,22 +458,26 @@ const Contacts = () => {
                               {contact?.company || <span className="text-gray-300">—</span>}
                             </td>
 
-                            {/* Actions */}
+                            {/* Actions — edit/delete only for app-saved contacts */}
                             <td className="px-5 py-3.5 text-right">
-                              <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  onClick={() => handleEditClick(contact)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
-                                >
-                                  <Edit3 className="w-3 h-3" /> Edit
-                                </button>
-                                <button
-                                  onClick={() => openDeleteModal(contact)}
-                                  className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
+                              {contact?.source === "ghl" ? (
+                                <span className="text-[11px] text-gray-300">In GoHighLevel</span>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => handleEditClick(contact)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                                  >
+                                    <Edit3 className="w-3 h-3" /> Edit
+                                  </button>
+                                  <button
+                                    onClick={() => openDeleteModal(contact)}
+                                    className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </motion.tr>
                         ))}

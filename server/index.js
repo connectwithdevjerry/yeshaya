@@ -10,6 +10,10 @@ const invoiceRoutes = require("./route/invoice.route");
 const teamRoutes = require("./route/team.route");
 const rebillingRoutes = require("./route/rebilling.route");
 const poolRoutes = require("./route/pool.route");
+const appointmentRoutes = require("./route/appointment.route");
+const templateRoutes = require("./route/template.route");
+const apiKeyRoutes = require("./route/apikey.route");
+const publicApiRoutes = require("./route/publicApi.route");
 const cookieParser = require("cookie-parser");
 const { verifyAccessToken } = require("./jwt_helpers");
 const { stripeWebhook } = require("./controller/payments.controller");
@@ -56,18 +60,26 @@ app.use("/invoices", invoiceRoutes);
 app.use("/team", teamRoutes);
 app.use("/rebilling", rebillingRoutes);
 app.use("/pools", poolRoutes);
+app.use("/appointments", appointmentRoutes);
+app.use("/templates", templateRoutes);
+app.use("/integrations/api-keys", apiKeyRoutes);
+app.use("/api/v1", publicApiRoutes);
 
 app.get("/", (req, res) => {
   res.send("homepage");
 });
 
 const { createNotification } = require("./controller/notification.controller");
+const { startAppointmentReminders } = require("./helpers/appointmentReminders");
 
 // ── Connect to MongoDB then start server ──────────────────────────────────────
 mongoose
   .connect(process.env.MONGODB_URL)
   .then(() => {
     console.log("✅ MongoDB connected");
+
+    // Appointment reminder scheduler (24h + 1h before)
+    startAppointmentReminders();
 
     // ── Wallet change stream (must run after DB connects) ──────────────────
     const changeStream = userModel.watch([

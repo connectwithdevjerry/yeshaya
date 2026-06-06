@@ -8,6 +8,8 @@ import notificationReducer from './slices/notificationSlice';
 import invoiceReducer from './slices/invoiceSlice';
 import teamReducer from './slices/teamSlice';
 import poolReducer from './slices/poolSlice';
+import appointmentReducer from './slices/appointmentSlice';
+import templateReducer from './slices/templateSlice';
 
 
 export const store = configureStore({
@@ -20,6 +22,8 @@ export const store = configureStore({
     invoices: invoiceReducer,
     team: teamReducer,
     pools: poolReducer,
+    appointments: appointmentReducer,
+    templates: templateReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

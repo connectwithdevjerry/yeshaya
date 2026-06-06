@@ -1,10 +1,44 @@
-import React from "react";
-import { useState } from "react";
-import { Info, Plus, Mail, Trash2, ExternalLink, X } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { Plus, Mail, Link2, Loader2, Users, ShieldCheck } from "lucide-react";
+import toast from "react-hot-toast";
+import { fetchTeam, inviteMember } from "../../../../store/slices/teamSlice";
+
+const ROLE_STYLE = {
+  owner:  "bg-violet-50 text-violet-600",
+  admin:  "bg-indigo-50 text-indigo-600",
+  member: "bg-emerald-50 text-emerald-600",
+  viewer: "bg-gray-100 text-gray-500",
+};
 
 export const CollabSessionDropdown = ({ isOpen, onClose }) => {
-  const [allowAll, setAllowAll] = useState(false);
+  const dispatch = useDispatch();
+  const { members = [], pendingInvites = [], loading, inviting } = useSelector((s) => s.team);
+
+  const [email, setEmail] = useState("");
+  const [role, setRole]   = useState("member");
+
+  useEffect(() => { if (isOpen) dispatch(fetchTeam()); }, [isOpen, dispatch]);
+
   if (!isOpen) return null;
+
+  const handleInvite = async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast.error("Enter a valid email"); return; }
+    try {
+      await dispatch(inviteMember({ email: email.trim(), role })).unwrap();
+      toast.success("Invite sent");
+      setEmail("");
+      dispatch(fetchTeam());
+    } catch (err) {
+      toast.error(err || "Failed to send invite");
+    }
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href)
+      .then(() => toast.success("Link to this assistant copied"))
+      .catch(() => toast.error("Failed to copy link"));
+  };
 
   return (
     <>
@@ -13,98 +47,109 @@ export const CollabSessionDropdown = ({ isOpen, onClose }) => {
       <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-xl z-[100] overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3 border-b border-gray-50 flex justify-between items-center">
-          <div>
-            <h3 className="text-sm font-bold text-gray-800">Collab Session</h3>
-            <p className="text-[10px] text-gray-400">
-              Expires at 12/04/25 11:22 pm
-            </p>
+          <div className="flex items-center gap-2">
+            <Users size={16} className="text-indigo-500" />
+            <h3 className="text-sm font-bold text-gray-800">Collaborators</h3>
           </div>
-          <Info size={16} className="text-gray-300 cursor-help" />
+          <button
+            onClick={handleCopyLink}
+            title="Copy a link to this assistant"
+            className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
+          >
+            <Link2 size={13} /> Share
+          </button>
         </div>
 
-        <div className="p-4 space-y-4">
-          {/* Toggle Section */}
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-1">
-              <span className="text-xs font-medium text-gray-600">
-                Allow all to view
-              </span>
-              <Info size={14} className="text-gray-300" />
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
+        <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+          {/* Invite */}
+          <div className="space-y-2">
+            <span className="text-xs font-bold text-gray-800">Invite a teammate</span>
+            <div className="flex gap-2">
               <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={allowAll}
-                onChange={() => setAllowAll(!allowAll)}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleInvite()}
+                placeholder="teammate@company.com"
+                className="flex-1 min-w-0 px-3 py-1.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-1 focus:ring-indigo-500"
               />
-              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-            </label>
+              <button
+                onClick={handleInvite}
+                disabled={inviting}
+                className="p-1.5 border border-indigo-100 bg-indigo-50 rounded-lg text-indigo-600 hover:bg-indigo-100 disabled:opacity-50"
+              >
+                {inviting ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+              </button>
+            </div>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+            >
+              <option value="admin">Admin — full access except removing the owner</option>
+              <option value="member">Member — manage assistants, contacts & calls</option>
+              <option value="viewer">Viewer — read-only</option>
+            </select>
           </div>
 
-          {/* User Input Section */}
-          {!allowAll && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-gray-800">
-                  Authorized users
-                </span>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="user@gmail.com..."
-                    className="flex-1 px-3 py-1.5 border border-gray-200 rounded-md text-sm outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                  <button className="p-1.5 border border-gray-200 rounded-md hover:bg-gray-50">
-                    <Plus size={16} className="text-gray-400" />
-                  </button>
-                </div>
-              </div>
+          {/* Members */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-800">Team</span>
+              {loading && <Loader2 size={12} className="animate-spin text-gray-300" />}
+            </div>
 
-              {/* User List */}
-              <div className="flex items-center justify-between group">
-                <div className="flex items-center gap-2 text-indigo-600">
-                  <Mail size={14} />
-                  <span className="text-xs">kverlus@mit.edu</span>
+            {members.length === 0 && !loading ? (
+              <p className="text-xs text-gray-400">No teammates yet — invite someone above.</p>
+            ) : (
+              members.map((m) => {
+                const name = `${m.firstName || ""} ${m.lastName || ""}`.trim() || m.email;
+                return (
+                  <div key={m._id} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                        <span className="text-[10px] font-bold text-indigo-600 uppercase">{name[0] || "?"}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-700 truncate">{name}</p>
+                        <p className="text-[10px] text-gray-400 truncate">{m.email}</p>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md capitalize flex-shrink-0 ${ROLE_STYLE[m.role] || ROLE_STYLE.viewer}`}>
+                      {m.role || "member"}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Pending invites */}
+          {pendingInvites.length > 0 && (
+            <div className="space-y-2 pt-1 border-t border-gray-50">
+              <span className="text-xs font-bold text-gray-800">Pending invites</span>
+              {pendingInvites.map((inv, i) => (
+                <div key={inv._id || i} className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0 text-gray-500">
+                    <Mail size={13} className="flex-shrink-0" />
+                    <span className="text-xs truncate">{inv.email}</span>
+                  </div>
+                  <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md capitalize flex-shrink-0">
+                    {inv.role}
+                  </span>
                 </div>
-                <button className="p-1 text-red-200 hover:text-red-500 transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </div>
+              ))}
             </div>
           )}
-
-          {/* Collab Link Card */}
-          <div className="flex items-center justify-between p-3 border border-indigo-100 bg-indigo-50/30 rounded-lg">
-            <div className="flex items-center gap-3">
-              <div className="p-1.5 bg-white border border-indigo-100 rounded-md">
-                <ExternalLink size={16} className="text-indigo-500" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-gray-800">
-                  Collab Link
-                </span>
-                <span className="text-[10px] text-gray-400 truncate w-24">
-                  .../session/176488...
-                </span>
-              </div>
-            </div>
-            <button className="px-3 py-1 text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-md hover:bg-indigo-100">
-              Copy
-            </button>
-          </div>
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="text-xs font-bold text-gray-500 hover:text-gray-700"
-          >
+        <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+          <span className="flex items-center gap-1 text-[10px] text-gray-400">
+            <ShieldCheck size={12} /> Access managed in Team settings
+          </span>
+          <button onClick={onClose} className="text-xs font-bold text-gray-500 hover:text-gray-700">
             Close
-          </button>
-          <button className="px-3 py-1.5 text-xs font-bold text-red-500 bg-red-50 border border-red-100 rounded-md hover:bg-red-100">
-            Delete Session
           </button>
         </div>
       </div>

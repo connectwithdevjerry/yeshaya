@@ -405,6 +405,48 @@ export const getUserDetails = createAsyncThunk(
   },
 );
 
+// Request Email Change Thunk
+export const requestEmailChange = createAsyncThunk(
+  "auth/requestEmailChange",
+  async ({ newEmail, password }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.post("/auth/request-email-change", { newEmail, password });
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return res.data.message;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to request email change");
+    }
+  }
+);
+
+// Confirm Email Change Thunk (public, token-gated)
+export const confirmEmailChange = createAsyncThunk(
+  "auth/confirmEmailChange",
+  async (token, { rejectWithValue }) => {
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/auth/confirm-email-change/${token}`);
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return res.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to confirm email change");
+    }
+  }
+);
+
+// Change Password Thunk
+export const changePassword = createAsyncThunk(
+  "auth/changePassword",
+  async ({ currentPassword, newPassword }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.post("/auth/change-password", { currentPassword, newPassword });
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return res.data.message;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to change password");
+    }
+  }
+);
+
 // Update User Profile Thunk
 export const updateUserProfile = createAsyncThunk(
   "auth/updateUserProfile",

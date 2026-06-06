@@ -15,6 +15,8 @@ import {
 } from "../../../store/slices/numberSlice";
 import { fetchAssistants } from "../../../store/slices/assistantsSlice";
 import NumbersActionsMenu from "../../../components/components-ghl/Numbers/NumberActionsMenu";
+import NumberSettingsModal from "../../../components/components-ghl/Numbers/NumberSettingsModal";
+import apiClient from "../../../store/api/config";
 
 /* ── Capability pills ── */
 const CAP_STYLE = {
@@ -111,6 +113,23 @@ const Numbers = () => {
   const [selectedAccount,    setSelectedAccount]    = useState(null);
   const [openMenuAccountId,  setOpenMenuAccountId]  = useState(null);
   const [menuPosition,       setMenuPosition]       = useState({ top: 0, left: 0 });
+  const [settingsModal,      setSettingsModal]      = useState({ section: null, account: null });
+  const [numberLabels,       setNumberLabels]       = useState({}); // { phoneSid: label }
+  const [refreshKey,         setRefreshKey]         = useState(0);
+
+  const loadNumberLabels = React.useCallback(() => {
+    apiClient.get("/integrations/number-settings")
+      .then((res) => {
+        if (res.data.status && Array.isArray(res.data.data)) {
+          const map = {};
+          res.data.data.forEach((d) => { if (d.label) map[d.phoneSid] = d.label; });
+          setNumberLabels(map);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => { loadNumberLabels(); }, [loadNumberLabels]);
   const [currentPage,        setCurrentPage]        = useState(1);
   const [rowsPerPage,        setRowsPerPage]        = useState(10);
   const [searchTerm,         setSearchTerm]         = useState("");
@@ -142,7 +161,17 @@ const Numbers = () => {
           if (!acc.find((x) => x.phoneNumberDetails?.sid === cur.phoneNumberDetails?.sid)) acc.push(cur);
           return acc;
         }, []);
-        setAllPurchasedNumbers(unique);
+
+        // Also pull external (BYO) numbers and merge them in (Imported tab)
+        let byo = [];
+        try {
+          const res = await apiClient.get(`/integrations/byo-numbers?subaccountId=${subaccountId}`);
+          if (res.data.status && Array.isArray(res.data.data)) {
+            byo = res.data.data.map((n) => ({ ...n, assistantId: null, assistantName: "External" }));
+          }
+        } catch (_) {}
+
+        setAllPurchasedNumbers([...unique, ...byo]);
       } catch (e) {
         console.error(e);
       } finally {
@@ -150,7 +179,7 @@ const Numbers = () => {
       }
     };
     fetchAllNumbers();
-  }, [dispatch, subaccountId, assistants]);
+  }, [dispatch, subaccountId, assistants, refreshKey]);
 
   useEffect(() => {
     if (allPurchasedNumbers.length === 0 || !subaccountId) return;
@@ -371,7 +400,7 @@ const Numbers = () => {
                               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0">
                                 <Phone className="w-3.5 h-3.5 text-white" />
                               </div>
-                              <span className="text-sm font-semibold text-gray-800">{d.friendlyName || "—"}</span>
+                              <span className="text-sm font-semibold text-gray-800">{numberLabels[d.sid] || d.friendlyName || "—"}</span>
                             </div>
                           </td>
                           {/* Number */}
@@ -407,7 +436,7 @@ const Numbers = () => {
                               whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.94 }}
                               onClick={(e) => handleOpenMenu(e, item)}
                               ref={openMenuAccountId === d.sid ? menuAnchorRef : null}
-                              className="p-2 rounded-xl border border-gray-200 text-gray-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all opacity-0 group-hover:opacity-100"
+                              className="p-2 rounded-xl border border-gray-200 text-gray-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all"
                             >
                               <MoreHorizontal className="w-4 h-4" />
                             </motion.button>
@@ -463,7 +492,7 @@ const Numbers = () => {
       </div>
 
       {/* Modals */}
-      <ImportNumberModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} />
+      <ImportNumberModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImported={() => setRefreshKey((k) => k + 1)} />
       <BuyNumberModal    isOpen={isBuyModalOpen}    onClose={() => setIsBuyModalOpen(false)} />
       {openMenuAccountId && selectedAccount && (
         <NumbersActionsMenu
@@ -472,6 +501,15 @@ const Numbers = () => {
           account={selectedAccount}
           position={menuPosition}
           anchorRef={menuAnchorRef}
+          onAction={(section, account) => setSettingsModal({ section, account })}
+        />
+      )}
+
+      {settingsModal.section && (
+        <NumberSettingsModal
+          section={settingsModal.section}
+          account={settingsModal.account}
+          onClose={() => { setSettingsModal({ section: null, account: null }); loadNumberLabels(); setRefreshKey((k) => k + 1); }}
         />
       )}
     </div>

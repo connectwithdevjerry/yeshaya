@@ -299,15 +299,23 @@ const callGetSubaccounts = async (req, res) => {
       importedIds.includes(subAccount.id),
     );
 
-    // Merge local metadata + real connection status into GHL data
+    // Merge local metadata + real connection status into GHL data.
+    // Treat as connected if the flag is set OR there's a non-expired refresh
+    // token (covers accounts reconnected before the flag-setting fix deployed).
+    const nowMs = Date.now();
     const metaMap = {};
     user.ghlSubAccountIds.forEach(acc => {
+      const hasLiveToken =
+        !!acc.ghlSubRefreshToken &&
+        acc.ghlSubRefreshTokenExpiry &&
+        new Date(acc.ghlSubRefreshTokenExpiry).getTime() > nowMs;
+
       metaMap[acc.accountId] = {
         isFavorite:  acc.isFavorite  || false,
         isArchived:  acc.isArchived  || false,
         customName:  acc.customName  || "",
         notes:       acc.notes       || "",
-        connected:   acc.connected   === true,
+        connected:   acc.connected === true || hasLiveToken,
       };
     });
 
@@ -1507,8 +1515,16 @@ const ghlSubAuthorize = async (req, res) => {
     return res.status(400).json({ status: false, message: "accountId is required" });
   }
 
+  // Scopes only — no version_id mixed in here
   const scopes =
-    "locations.readonly+oauth.write+oauth.readonly+businesses.write+businesses.readonly+calendars.write+calendars.readonly+calendars%2Fevents.readonly+calendars%2Fevents.write+calendars%2Fgroups.readonly+calendars%2Fgroups.write+calendars%2Fresources.readonly+calendars%2Fresources.write&version_id=696ade02ea0d940c862c9efd";
+    "locations.readonly+oauth.write+oauth.readonly+businesses.write+businesses.readonly+contacts.readonly+contacts.write+calendars.write+calendars.readonly+calendars%2Fevents.readonly+calendars%2Fevents.write+calendars%2Fgroups.readonly+calendars%2Fgroups.write+calendars%2Fresources.readonly+calendars%2Fresources.write";
+
+  // The sub-account app's version id (single, correct param)
+  // NOTE: we intentionally do NOT pin version_id. GHL locks scopes to a specific
+  // app version, so a pinned id rejects any scope added after that version was
+  // created ("Invalid scope(s)"). Omitting it makes GHL use the app's latest
+  // version, which always reflects the currently-enabled scopes.
+  const VERSION_ID = "696ade02ea0d940c862c9efd"; // kept for reference / fallback
 
   const REDIRECT_URI = encodeURIComponent(
     `${process.env.SERVER_URL}${SUB_PATH}${GHL_SUB_OAUTH_CALLBACK}`,
@@ -1517,7 +1533,7 @@ const ghlSubAuthorize = async (req, res) => {
   // The 'state' parameter is crucial for security (CSRF protection)
   const state = await generateSecureState(userId, accountId);
 
-  const authUrl = `https://marketplace.leadconnectorhq.com/oauth/chooselocation?response_type=code&redirect_uri=${REDIRECT_URI}&client_id=${SUB_CLIENT_ID}&scope=${scopes}&version_id=6905111141b5e7b749099891&state=${state}`;
+  const authUrl = `https://marketplace.leadconnectorhq.com/oauth/chooselocation?response_type=code&redirect_uri=${REDIRECT_URI}&client_id=${SUB_CLIENT_ID}&scope=${scopes}&version_id=${VERSION_ID}&state=${state}`;
 
   console.log("Redirecting to GHL OAuth URL:", authUrl);
 
@@ -1615,8 +1631,12 @@ const ghlSubOauthCallback = async (req, res) => {
     subAccount.ghlSubRefreshTokenExpiry = new Date(
       Date.now() + response.expires_in * 1000,
     );
+    subAccount.connected = true; // clear "Reconnect needed" status
+    updateUser.markModified("ghlSubAccountIds");
 
     await updateUser.save();
+
+    console.log(`✅ Sub-account ${accountId} reconnected — connected=true`);
 
     const successMsg = "GHL Connection successful!";
     return res.redirect(
@@ -1691,11 +1711,16 @@ const getSubAccountDetails = async (req, res) => {
       (acc, a) => acc + (a.numberDetails?.length || 0), 0
     );
 
+    const hasLiveToken =
+      !!sub.ghlSubRefreshToken &&
+      sub.ghlSubRefreshTokenExpiry &&
+      new Date(sub.ghlSubRefreshTokenExpiry).getTime() > Date.now();
+
     const data = {
       accountId:        sub.accountId,
       customName:       sub.customName || "",
       notes:            sub.notes || "",
-      connected:        sub.connected || false,
+      connected:        sub.connected === true || hasLiveToken,
       isFavorite:       sub.isFavorite || false,
       isArchived:       sub.isArchived || false,
       installationType: sub.installationType || "",
@@ -1853,9 +1878,255 @@ const disconnectStripe = async (req, res) => {
   }
 };
 
+// ─── Import a BYO (bring-your-own) SIP number into Vapi ────────────────────────
+const importByoNumber = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { number, terminationUri, sipUsername, sipPassword, assistantId, subaccountId } = req.body;
+    if (!number || !terminationUri) {
+      return res.send({ status: false, message: "number and terminationUri are required" });
+    }
+    if (!subaccountId) {
+      return res.send({ status: false, message: "subaccountId is required" });
+    }
+
+    // Derive the SIP gateway host from the termination URI
+    // e.g. "sip:user@my.pstn.twilio.com" → "my.pstn.twilio.com"
+    const host = terminationUri
+      .replace(/^sips?:/i, "")
+      .split("@").pop()
+      .split(/[:/?]/)[0]
+      .trim();
+    if (!host) return res.send({ status: false, message: "Could not parse the termination URI host" });
+
+    // 1) Create a BYO SIP trunk credential in Vapi
+    const credentialBody = {
+      provider: "byo-sip-trunk",
+      name: `trunk-${number}`,
+      gateways: [{ ip: host }],
+    };
+    if (sipUsername) {
+      credentialBody.outboundAuthenticationPlan = {
+        authUsername: sipUsername,
+        authPassword: sipPassword || "",
+      };
+    }
+
+    let credentialId;
+    try {
+      const credRes = await axios.post("https://api.vapi.ai/credential", credentialBody, {
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}`, "Content-Type": "application/json" },
+      });
+      credentialId = credRes.data?.id;
+    } catch (e) {
+      const m = e.response?.data?.message;
+      return res.send({ status: false, message: `SIP trunk step failed: ${Array.isArray(m) ? m.join(", ") : (m || e.message)}` });
+    }
+
+    // 2) Create the BYO phone number
+    const numberBody = {
+      provider: "byo-phone-number",
+      name: `BYO ${number}`,
+      number,
+      numberE164CheckEnabled: false,
+      credentialId,
+    };
+    if (assistantId) numberBody.assistantId = assistantId;
+
+    try {
+      const numRes = await axios.post("https://api.vapi.ai/phone-number", numberBody, {
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}`, "Content-Type": "application/json" },
+      });
+
+      // Persist the external number at the sub-account level so the UI can show it
+      try {
+        const user = await userModel.findById(userId);
+        const sub = user?.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+        if (sub) {
+          if (!Array.isArray(sub.byoNumbers)) sub.byoNumbers = [];
+          sub.byoNumbers.push({
+            phoneNumber: number,
+            vapiPhoneNumId: numRes.data?.id || "",
+            credentialId,
+            terminationUri,
+            friendlyName: `BYO ${number}`,
+          });
+          user.markModified("ghlSubAccountIds");
+          await user.save();
+        }
+      } catch (e) {
+        console.error("⚠️ byoNumber persist failed:", e.message);
+      }
+
+      return res.send({ status: true, data: numRes.data, message: "Number imported successfully" });
+    } catch (e) {
+      const m = e.response?.data?.message;
+      return res.send({ status: false, message: `Number import failed: ${Array.isArray(m) ? m.join(", ") : (m || e.message)}` });
+    }
+  } catch (e) {
+    console.error("importByoNumber error:", e.message);
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+// ─── Reassign a phone number to a different assistant ──────────────────────────
+const reassignNumberAssistant = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId, phoneSid, toAssistantId } = req.body;
+    if (!subaccountId || !phoneSid || !toAssistantId) {
+      return res.send({ status: false, message: "subaccountId, phoneSid and toAssistantId are required" });
+    }
+
+    const user = await userModel.findById(userId);
+    const sub = user?.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+    if (!sub) return res.send({ status: false, message: "Sub-account not found" });
+
+    // Find which assistant currently holds this number
+    let fromAssistant = null, numEntry = null;
+    for (const ast of sub.vapiAssistants) {
+      const found = (ast.numberDetails || []).find((n) => n.phoneSid === phoneSid);
+      if (found) { fromAssistant = ast; numEntry = found; break; }
+    }
+    if (!numEntry) return res.send({ status: false, message: "This number isn't assigned to any assistant yet." });
+
+    const toAssistant = sub.vapiAssistants.find((a) => a.assistantId === toAssistantId);
+    if (!toAssistant) return res.send({ status: false, message: "Target assistant not found" });
+    if (fromAssistant.assistantId === toAssistantId) {
+      return res.send({ status: true, message: "Number is already assigned to that assistant." });
+    }
+
+    // Point the Vapi phone number at the new assistant (if it's connected to Vapi)
+    if (numEntry.vapiPhoneNumId) {
+      try {
+        await axios.patch(
+          `https://api.vapi.ai/phone-number/${numEntry.vapiPhoneNumId}`,
+          { assistantId: toAssistantId },
+          { headers: { Authorization: `Bearer ${VAPI_API_KEY}`, "Content-Type": "application/json" } },
+        );
+      } catch (e) {
+        console.error("⚠️ Vapi reassign failed:", e.response?.data?.message || e.message);
+      }
+    }
+
+    // Repoint Twilio's voice webhook to the new assistant (best-effort)
+    try {
+      const client = twilio(ACCOUNT_SID, ACCOUNT_AUTH_TOKEN);
+      await client.incomingPhoneNumbers(phoneSid).update({
+        voiceUrl: `${process.env.SERVER_URL}/integrations/voiceurl/${userId}/${subaccountId}/${toAssistantId}`,
+      });
+    } catch (e) {
+      console.error("⚠️ Twilio voiceUrl update failed:", e.message);
+    }
+
+    // Move the number record between assistants in our DB
+    fromAssistant.numberDetails = (fromAssistant.numberDetails || []).filter((n) => n.phoneSid !== phoneSid);
+    if (!Array.isArray(toAssistant.numberDetails)) toAssistant.numberDetails = [];
+    toAssistant.numberDetails.push({
+      phoneNum: numEntry.phoneNum,
+      vapiPhoneNumId: numEntry.vapiPhoneNumId,
+      phoneSid: numEntry.phoneSid,
+    });
+
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    return res.send({ status: true, message: "Number reassigned successfully." });
+  } catch (e) {
+    console.error("reassignNumberAssistant error:", e.message);
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+// ─── List a sub-account's external (BYO) numbers, shaped like the table rows ────
+const getByoNumbers = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId } = req.query;
+    if (!subaccountId) return res.send({ status: false, message: "subaccountId is required" });
+
+    const user = await userModel.findById(userId);
+    const sub = user?.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+    const list = (sub?.byoNumbers || []).map((n) => ({
+      status: true,
+      // Mirror the Twilio phoneNumberDetails shape so the UI renders it uniformly
+      phoneNumberDetails: {
+        sid: n.vapiPhoneNumId || n.phoneNumber,
+        phoneNumber: n.phoneNumber,
+        friendlyName: n.friendlyName || n.phoneNumber,
+        origin: "byo",
+        status: "active",
+        capabilities: {},
+        dateUpdated: n.createdAt,
+      },
+    }));
+
+    return res.send({ status: true, data: list });
+  } catch (e) {
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+// ─── Per-number settings (Edit Account / Limits / Permissions / Rename) ────────
+const numberSettingModel = require("../model/numberSetting.model");
+
+const getNumberSettings = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { phoneSid } = req.query;
+
+    // No phoneSid → return all of this user's number settings (for list labels)
+    if (!phoneSid) {
+      const all = await numberSettingModel.find({ userId }).lean();
+      return res.send({ status: true, data: all });
+    }
+
+    const doc = await numberSettingModel.findOne({ userId, phoneSid }).lean();
+    return res.send({
+      status: true,
+      data: doc || {
+        phoneSid, label: "", notes: "",
+        limits: { maxCallsPerDay: 0, monthlyBudget: 0 },
+        permissions: { allowedRoles: ["owner", "admin", "member"] },
+      },
+    });
+  } catch (e) {
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+const saveNumberSettings = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { phoneSid, label, notes, limits, permissions } = req.body;
+    if (!phoneSid) return res.send({ status: false, message: "phoneSid is required" });
+
+    const update = {};
+    if (label !== undefined)       update.label = label;
+    if (notes !== undefined)       update.notes = notes;
+    if (limits !== undefined)      update.limits = limits;
+    if (permissions !== undefined) update.permissions = permissions;
+
+    const doc = await numberSettingModel.findOneAndUpdate(
+      { userId, phoneSid },
+      { $set: update },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    return res.send({ status: true, data: doc, message: "Saved" });
+  } catch (e) {
+    console.error("saveNumberSettings error:", e.message);
+    return res.send({ status: false, message: e.message });
+  }
+};
+
 module.exports = {
   ghlAuthorize,
   ghlOauthCallback,
+  getNumberSettings,
+  saveNumberSettings,
+  importByoNumber,
+  getByoNumbers,
+  reassignNumberAssistant,
   ghlSubAuthorize,
   ghlSubOauthCallback,
   ghlSsoLoginHandler,

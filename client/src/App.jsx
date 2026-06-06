@@ -29,6 +29,7 @@ import Login from "./pages/pages-ui/Login";
 import Register from "./pages/pages-ui/Register";
 import ResetLink from "./pages/pages-ui/ResetLink";
 import AcceptInvite from "./pages/pages-ui/AcceptInvite";
+import ConfirmEmailChange from "./pages/pages-ui/ConfirmEmailChange";
 import VerifyEmail from "./pages/pages-ui/VerifyEmail";
 import HomePage from "./pages/pages-ghl/Homepage";
 import ResetPassword from "./pages/pages-ui/ForgotPassword";
@@ -203,6 +204,7 @@ useEffect(() => {
           />
           <Route path="/resetpassword/:token" element={<ResetPassword />} />
           <Route path="/accept-invite/:token" element={<AcceptInvite />} />
+          <Route path="/confirm-email-change/:token" element={<ConfirmEmailChange />} />
           <Route path="/homepage" element={<HomePage />} />
 
           {/* Protected Routes */}

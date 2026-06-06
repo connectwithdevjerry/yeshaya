@@ -1,9 +1,10 @@
 // src/components/components-ghl/UserMenu.jsx
 import React, { useState } from "react";
 import { User, LogOut, ChevronRight, Sparkles } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { logout } from "../../store/slices/authSlice";
+import { useCurrentAccount } from "../../hooks/useCurrentAccount";
 import { motion } from "framer-motion";
 
 const MenuItem = ({ icon: Icon, label, sublabel, onClick, disabled, danger }) => (
@@ -37,7 +38,22 @@ const UserMenuPopup = () => {
   const navigate  = useNavigate();
   const dispatch  = useDispatch();
   const { user }  = useSelector((s) => s.auth);
+  const [searchParams] = useSearchParams();
+  const account   = useCurrentAccount();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // Go to the in-app (pages-ghl) account/settings page, preserving account context
+  const handleAccount = () => {
+    const p = new URLSearchParams({
+      agencyid:   searchParams.get("agencyid")   || account?.agencyid   || "",
+      subaccount: searchParams.get("subaccount") || account?.subaccount || "",
+      allow:      searchParams.get("allow")      || account?.allow      || "",
+      myname:     searchParams.get("myname")     || account?.myname     || "",
+      myemail:    searchParams.get("myemail")    || account?.myemail    || "",
+      route:      "/ghl_settings",
+    });
+    navigate(`/app?${p.toString()}`);
+  };
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -88,7 +104,7 @@ const UserMenuPopup = () => {
           icon={User}
           label="Your Account"
           sublabel="Manage profile & preferences"
-          onClick={() => navigate("/settings")}
+          onClick={handleAccount}
         />
       </div>
 

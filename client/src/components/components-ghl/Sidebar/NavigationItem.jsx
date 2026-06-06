@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import {
   Inbox, PhoneCall, Users, Bot, BookOpen, Tag, Smartphone,
-  LayoutGrid, Settings, HelpCircle, ChevronDown, Dot,
+  LayoutGrid, Settings, HelpCircle, ChevronDown, Dot, Calendar,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -13,6 +13,7 @@ const ICON_MAP = {
   contacts:     Users,
   knowledge:    BookOpen,
   assistants:   Bot,
+  appointments: Calendar,
   "active-tags": Tag,
   numbers:      Smartphone,
   widgets:      LayoutGrid,

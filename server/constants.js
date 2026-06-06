@@ -42,8 +42,12 @@ const GET_VAPI_NUMBER_IMPORT_STATUS = "/vapi-number-import-status";
 const DELETE_NUM_FROM_VAPI = "/delete-number-from-vapi";
 const STRIPE_WEBHOOK = "/stripe/webhook";
 const ADD_TOOL = "/add-tool";
+const IMPORT_TOOL = "/import-tool";
+const CREATE_CUSTOM_TOOL = "/create-custom-tool";
 const DELETE_TOOL = "/delete-tool";
 const ADD_CALENDAR = "/add-calendar";
+const REMOVE_CALENDAR = "/remove-calendar";
+const SET_ASSISTANT_META = "/assistant-meta";
 const GET_TOOLS = "/get-tools";
 const EXECUTE_TOOL = "/vapi-tool-webhook/:userId";
 const ADD_DYNAMIC_MESSAGE = "/add-dynamic-message";
@@ -63,6 +67,9 @@ const GENERATE_OUTBOUND_CALL_URL = "/generate-outbound-call-url";
 const GET_ASSISTANT_KNOWLEDGE_BASES = "/get-assistant-knowledge-bases";
 const LINK_KNOWLEDGE_BASES_2_ASSISTANT = "/link-knowledge-bases-to-assistant";
 const GET_ALL_KNOWLEDGE_BASES = "/get-all-knowledge-bases";
+const KB_SEARCH = "/kb-search";
+const GET_GHL_CUSTOM_FIELDS = "/ghl-custom-fields";
+const SAVE_CUSTOM_FIELD_MAP = "/custom-field-map";
 const RMV_ASSISTANT_KNOWLEDGE = "/remove-knowlege-base-from-assistant";
 const DELETE_KNOWLEDGE_BASE = "/delete-knowlege-base";
 const SEND_CHAT_MESSAGE = "/send-chat-message";
@@ -88,6 +95,9 @@ const TOGGLE_SUBACCOUNT_ARCHIVE    = "/subaccount/:id/archive";
 const UPDATE_SUBACCOUNT_META       = "/subaccount/:id/meta";
 const GET_SUBACCOUNT_DETAILS       = "/subaccount/:id/details";
 const UPDATE_USER_PROFILE      = "/update-profile";
+const REQUEST_EMAIL_CHANGE     = "/request-email-change";
+const CONFIRM_EMAIL_CHANGE     = "/confirm-email-change/:token";
+const CHANGE_PASSWORD          = "/change-password";
 const GET_STRIPE_PORTAL        = "/stripe-portal-link";
 const DISCONNECT_GHL           = "/disconnect/ghl";
 const DISCONNECT_OPENAI        = "/disconnect/openai";
@@ -146,8 +156,12 @@ module.exports = {
   REGISTER_COMPANY,
   DELETE_NUM_FROM_VAPI,
   ADD_TOOL,
+  IMPORT_TOOL,
+  CREATE_CUSTOM_TOOL,
   DELETE_TOOL,
   ADD_CALENDAR,
+  REMOVE_CALENDAR,
+  SET_ASSISTANT_META,
   GET_TOOLS,
   ADD_DYNAMIC_MESSAGE,
   GET_DYNAMIC_MESSAGE,
@@ -166,6 +180,9 @@ module.exports = {
   GET_FILE_DETAILS,
   GET_ASSISTANT_KNOWLEDGE_BASES,
   GET_ALL_KNOWLEDGE_BASES,
+  KB_SEARCH,
+  GET_GHL_CUSTOM_FIELDS,
+  SAVE_CUSTOM_FIELD_MAP,
   LINK_KNOWLEDGE_BASES_2_ASSISTANT,
   RMV_ASSISTANT_KNOWLEDGE,
   DELETE_KNOWLEDGE_BASE,
@@ -194,6 +211,9 @@ module.exports = {
   UPDATE_SUBACCOUNT_META,
   GET_SUBACCOUNT_DETAILS,
   UPDATE_USER_PROFILE,
+  REQUEST_EMAIL_CHANGE,
+  CONFIRM_EMAIL_CHANGE,
+  CHANGE_PASSWORD,
   GET_STRIPE_PORTAL,
   DISCONNECT_GHL,
   DISCONNECT_OPENAI,
