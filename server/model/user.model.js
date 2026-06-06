@@ -121,6 +121,7 @@ const userSchema = mongoose.Schema({
       callId: String,
       type: { type: String },
       amount: Number,
+      phoneSid: String, // set on call charges to track per-number limits
       processedAt: { type: Date, default: Date.now },
     },
   ],

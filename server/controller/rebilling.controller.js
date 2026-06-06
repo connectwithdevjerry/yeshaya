@@ -11,9 +11,16 @@ const num = (v) => {
   return isNaN(n) ? 0 : n;
 };
 
-// Compute rebilling figures for the whole agency (per sub-account).
+// Current calendar month [start, now]
+const currentPeriod = () => {
+  const now = new Date();
+  return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now };
+};
+
+// Compute rebilling figures for the whole agency (per sub-account), scoped to a
+// billing period so usage isn't counted cumulatively/forever.
 // Returns { prices, breakdown: [...] }
-const computeBreakdown = async (user) => {
+const computeBreakdown = async (user, period = currentPeriod()) => {
   const rb = user.snapshot?.rebilling || {};
   const prices = {
     voice: { enabled: !!rb.voice?.enabled, price: num(rb.voice?.price) },
@@ -49,7 +56,12 @@ const computeBreakdown = async (user) => {
     const callArrays = await Promise.all(
       uniqueAssistantIds.map((id) =>
         axios.get("https://api.vapi.ai/call", {
-          params: { assistantId: id },
+          params: {
+            assistantId: id,
+            // Scope usage to the billing period (Vapi ISO date filters)
+            createdAtGe: new Date(period.start).toISOString(),
+            createdAtLe: new Date(period.end).toISOString(),
+          },
           headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}` },
         }).then((r) => r.data.map((c) => ({ ...c, _assistantId: id }))).catch(() => []),
       ),
@@ -114,7 +126,23 @@ const generateRebillingInvoice = async (req, res) => {
     const sub = user.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
     if (!sub) return res.status(404).json({ status: false, message: "Sub-account not found" });
 
-    const { prices, breakdown } = await computeBreakdown(user);
+    // Billing period = current calendar month
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Prevent generating two rebilling invoices for the same sub-account/period
+    const existing = await invoiceModel.findOne({
+      userId, kind: "rebilling", subaccountId,
+      periodStart: { $gte: periodStart },
+    }).lean();
+    if (existing) {
+      return res.status(409).json({
+        status: false,
+        message: `A rebilling invoice (${existing.invoiceNumber}) already exists for this sub-account this period.`,
+      });
+    }
+
+    const { prices, breakdown } = await computeBreakdown(user, { start: periodStart, end: now });
     const row = breakdown.find((b) => b.accountId === subaccountId);
     if (!row) return res.status(404).json({ status: false, message: "No rebilling data for this sub-account" });
 
@@ -173,9 +201,6 @@ const generateRebillingInvoice = async (req, res) => {
 
     const company = user.company || {};
     const clientName = sub.customName || "Sub-account Client";
-
-    const now = new Date();
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const invoice = await invoiceModel.create({
       invoiceNumber,

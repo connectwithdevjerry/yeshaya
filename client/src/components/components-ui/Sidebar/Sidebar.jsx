@@ -129,17 +129,8 @@ function SidebarContent({
         className={`flex items-center border-b border-white/5 flex-shrink-0
           ${isCollapsed ? "px-0 py-4 justify-center" : "px-4 py-3.5 gap-3"}`}
       >
-        <img
-          src={LOGO_URL}
-          alt="Yashayah AI"
-          className="w-8 h-8 rounded-lg object-cover flex-shrink-0 shadow-lg"
-        />
-        {!isCollapsed && (
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white leading-none tracking-tight">Yashayah AI</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">Voice Intelligence</p>
-          </div>
-        )}
+        {/* Brand hidden per request */}
+        {!isCollapsed && <div className="flex-1 min-w-0" />}
         {/* Collapse toggle — desktop only */}
         {!mobile && (
           <button

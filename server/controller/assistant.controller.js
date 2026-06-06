@@ -4361,6 +4361,8 @@ module.exports = {
   setAssistantMeta,
   importToolById,
   createCustomTool,
+  createTool,
+  linkToolToAssistant,
   kbSearch,
   getGhlCustomFields,
   saveCustomFieldMap,

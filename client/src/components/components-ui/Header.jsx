@@ -263,17 +263,19 @@ export function Header({ title }) {
             </AnimatePresence>
           </div>
 
-          {/* Link popup */}
-          <button
-            className={`p-2.5 rounded-xl transition-all relative ${downCount ? "text-amber-500 bg-amber-50 hover:bg-amber-100" : "text-gray-500 hover:text-indigo-600 hover:bg-indigo-50"}`}
-            onClick={() => togglePopup("oauth")}
-            title="Integration connections"
-          >
-            <Link2 className="w-5 h-5" />
-            {downCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-amber-500 text-white text-[10px] font-bold rounded-full">{downCount}</span>
-            )}
-          </button>
+          {/* Link popup — agency shell only (hidden on the GHL sub-account workspace) */}
+          {location.pathname !== "/app" && (
+            <button
+              className={`p-2.5 rounded-xl transition-all relative ${downCount ? "text-amber-500 bg-amber-50 hover:bg-amber-100" : "text-gray-500 hover:text-indigo-600 hover:bg-indigo-50"}`}
+              onClick={() => togglePopup("oauth")}
+              title="Integration connections"
+            >
+              <Link2 className="w-5 h-5" />
+              {downCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-amber-500 text-white text-[10px] font-bold rounded-full">{downCount}</span>
+              )}
+            </button>
+          )}
 
           {/* Bell */}
           <button
