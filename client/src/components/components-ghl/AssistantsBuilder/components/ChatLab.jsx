@@ -111,7 +111,7 @@ export const ChatLabView = () => {
                     <span className="text-xs font-bold text-gray-500 mr-1">
                       You
                     </span>
-                    <div className="bg-white border border-gray-200 px-4 py-2 rounded-xl text-gray-800 shadow-sm font-medium">
+                    <div className="bg-white border border-gray-100 px-4 py-2 rounded-xl text-gray-800 shadow-md font-medium hover:shadow-lg transition-shadow duration-200">
                       {msg.content}
                     </div>
                   </div>
@@ -124,13 +124,13 @@ export const ChatLabView = () => {
                       </span>
                     </div>
                     {msg.isLoading ? (
-                      <div className="w-full max-w-[400px] bg-[#f8f9fa] border border-gray-100 p-4 rounded-xl space-y-3">
-                        <div className="h-3 bg-gray-200 rounded-full w-full animate-pulse"></div>
-                        <div className="h-3 bg-gray-200 rounded-full w-[85%] animate-pulse"></div>
-                        <div className="h-3 bg-gray-200 rounded-full w-[40%] animate-pulse"></div>
+                      <div className="w-full max-w-[400px] bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 p-4 rounded-xl space-y-3 shadow-sm">
+                        <div className="h-3 bg-gray-300 rounded-full w-full animate-pulse"></div>
+                        <div className="h-3 bg-gray-300 rounded-full w-[85%] animate-pulse"></div>
+                        <div className="h-3 bg-gray-300 rounded-full w-[40%] animate-pulse"></div>
                       </div>
                     ) : (
-                      <div className="w-full bg-[#4f86f7] text-white p-4 rounded-xl shadow-sm text-sm font-medium leading-relaxed whitespace-pre-wrap">
+                      <div className="w-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white p-4 rounded-xl shadow-md text-sm font-medium leading-relaxed whitespace-pre-wrap transition-all duration-300 hover:shadow-lg">
                         {msg.content}
                       </div>
                     )}

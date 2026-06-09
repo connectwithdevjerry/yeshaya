@@ -37,10 +37,7 @@ export const register = createAsyncThunk(
   "auth/signup",
   async (formData, { rejectWithValue }) => {
     try {
-      const response = await axios.post(
-        "https://api.yashayah.cloud/auth/signup",
-        formData,
-      );
+      const response = await authAPI.register(formData);
 
       console.log("Registration response:", response.data);
 
@@ -91,10 +88,7 @@ export const resetPassword = createAsyncThunk(
   "auth/forgot_password",
   async (email, { rejectWithValue }) => {
     try {
-      const response = await axios.post(
-        "https://api.yashayah.cloud/auth/forgot_password",
-        { email },
-      );
+      const response = await authAPI.resetPassword(email);
 
       return (
         response.data.message || "Reset link sent! Please check your email."
@@ -119,7 +113,7 @@ export const verifyToken = createAsyncThunk(
       const token = tokenFromLink || localStorage.getItem("accessToken");
       if (!token) throw new Error("No token found");
       const response = await authAPI.verifyToken(token);
-      localStorage.setItem("token", response.data.token);
+      localStorage.setItem("accessToken", response.data.token || response.data.accessToken || token);
 
       return response.data;
     } catch (error) {
@@ -141,7 +135,7 @@ export const refreshAccessToken = createAsyncThunk(
   async (refreshToken, { rejectWithValue }) => {
     try {
       console.log("🔄 Attempting to refresh token...");
-      const response = await authAPI.refreshToken(refreshToken);
+      const response = await authAPI.exchangeToken(refreshToken);
       const data = response.data;
 
       if (data.status === false) {
@@ -189,14 +183,7 @@ export const getCompanyDetails = createAsyncThunk(
   "auth/getCompanyDetails",
   async (_, { rejectWithValue }) => {
     try {
-      const response = await axios.get(
-        "https://api.yashayah.cloud/auth/company-details",
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-          },
-        },
-      );
+      const response = await authAPI.getCompanyDetails();
 
       const data = response.data;
       if (data.status === false) {
@@ -219,16 +206,7 @@ export const registerCompany = createAsyncThunk(
   "auth/registerCompany",
   async (formData, { rejectWithValue }) => {
     try {
-      const response = await axios.post(
-        "https://api.yashayah.cloud/auth/register-company",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-          },
-        },
-      );
+      const response = await authAPI.registerCompany(formData);
 
       const data = response.data;
       if (data.status === false) {
@@ -248,16 +226,7 @@ export const updateCompanyDetails = createAsyncThunk(
   "auth/updateCompanyDetails",
   async (formData, { rejectWithValue }) => {
     try {
-      const response = await axios.post(
-        "https://api.yashayah.cloud/auth/company-details/update",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-          },
-        },
-      );
+      const response = await authAPI.updateCompanyDetails(formData);
 
       const data = response.data;
       if (data.status === false) {
@@ -278,14 +247,7 @@ export const getUserDetails = createAsyncThunk(
   "auth/getUserDetails",
   async (_, { rejectWithValue }) => {
     try {
-      const response = await axios.get(
-        "https://api.yashayah.cloud/auth/get-user-details",
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-          },
-        },
-      );
+      const response = await authAPI.getUserDetails();
 
       const data = response.data;
       if (data.status === false) {
@@ -505,7 +467,7 @@ const authSlice = createSlice({
       })
       .addCase(registerCompany.fulfilled, (state, action) => {
         state.loading = false;
-        state.company = action.payload;
+        state.companyDetails = action.payload;
         state.registrationSuccess = true;
       })
       .addCase(registerCompany.rejected, (state, action) => {
@@ -521,7 +483,7 @@ const authSlice = createSlice({
       })
       .addCase(updateCompanyDetails.fulfilled, (state, action) => {
         state.loading = false;
-        state.company = action.payload;
+        state.companyDetails = action.payload;
       })
       .addCase(updateCompanyDetails.rejected, (state, action) => {
         state.loading = false;

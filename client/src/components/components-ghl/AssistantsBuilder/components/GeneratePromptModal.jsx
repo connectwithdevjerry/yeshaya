@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { X, Sparkle, Loader2 } from 'lucide-react';
 import { generatePrompt, clearGeneratedPrompt } from '../../../../store/slices/assistantsSlice';
+import toast from "react-hot-toast";
 
 export const GeneratePromptModal = ({ isOpen, onClose, onPromptGenerated }) => {
     const dispatch = useDispatch();
@@ -40,7 +41,7 @@ export const GeneratePromptModal = ({ isOpen, onClose, onPromptGenerated }) => {
             await dispatch(generatePrompt({ description: description.trim() })).unwrap();
         } catch (error) {
             console.error('Failed to generate prompt:', error);
-
+            toast.error(error?.message || error || 'Failed to generate prompt');
         }
     };
 

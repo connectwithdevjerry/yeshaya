@@ -43,10 +43,10 @@ export const AccountDetailSidebar = ({ isOpen, onClose, account }) => {
     if (account) {
       setFormData({
         name: account.name || '',
-        firstName: initialClientInfo.fullName.split(' ')[0] || '',
-        lastName: initialClientInfo.fullName.split(' ')[1] || '',
-        email: initialClientInfo.email,
-        phoneNumber: initialClientInfo.phoneNumber,
+        firstName: account.firstName || initialClientInfo.fullName.split(' ')[0] || '',
+        lastName: account.lastName || initialClientInfo.fullName.split(' ')[1] || '',
+        email: account.email || initialClientInfo.email,
+        phoneNumber: account.phone || initialClientInfo.phoneNumber,
       });
       
       setAccessMembers(initialAccessMembers); 
@@ -87,7 +87,7 @@ export const AccountDetailSidebar = ({ isOpen, onClose, account }) => {
           <h2 className="text-xl font-semibold text-gray-900 flex items-center">
             {account.name} 
             <span className="text-sm text-gray-500 font-normal ml-3 flex items-center">
-                ID: {account.locationId}
+                ID: {account.id || account.locationId}
                 <button className="ml-2 text-gray-400 hover:text-gray-600" title="Copy ID">
                     <Copy className="w-4 h-4" />
                 </button>

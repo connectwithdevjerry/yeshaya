@@ -5,7 +5,7 @@ import {
   Users,
   DollarSign,
   Info,
-  Link,
+  Link as LinkIcon,
   RefreshCcw,
   SquareStack,
   Zap,
@@ -14,7 +14,7 @@ import {
   PlusCircle,
   Link2,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import apiClient from "../../store/api/config";
 import { fetchSubAccounts } from "../../store/slices/integrationSlice";
@@ -27,7 +27,7 @@ function DashboardPage() {
   
   // Redux state
   const { subAccounts } = useSelector((state) => state.integrations || {});
-  const { balance } = useSelector((state) => state.wallet || {});
+  const { walletBalance } = useSelector((state) => state.assistants || {});
   const { user } = useSelector((state) => state.auth || {});
   
   const [isResetting, setIsResetting] = useState(false);
@@ -92,7 +92,7 @@ function DashboardPage() {
 
   // Calculate dynamic values
   const totalSubAccounts = subAccounts?.length || 0;
-  const walletBalance = balance || 0;
+  const currentWalletBalance = walletBalance || 0;
   const activeAssistants = 0;
   const totalCalls =  0;
   const totalSpent =  0;
@@ -139,7 +139,7 @@ function DashboardPage() {
                   <div>
                     <p className="text-xs text-gray-500">Wallet</p>
                     <div className="text-2xl font-bold text-gray-900">
-                      ${walletBalance.toFixed(2)}
+                      ${currentWalletBalance.toFixed(2)}
                     </div>
                   </div>
                 </div>
@@ -172,28 +172,28 @@ function DashboardPage() {
               </h3>
               <ul className="space-y-1">
                 <li>
-                  <a
-                    href="/integrations"
+                  <Link
+                    to="/integrations"
                     className="flex items-center gap-2 text-indigo-600 hover:bg-gray-200 text-sm"
                   >
-                    <Link size={16} /> Connect to GoHighLevel
-                  </a>
+                    <LinkIcon size={16} /> Connect to GoHighLevel
+                  </Link>
                 </li>
                 <li>
-                  <a
-                    href="/"
+                  <Link
+                    to="/"
                     className="flex items-center gap-2 text-indigo-600 hover:bg-gray-200 text-sm"
                   >
                     <PlusCircle size={16} /> Create Sub-account
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a
-                    href="/rebilling"
+                  <Link
+                    to="/rebilling"
                     className="flex items-center gap-2 text-indigo-600 hover:bg-gray-200 text-sm"
                   >
                     <CreditCard size={16} /> Start Re-billing
-                  </a>
+                  </Link>
                 </li>
               </ul>
             </div>

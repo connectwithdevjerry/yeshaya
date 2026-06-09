@@ -18,7 +18,7 @@ import {
   Wallet,
   Loader2,
 } from "lucide-react";
-import DownloadContact from "../../components/components-ghl/CallCenter/DownloadContact";
+import CallList from "../../components/components-ghl/CallCenter/CallList";
 import FunnelVisual from "../../components/components-ghl/CallCenter/FunnelChart";
 import PieChartsDashboard from "../../components/components-ghl/CallCenter/PieChartDashboard";
 import CallCharts from "../../components/components-ghl/CallCenter/CallsChart";
@@ -157,9 +157,7 @@ const CallDashboard = () => {
               ? "bg-blue-500 text-white"
               : "bg-white hover:bg-gray-100"
           }`}
-          onClick={() =>
-            setActiveModal(activeModal === "dataCenter" ? null : "dataCenter")
-          }
+          onClick={() => setActiveModal("dataCenter")}
         >
           Data Center
         </button>
@@ -169,11 +167,9 @@ const CallDashboard = () => {
               ? "bg-blue-500 text-white"
               : "bg-white hover:bg-gray-100"
           }`}
-          onClick={() =>
-            setActiveModal(activeModal === "callList" ? null : "callList")
-          }
+          onClick={() => setActiveModal("callList")}
         >
-          Call List
+          Call Logs
         </button>
       </div>
 
@@ -222,7 +218,7 @@ const CallDashboard = () => {
       )}
 
       {/* Call List View */}
-      {activeModal === "callList" && <DownloadContact />}
+      {activeModal === "callList" && <CallList />}
     </div>
   );
 };

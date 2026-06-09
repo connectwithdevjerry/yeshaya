@@ -1,4 +1,5 @@
 import React from 'react';
+import { toast } from 'react-hot-toast';
 
 const Integration = () => {
 
@@ -38,7 +39,10 @@ const Integration = () => {
 
             {/* Action Link */}
             <div className="flex justify-end">
-              <button className="text-sm font-medium text-teal-600 hover:text-teal-700 transition-colors">
+              <button 
+                onClick={() => toast.success("Integration reset feature coming soon!")}
+                className="text-sm font-medium text-teal-600 hover:text-teal-700 transition-colors"
+               >
                 Reset connection
               </button>
             </div>

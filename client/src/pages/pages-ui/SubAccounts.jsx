@@ -60,7 +60,9 @@ function SubAccounts() {
 
   const tabs = ["All", "Active", "Favorites", "Re-billed", "Archived"];
   const filtered =
-    activeTab === "All" ? subAccounts : subAccounts?.filter(() => false);
+    activeTab === "All" || activeTab === "Active"
+      ? subAccounts
+      : subAccounts?.filter(() => false);
 
   const handleAccountClick = (account) => {
     setSelectedAccount(account);

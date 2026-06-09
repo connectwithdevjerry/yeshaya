@@ -57,11 +57,7 @@ export function Sidebar({ userInfo, navigationItems }) {
       </nav>
 
       {/* 4. Pass the dynamic balance to BottomInfo */}
-      <BottomInfo
-        balance={displayBalance}
-        numbers={safeUserInfo.numbers || 0}
-        currentUser={safeUserInfo.currentUser}
-      />
+      <BottomInfo balance={displayBalance} />
     </div>
   );
 }

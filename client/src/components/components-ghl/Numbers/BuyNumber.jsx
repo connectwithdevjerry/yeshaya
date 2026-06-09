@@ -15,9 +15,10 @@ import {
   buyNumber,
 } from "../../../store/slices/numberSlice";
 import { fetchAssistants } from "../../../store/slices/assistantsSlice";
+import toast from "react-hot-toast";
 
-// Helper function to get capability icons
 const getCapabilityIcons = (capabilities) => {
+  if (!capabilities) return [];
   const icons = [];
 
   if (capabilities.SMS) {
@@ -54,21 +55,20 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
     (state) => state.assistants
   );
 
+  const searchParams = new URLSearchParams(window.location.search);
+  const urlSubaccountId = searchParams.get("subaccount");
+  const activeSubaccountId = urlSubaccountId || localStorage.getItem("selectedSubaccountId");
+
   // ✅ Fetch numbers and assistants when modal opens
   useEffect(() => {
     if (isOpen) {
       dispatch(fetchAvailableNumbers());
 
-      // Get subaccountId from localStorage or your auth state
-      const subaccountId = localStorage.getItem("selectedSubaccountId");
-      if (subaccountId) {
-        dispatch(fetchAssistants(subaccountId));
+      if (activeSubaccountId) {
+        dispatch(fetchAssistants(activeSubaccountId));
       }
     }
-  }, [isOpen, dispatch]);
-
-  const searchParams = new URLSearchParams(window.location.search);
-  const subaccountId = searchParams.get("subaccount");
+  }, [isOpen, activeSubaccountId, dispatch]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -103,13 +103,13 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
   };
 
   const handleBuy = async () => {
-    if (selectedNumber && selectedAssistant && subaccountId) {
+    if (selectedNumber && selectedAssistant && activeSubaccountId) {
       setBuyingNumber(true);
 
       try {
         const resultAction = await dispatch(
           buyNumber({
-            subaccountId: subaccountId,
+            subaccountId: activeSubaccountId,
             assistantId: selectedAssistant,
             number: selectedNumber.phoneNumber,
           })
@@ -120,22 +120,23 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
             "✅ Number purchased successfully:",
             resultAction.payload
           );
+          toast.success("Number purchased successfully");
           // Optionally refresh the available numbers list
           dispatch(fetchAvailableNumbers());
           onClose();
         } else {
           console.error("❌ Failed to buy number:", resultAction.payload);
-          alert(`Failed to buy number: ${resultAction.payload}`);
+          toast.error(`Failed to buy number: ${resultAction.payload}`);
         }
       } catch (error) {
         console.error("❌ Error buying number:", error);
-        alert("An error occurred while buying the number");
+        toast.error("An error occurred while buying the number");
       } finally {
         setBuyingNumber(false);
       }
     } else {
-      if (!subaccountId) {
-        alert("Subaccount ID is missing. Please select a subaccount.");
+      if (!activeSubaccountId) {
+        toast.error("Subaccount ID is missing. Please select a subaccount.");
       }
     }
   };

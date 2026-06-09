@@ -31,7 +31,7 @@ import toast from "react-hot-toast";
 const IconButton = ({ icon: Icon, tooltip, onClick }) => (
   <button
     onClick={onClick}
-    className="p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors duration-150"
+    className="p-2 rounded-md text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 focus:scale-110 active:scale-95 transition-all duration-200"
     title={tooltip}
     aria-label={tooltip}
   >
@@ -293,7 +293,7 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
 
         <button
           onClick={onSave}
-          className="flex items-center space-x-2 px-2 py-1 bg-green-50 border border-green-500 text-green-500 font-medium rounded-md shadow-sm transition hover:bg-green-100"
+          className="flex items-center space-x-2 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium rounded-md shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-200 border-none"
         >
           <Save className="w-4 h-4" />
           <span>Save Changes</span>

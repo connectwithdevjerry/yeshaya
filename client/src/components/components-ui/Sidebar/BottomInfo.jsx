@@ -14,7 +14,7 @@ import { fetchPurchasedNumbers } from "../../../store/slices/numberSlice";
 import { fetchSubAccounts } from "../../../store/slices/integrationSlice";
 import { getUserDetails } from "../../../store/slices/authSlice";
 
-export function BottomInfo({ balance, currentUser }) {
+export function BottomInfo({ balance }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   

@@ -5,10 +5,12 @@ import { X, Info } from "lucide-react";
 import { createAssistant } from "../../../store/slices/assistantsSlice";
 import { useCurrentAccount } from "../../../hooks/useCurrentAccount";
 import { useSearchParams } from "react-router-dom";
+import toast from "react-hot-toast";
 
 const GenerateAssistantFormModal = ({ isOpen, onClose }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
   const account = useCurrentAccount();
@@ -20,25 +22,29 @@ const GenerateAssistantFormModal = ({ isOpen, onClose }) => {
 
   const handleGenerate = async () => {
     if (!name.trim()) {
-      alert("Assistant name is required");
+      toast.error("Assistant name is required");
       return;
     }
 
     if (!subaccountId) {
-      alert("No subaccount selected");
+      toast.error("No subaccount selected");
       return;
     }
 
     try {
+      setIsSubmitting(true);
       await dispatch(
         createAssistant({ name, description, subaccountId })
       ).unwrap();
+      toast.success("Assistant created successfully");
       setName("");
       setDescription("");
       onClose();
     } catch (err) {
       console.error("❌ Error creating assistant:", err);
-      alert(err.message || "Failed to create assistant");
+      toast.error(err.message || err || "Failed to create assistant");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -99,14 +105,14 @@ const GenerateAssistantFormModal = ({ isOpen, onClose }) => {
           </button>
           <button
             onClick={handleGenerate}
-            disabled={!name.trim() || !subaccountId}
+            disabled={!name.trim() || !subaccountId || isSubmitting}
             className={`px-4 py-2 text-sm font-medium text-white rounded-md shadow-sm transition ${
-              name.trim() && subaccountId
+              name.trim() && subaccountId && !isSubmitting
                 ? "bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700"
                 : "bg-gray-400 cursor-not-allowed"
             }`}
           >
-            Generate Assistant
+            {isSubmitting ? "Generating..." : "Generate Assistant"}
           </button>
         </div>
       </div>

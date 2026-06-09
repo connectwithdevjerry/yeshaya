@@ -209,10 +209,10 @@ const KnowledgePage = () => {
                         className="flex justify-end space-x-2"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <button className="flex items-center space-x-1 px-3 py-1 border rounded-md text-xs hover:bg-gray-100">
+                        {/* <button className="flex items-center space-x-1 px-3 py-1 border rounded-md text-xs hover:bg-gray-100">
                           <Volume2 className="w-3 h-3 text-green-600" />
                           <span>ENABLE VOICE</span>
-                        </button>
+                        </button> */}
 
                         {/* 3. Attach the handleDelete to the button */}
                         <button
