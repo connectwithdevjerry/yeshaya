@@ -3796,9 +3796,20 @@ const sendChatMessage = async (req, res) => {
       error.response ? error.response.data : error.message,
     );
     const vapiMsg = error.response?.data?.message;
+    const rawMsg = Array.isArray(vapiMsg) ? vapiMsg.join(", ") : (vapiMsg || error.message || "");
+
+    // Hide internal Vapi billing/account errors from end-users
+    const isBillingError =
+      rawMsg.toLowerCase().includes("payment") ||
+      rawMsg.toLowerCase().includes("card") ||
+      rawMsg.toLowerCase().includes("pay-as-you-go") ||
+      rawMsg.toLowerCase().includes("billing");
+
     return res.send({
       status: false,
-      message: Array.isArray(vapiMsg) ? vapiMsg.join(", ") : (vapiMsg || error.message),
+      message: isBillingError
+        ? "Chat is temporarily unavailable. Please contact the developer or support team for assistance."
+        : rawMsg || "Failed to send message.",
       data: error.response?.data,
     });
   }
