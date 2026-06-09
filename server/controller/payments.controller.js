@@ -398,6 +398,12 @@ const callBillingWebhook = async (req, res) => {
       amountToDeduct = call.analysis?.cost || 0;
     }
 
+    // ---- APPLY RESELL MARKUP ----
+    const voiceResell = user.resellConfig?.aiVoiceMinutes;
+    if (amountToDeduct > 0 && voiceResell?.enabled) {
+      amountToDeduct += voiceResell.resellPrice || 0;
+    }
+
     // ---- DEDUCT WALLET ----
     user.walletBalance -= amountToDeduct;
 
@@ -525,7 +531,12 @@ const handleVapiSmsBilling = async (req, res) => {
 
         if (!user) return res.status(404).send("User not found");
 
-        const smsCost = 0.05; // Set your price per SMS
+        let smsCost = 0.05; // Set your price per SMS
+
+        const chatResell = user.resellConfig?.aiChatMessages;
+        if (chatResell?.enabled) {
+          smsCost += chatResell.resellPrice || 0;
+        }
 
         // 2. Deduct from Wallet
         user.walletBalance -= smsCost;
@@ -575,6 +586,59 @@ const handleVapiSmsBilling = async (req, res) => {
   }
 };
 
+const getResellConfig = async (req, res) => {
+  try {
+    const userId = req.user;
+    const user = await userModel.findById(userId);
+    return res.send({ status: true, data: user.resellConfig || {} });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+const updateResellConfig = async (req, res) => {
+  try {
+    const userId = req.user;
+    const {
+      aiVoiceMinutes,
+      aiChatMessages,
+      voiceKnowledgeBases,
+      phoneNumbers,
+    } = req.body;
+    const user = await userModel.findById(userId);
+
+    if (aiVoiceMinutes)
+      user.resellConfig.aiVoiceMinutes = {
+        ...user.resellConfig.aiVoiceMinutes,
+        ...aiVoiceMinutes,
+      };
+    if (aiChatMessages)
+      user.resellConfig.aiChatMessages = {
+        ...user.resellConfig.aiChatMessages,
+        ...aiChatMessages,
+      };
+    if (voiceKnowledgeBases)
+      user.resellConfig.voiceKnowledgeBases = {
+        ...user.resellConfig.voiceKnowledgeBases,
+        ...voiceKnowledgeBases,
+      };
+    if (phoneNumbers)
+      user.resellConfig.phoneNumbers = {
+        ...user.resellConfig.phoneNumbers,
+        ...phoneNumbers,
+      };
+
+    await user.save();
+    return res.send({
+      status: true,
+      message: "Resell configuration updated",
+      data: user.resellConfig,
+    });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
 module.exports = {
   callBillingWebhook,
   getLatestConnectedBalance,
@@ -585,4 +649,6 @@ module.exports = {
   getTransactionHistory,
   getChargingDetails,
   updateAutoChargingSettings,
+  getResellConfig,
+  updateResellConfig,
 };

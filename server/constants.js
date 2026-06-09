@@ -80,6 +80,8 @@ const AUTO_CARD_PAY_WEBHOOK = "/autopay/webhook";
 const GET_ANALYTICS = "/get-analytics";
 const GET_TEAM_NOTES = "/get-team-notes";
 const UPDATE_TEAM_NOTES = "/update-team-notes";
+const GET_RESELL_CONFIG = "/get-resell-config";
+const UPDATE_RESELL_CONFIG = "/update-resell-config";
 // cookie constants
 const REFRESH_TOKEN = "refreshToken";
 
@@ -166,4 +168,6 @@ module.exports = {
   GET_ANALYTICS,
   GET_TEAM_NOTES,
   UPDATE_TEAM_NOTES,
+  GET_RESELL_CONFIG,
+  UPDATE_RESELL_CONFIG,
 };

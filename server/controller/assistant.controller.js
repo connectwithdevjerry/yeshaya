@@ -431,9 +431,11 @@ const createAssistantAndSave = async (req, res) => {
 
   console.log({ subaccountId });
 
-  const targetSubaccount = user.ghlSubAccountIds.find(
+  const targetSubaccount = user?.ghlSubAccountIds?.find(
     (sub) => sub.accountId == subaccountId && sub.connected
   );
+
+  console.log({ targetSubaccount });
 
   if (!targetSubaccount)
     return res.send({
@@ -2440,6 +2442,23 @@ const addKnowledgeBase = async (req, res) => {
 
   try {
     const user = await userModel.findById(userId);
+    
+    // ---- KB BILLING CHECK ----
+    const kbResell = user.resellConfig?.voiceKnowledgeBases;
+    let amountToDeduct = 0;
+
+    if (kbResell?.enabled) {
+      amountToDeduct = kbResell.resellPrice || 0;
+    }
+
+    if (user.walletBalance < amountToDeduct) {
+      return res.send({
+        status: false,
+        message: `Insufficient wallet balance to add knowledge base. Cost: $${amountToDeduct.toFixed(
+          2,
+        )}`,
+      });
+    }
 
     // const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
     //   sub.vapiAssistants.some(
@@ -2631,6 +2650,16 @@ const addKnowledgeBase = async (req, res) => {
     user.allKnowledgeBaseToolIds.push(toolId);
     user.markModified("ghlSubAccountIds");
     await user.save();
+
+    // ---- DEDUCT WALLET ----
+    if (amountToDeduct > 0) {
+      user.walletBalance -= amountToDeduct;
+      user.billingEvents.push({
+        type: "KB_CREATION_CHARGE",
+        amount: amountToDeduct,
+        callId: toolId,
+      });
+    }
 
     // console.log(
     //   `Knowledge base added and linked successfully to Assistant ${assistantId}.`
@@ -3108,7 +3137,12 @@ const sendChatMessage = async (req, res) => {
       },
     );
 
-    const amountToDeduct = response.data.cost || 0;
+    let amountToDeduct = response.data.cost || 0;
+    
+    const chatResell = user.resellConfig?.aiChatMessages;
+    if (chatResell?.enabled) {
+      amountToDeduct += chatResell.resellPrice || 0;
+    }
     const type = "chat_message";
 
     user.walletBalance -= amountToDeduct;

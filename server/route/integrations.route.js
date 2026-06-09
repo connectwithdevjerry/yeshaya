@@ -55,6 +55,8 @@ const {
   GET_CHARGING_DETAILS,
   UPDATE_CHARGING_DETAILS,
   AUTO_CARD_PAY_WEBHOOK,
+  GET_RESELL_CONFIG,
+  UPDATE_RESELL_CONFIG,
 } = require("../constants");
 const {
   stripeWebhook,
@@ -65,6 +67,8 @@ const {
   getChargingDetails,
   updateAutoChargingSettings,
   autoTopUpLowWalletUsers,
+  getResellConfig,
+  updateResellConfig,
 } = require("../controller/payments.controller");
 
 router.post(TWILIO_CALL_RECEIVER, twilioCallReceiver);
@@ -109,5 +113,7 @@ router.put(
   updateAutoChargingSettings,
 );
 router.post(AUTO_CARD_PAY_WEBHOOK, autoTopUpLowWalletUsers);
+router.get(GET_RESELL_CONFIG, verifyAccessToken, getResellConfig);
+router.put(UPDATE_RESELL_CONFIG, verifyAccessToken, updateResellConfig);
 
 module.exports = router;

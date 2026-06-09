@@ -935,6 +935,24 @@ const buyUsPhoneNumber = async (req, res) => {
       });
     }
 
+    // ---- BILLING CHECK ----
+    const BASE_PHONE_COST = 1.15;
+    const phoneResell = user.resellConfig?.phoneNumbers;
+    let amountToDeduct = BASE_PHONE_COST;
+
+    if (phoneResell?.enabled) {
+      amountToDeduct += phoneResell.resellPrice || 0;
+    }
+
+    if (user.walletBalance < amountToDeduct) {
+      return res.send({
+        status: false,
+        message: `Insufficient wallet balance. Cost: $${amountToDeduct.toFixed(
+          2,
+        )}`,
+      });
+    }
+
     const client = twilio(ACCOUNT_SID, ACCOUNT_AUTH_TOKEN);
     console.log("Searching for an available US phone number...");
 
@@ -942,27 +960,25 @@ const buyUsPhoneNumber = async (req, res) => {
 
     const purchasedNumber = await client.incomingPhoneNumbers.create({
       phoneNumber: numberToBuy,
-      // Optional: Configure webhook URLs for voice and SMS handling
-      // voiceUrl: `${process.env.SERVER_URL}/integrations/voiceurl/${userId}/${subaccount}/${assistant}`,
-      // smsUrl: `${process.env.SERVER_URL}/integrations/smsurl/${userId}/${subaccount}/${assistant}`,
-      // voiceFallbackUrl: "",
-      // smsFallbackUrl: "",
     });
 
-    console.log({ purchasedNumber });
-
-    // console.log("SUCCESS! Phone number purchased.");
-    // console.log(`SID: ${purchasedNumber.sid}`);
-    // console.log(`Number: ${purchasedNumber.phoneNumber}`);
-
-    // console.log(getSubAccount);
+    // ---- DEDUCT WALLET ----
+    user.walletBalance -= amountToDeduct;
 
     getAssistant[0].numberDetails.push({
       phoneNum: purchasedNumber?.phoneNumber,
       phoneSid: purchasedNumber?.sid,
     });
 
+    user.billingEvents.push({
+      type: "PHONE_NUMBER_PURCHASE",
+      amount: amountToDeduct,
+      callId: purchasedNumber.sid,
+    });
+
     await user.save();
+
+    console.log(`Phone number purchased and wallet charged: $${amountToDeduct}`);
 
     return res.send({ status: true, purchasedNumber });
   } catch (error) {
