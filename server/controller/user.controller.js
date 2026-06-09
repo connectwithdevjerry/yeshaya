@@ -881,13 +881,13 @@ const saveSnapshot = async (req, res) => {
 
     // Safe spread merge — avoids crash if sub-object is undefined on fresh accounts
     if (features !== undefined)
-      user.snapshot.features   = { ...(user.snapshot.features  || {}), ...features   };
+      user.snapshot.features   = { ...(user.snapshot.features?.toObject?.()  || {}), ...features   };
     if (rebilling !== undefined)
-      user.snapshot.rebilling  = { ...(user.snapshot.rebilling || {}), ...rebilling  };
+      user.snapshot.rebilling  = { ...(user.snapshot.rebilling?.toObject?.() || {}), ...rebilling  };
     if (resources !== undefined)
       user.snapshot.resources  = resources;
     if (limits !== undefined)
-      user.snapshot.limits     = { ...(user.snapshot.limits    || {}), ...limits     };
+      user.snapshot.limits     = { ...(user.snapshot.limits?.toObject?.()    || {}), ...limits     };
 
     user.markModified("snapshot");
     await user.save();

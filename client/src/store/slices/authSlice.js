@@ -379,9 +379,7 @@ export const getAdminSettings = createAsyncThunk(
   "auth/getAdminSettings",
   async (_, { rejectWithValue }) => {
     try {
-      const res = await axios.get("https://api.yashayah.cloud/auth/admin-settings", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
-      });
+      const res = await apiClient.get("/auth/admin-settings");
       if (!res.data.status) return rejectWithValue(res.data.message);
       return res.data.data;
     } catch (e) {
@@ -394,9 +392,7 @@ export const saveAdminSettings = createAsyncThunk(
   "auth/saveAdminSettings",
   async (payload, { rejectWithValue }) => {
     try {
-      const res = await axios.post("https://api.yashayah.cloud/auth/admin-settings/save", payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
-      });
+      const res = await apiClient.post("/auth/admin-settings/save", payload);
       if (!res.data.status) return rejectWithValue(res.data.message);
       return res.data;
     } catch (e) {

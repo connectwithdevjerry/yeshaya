@@ -3,8 +3,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { Info, Loader2, Wallet, Phone, PhoneOff, Mic, Bot, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Vapi from "@vapi-ai/web";
-import { getAssistantIdFromUrl } from "../../../../utils/urlUtils";
-import { useSearchParams } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { fetchWalletBalance } from "../../../../store/slices/assistantsSlice";
 import toast from "react-hot-toast";
@@ -19,8 +17,6 @@ export const VoiceLabView = () => {
   const vapiRef      = useRef(null);
   const chatEndRef   = useRef(null);
   const dispatch     = useDispatch();
-  const [searchParams] = useSearchParams();
-  const assistantId  = getAssistantIdFromUrl(searchParams);
 
   const [isCallActive,        setIsCallActive]        = useState(false);
   const [isConnecting,        setIsConnecting]        = useState(false);
@@ -30,7 +26,9 @@ export const VoiceLabView = () => {
   const [currentUserTranscript, setCurrentUserTranscript] = useState("");
   const [currentAITranscript,   setCurrentAITranscript]   = useState("");
 
-  const assistantName = useSelector((s) => s.assistants?.selectedAssistant?.name || "Assistant");
+  const selectedAssistant = useSelector((s) => s.assistants?.selectedAssistant);
+  const assistantId   = selectedAssistant?.id;
+  const assistantName = selectedAssistant?.name || "Assistant";
   const { walletBalance, fetchingBalance } = useSelector((s) => s.assistants);
 
   useEffect(() => { dispatch(fetchWalletBalance()); }, [dispatch]);
@@ -83,6 +81,10 @@ export const VoiceLabView = () => {
 
   const handleToggleCall = async () => {
     if (!isCallActive) {
+      if (!assistantId) {
+        toast.error("No assistant selected.");
+        return;
+      }
       try {
         setIsConnecting(true);
         const balance = await dispatch(fetchWalletBalance()).unwrap();
