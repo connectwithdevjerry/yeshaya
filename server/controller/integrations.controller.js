@@ -380,6 +380,66 @@ const getSubAccount = async (accessToken, subAccountId) => {
   }
 };
 
+// ─── Snapshot "Resources": clone the agency's template assistants into a new
+// sub-account. `user.snapshot.resources` is an array of source Vapi assistant IDs.
+// Best-effort: failures on individual assistants are logged, never thrown.
+const cloneSnapshotResources = async (user, subAccount) => {
+  const resourceIds = Array.isArray(user?.snapshot?.resources)
+    ? user.snapshot.resources.filter(Boolean)
+    : [];
+  if (!resourceIds.length || !subAccount) return;
+
+  if (!Array.isArray(subAccount.vapiAssistants)) subAccount.vapiAssistants = [];
+
+  for (const sourceId of resourceIds) {
+    try {
+      // Skip if this template was already cloned into the sub-account
+      const already = subAccount.vapiAssistants.some(
+        (a) => a.clonedFrom === sourceId,
+      );
+      if (already) continue;
+
+      // 1) Fetch the source assistant config
+      const srcRes = await axios.get(
+        `https://api.vapi.ai/assistant/${sourceId}`,
+        { headers: { Authorization: `Bearer ${VAPI_API_KEY}` } },
+      );
+      const src = srcRes.data || {};
+
+      // 2) Strip read-only fields and create a copy
+      const body = { ...src };
+      [
+        "id", "orgId", "createdAt", "updatedAt", "isServerUrlSecretSet",
+      ].forEach((k) => delete body[k]);
+
+      const created = await axios.post("https://api.vapi.ai/assistant", body, {
+        headers: {
+          Authorization: `Bearer ${VAPI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      });
+      const newAssistant = created.data || {};
+
+      // 3) Attach the clone to the sub-account
+      subAccount.vapiAssistants.push({
+        assistantId: newAssistant.id,
+        description: newAssistant.name || src.name || "Snapshot Assistant",
+        clonedFrom: sourceId,
+        numberDetails: [],
+        connectedTools: [],
+      });
+      console.log(
+        `✅ Snapshot clone: assistant ${sourceId} → ${newAssistant.id} for sub ${subAccount.accountId}`,
+      );
+    } catch (e) {
+      console.error(
+        `⚠️ Snapshot clone failed for assistant ${sourceId}:`,
+        e.response?.data?.message || e.message,
+      );
+    }
+  }
+};
+
 const importGhlSubaccount = async (req, res) => {
   const { subAccountId } = req.body;
   const userId = req.user;
@@ -430,6 +490,11 @@ const importGhlSubaccount = async (req, res) => {
     numberDetails: [],
   });
 
+  // Apply snapshot "Resources" (clone template assistants) into the new sub-account
+  const newSub = user.ghlSubAccountIds.find((a) => a.accountId === subAccountId);
+  await cloneSnapshotResources(user, newSub);
+  user.markModified("ghlSubAccountIds");
+
   await user.save();
 
   return res.send({ status: true, data, subaccounts: user.ghlSubAccountIds });
@@ -478,6 +543,7 @@ const importGhlSubaccounts = async (req, res) => {
   const results = await Promise.all(promises);
   console.log({ results });
 
+  const newlyAdded = [];
   results.forEach((result) => {
     if (result.status) {
       // true shows the subaccount id is linked to the agency account
@@ -487,8 +553,16 @@ const importGhlSubaccounts = async (req, res) => {
         vapiAssistants: [],
         numberDetails: [],
       });
+      newlyAdded.push(result.subAccountId);
     }
   });
+
+  // Apply snapshot "Resources" (clone template assistants) into each new sub-account
+  for (const accId of newlyAdded) {
+    const newSub = user.ghlSubAccountIds.find((a) => a.accountId === accId);
+    await cloneSnapshotResources(user, newSub);
+  }
+  user.markModified("ghlSubAccountIds");
 
   await user.save();
 
@@ -960,6 +1034,20 @@ const buyUsPhoneNumber = async (req, res) => {
         status: false,
         message: "No assistant with this account for this number!",
       });
+    }
+
+    // Feature gate + "Maximum Phone Numbers" limit per sub-account
+    {
+      const { checkSnapshotLimit, checkFeature } = require("../helpers/snapshotLimits");
+      const phonesOff = checkFeature(user, "phones");
+      if (phonesOff) return res.send({ status: false, message: phonesOff });
+      const phoneCap = checkSnapshotLimit(user, getSubAccount[0], "phones");
+      if (phoneCap.exceeded) {
+        return res.send({
+          status: false,
+          message: `Phone number limit reached (${phoneCap.limit}) for this sub-account. Increase it in Agency → Snapshot → Limits.`,
+        });
+      }
     }
 
     const client = twilio(ACCOUNT_SID, ACCOUNT_AUTH_TOKEN);
@@ -1888,6 +1976,24 @@ const importByoNumber = async (req, res) => {
     }
     if (!subaccountId) {
       return res.send({ status: false, message: "subaccountId is required" });
+    }
+
+    // Enforce the agency snapshot "Maximum Phone Numbers" limit per sub-account
+    {
+      const capUser = await userModel.findById(userId);
+      const capSub = capUser?.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+      if (capSub) {
+        const { checkSnapshotLimit, checkFeature } = require("../helpers/snapshotLimits");
+        const phonesOff = checkFeature(capUser, "phones");
+        if (phonesOff) return res.send({ status: false, message: phonesOff });
+        const phoneCap = checkSnapshotLimit(capUser, capSub, "phones");
+        if (phoneCap.exceeded) {
+          return res.send({
+            status: false,
+            message: `Phone number limit reached (${phoneCap.limit}) for this sub-account. Increase it in Agency → Snapshot → Limits.`,
+          });
+        }
+      }
     }
 
     // Derive the SIP gateway host from the termination URI

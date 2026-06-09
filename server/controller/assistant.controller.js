@@ -488,6 +488,16 @@ const createAssistantAndSave = async (req, res) => {
       message: "This subaccount does not exist!",
     });
 
+  // Enforce the agency snapshot "Maximum Assistants" limit per sub-account
+  const { checkSnapshotLimit } = require("../helpers/snapshotLimits");
+  const assistantCap = checkSnapshotLimit(user, targetSubaccount, "assistants");
+  if (assistantCap.exceeded) {
+    return res.send({
+      status: false,
+      message: `Assistant limit reached (${assistantCap.limit}) for this sub-account. Increase it in Agency → Snapshot → Limits.`,
+    });
+  }
+
   try {
     // Using axios.post. The request body (VAPI_ASSISTANT_CONFIG) is passed directly.
     const response = await axios.post(
@@ -1334,7 +1344,14 @@ const executeToolFromVapi = async (req, res) => {
 
     // 2 --- TOOL: BOOK APPOINTMENT ---
     if (name === "book_appointment") {
-      const { customerEmail, customerName, startTime } = args;
+      const { customerEmail, customerName } = args;
+      // The tool exposes the param as `requestedTime`; accept `startTime` too.
+      const startTime = args.requestedTime || args.startTime;
+      if (!startTime) {
+        return res.json({
+          results: [{ toolCallId: toolCall.id, result: "I couldn't read the requested time. Please restate the date and time." }],
+        });
+      }
 
       // Step A: Upsert Contact
       const contactRes = await axios.post(
@@ -1386,10 +1403,12 @@ const executeToolFromVapi = async (req, res) => {
         });
       } catch (e) { console.error("⚠️ appointment store failed:", e.message); }
 
-      // Confirmation email to the customer
+      // Confirmation email to the customer (white-label sender if configured)
       if (customerEmail) {
         try {
-          await emailHelper(
+          const sendUserEmail = require("../helpers/sendUserEmail");
+          await sendUserEmail(
+            userId,
             customerEmail,
             `Appointment Confirmed — ${businessName}`,
             confirmationEmail({ customerName, when, businessName, title: "" }),
@@ -2955,6 +2974,13 @@ const addKnowledgeBase = async (req, res) => {
   try {
     const user = await userModel.findById(userId);
 
+    // Feature gate: agency may have the knowledge base disabled
+    {
+      const { checkFeature } = require("../helpers/snapshotLimits");
+      const kbOff = checkFeature(user, "kb");
+      if (kbOff) return res.send({ status: false, message: kbOff });
+    }
+
     // Resolve the target sub-account (scopes the KB to this location)
     const targetSubaccount = subaccountId
       ? user.ghlSubAccountIds.find((sub) => sub.accountId === subaccountId)
@@ -3606,6 +3632,13 @@ const makeOutboundCall = async (req, res) => {
     if (!targetSubaccount)
       return res.send({ status: false, message: "Subaccount not found!" });
 
+    // Feature gate: agency may have voice calling disabled
+    {
+      const { checkFeature } = require("../helpers/snapshotLimits");
+      const voiceOff = checkFeature(user, "voice");
+      if (voiceOff) return res.send({ status: false, message: voiceOff });
+    }
+
     const targetAssistant = targetSubaccount.vapiAssistants.find(
       (target) => target.assistantId === assistantId,
     );
@@ -3697,6 +3730,17 @@ const sendChatMessage = async (req, res) => {
     return res.send({ status: false, reply: [{ role: "assistant", content }] });
   }
 
+  // Feature gate + monthly "Messages" cap for this sub-account
+  const { resolveSubaccountId, checkUsageLimit, checkFeature } = require("../helpers/snapshotLimits");
+  const chatSubaccountId = resolveSubaccountId(user, assistantId);
+  const chatBlockReason =
+    checkFeature(user, "chat") ||
+    checkUsageLimit(user, chatSubaccountId, "messages");
+  if (chatBlockReason) {
+    req.session.chatHistory[assistantId].push({ role: "assistant", content: chatBlockReason });
+    return res.send({ status: false, reply: [{ role: "assistant", content: chatBlockReason }] });
+  }
+
   try {
     const currentHistory = req.session.chatHistory[assistantId];
     const messages = [
@@ -3736,6 +3780,7 @@ const sendChatMessage = async (req, res) => {
       callId: response.data.id,
       type: "chat_message",
       amount: amountToDeduct,
+      subaccountId: chatSubaccountId || undefined, // enables snapshot message caps
     });
     await user.save();
 

@@ -2,6 +2,7 @@ const axios = require("axios");
 const userModel = require("../model/user.model");
 const appointmentModel = require("../model/appointment.model");
 const emailHelper = require("../resendObject");
+const sendUserEmail = require("../helpers/sendUserEmail");
 const { createNotification } = require("./notification.controller");
 const { fmtWhen, confirmationEmail } = require("../helpers/appointmentEmails");
 
@@ -280,7 +281,7 @@ const bookAppointmentManual = async (req, res) => {
     const businessName = user.company?.name || "us";
     const when = fmtWhen(startTime);
     try {
-      await emailHelper(email, `Appointment Confirmed — ${businessName}`,
+      await sendUserEmail(userId, email, `Appointment Confirmed — ${businessName}`,
         confirmationEmail({ customerName: name, when, businessName, title: "" }));
     } catch (e) { console.error("⚠️ manual confirmation email failed:", e.message); }
 

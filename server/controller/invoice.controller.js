@@ -4,6 +4,7 @@ const { getNextSequence } = require("../model/counter.model");
 const { generateInvoicePdf } = require("../helpers/invoicePdf");
 const { saveImageToDB } = require("../cloudinaryImageHandler");
 const emailHelper = require("../resendObject");
+const sendUserEmail = require("../helpers/sendUserEmail");
 
 // Map raw billingEvents.type → human grouping
 const USAGE_GROUPS = {
@@ -200,7 +201,7 @@ const sendInvoiceEmail = async (req, res) => {
         <p style="color:#9CA3AF;font-size:12px;margin-top:24px">Thank you for your business.</p>
       </div>`;
 
-    await emailHelper(to, `Invoice ${invoice.invoiceNumber}`, html, [
+    await sendUserEmail(userId, to, `Invoice ${invoice.invoiceNumber}`, html, [
       { filename: `${invoice.invoiceNumber}.pdf`, content: pdfBuffer },
     ]);
 

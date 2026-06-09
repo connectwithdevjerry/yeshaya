@@ -3,6 +3,7 @@ const userModel = require("../model/user.model");
 const numberSettingModel = require("../model/numberSetting.model");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { createNotification } = require("./notification.controller");
+const { resolveSubaccountId, checkUsageLimit, featureEnabled } = require("../helpers/snapshotLimits");
 require("dotenv").config();
 
 const CHARGE_TYPES = ["end-of-call-report", "call.ended", "call.analysis.completed"];
@@ -438,7 +439,14 @@ const callBillingWebhook = async (req, res) => {
 
     // ---- PER-NUMBER LIMITS (max calls/day, monthly budget) ----
     const phoneSid = resolvePhoneSid(user, call);
-    const limitReason = await checkNumberLimits(user, phoneSid);
+    const subaccountId = resolveSubaccountId(user, call.assistantId);
+
+    // ---- SNAPSHOT USAGE CAP: monthly call-minutes per sub-account ----
+    // ---- FEATURE GATE: agency may have voice calling disabled ----
+    const limitReason =
+      (featureEnabled(user, "voice") ? null : "Voice calling is disabled for this agency.") ||
+      (await checkNumberLimits(user, phoneSid)) ||
+      checkUsageLimit(user, subaccountId, "calling");
     if (limitReason) {
       res.status(200).json({ error: limitReason });
       try {
@@ -480,6 +488,11 @@ const callBillingWebhook = async (req, res) => {
     }
     amountToDeduct = Number(amountToDeduct) || 0;
 
+    // Resolve the call duration (seconds) for usage tracking + notifications
+    const durationSec = call.endedAt && call.startedAt
+      ? Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000)
+      : (Number(call.durationSeconds) ? Math.round(call.durationSeconds) : null);
+
     // ---- DEDUCT WALLET (single charge per call) ----
     user.walletBalance -= amountToDeduct;
 
@@ -487,7 +500,9 @@ const callBillingWebhook = async (req, res) => {
       callId: call.id,
       type,
       amount: amountToDeduct,
-      phoneSid: phoneSid || undefined, // enables per-number limit tracking
+      phoneSid: phoneSid || undefined,   // enables per-number limit tracking
+      subaccountId: subaccountId || undefined, // enables snapshot call-minute caps
+      durationSec: durationSec || undefined,
     });
 
     user.dateUpdated = new Date();
@@ -495,9 +510,6 @@ const callBillingWebhook = async (req, res) => {
 
     // Fire call completed notification
     if (type === "end-of-call-report" || type === "call.ended") {
-      const durationSec = call.endedAt && call.startedAt
-        ? Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000)
-        : null;
       const durationText = durationSec != null
         ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`
         : "Unknown duration";

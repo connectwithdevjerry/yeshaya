@@ -55,7 +55,9 @@ const refreshTokens = async () => {
       refreshToken
     });
 
-    if (response.data.status && response.data.accessToken) {
+    // Accept the response as long as a new access token came back.
+    // (Don't depend on a `status` flag — a valid accessToken is the contract.)
+    if (response.data.accessToken && response.data.status !== false) {
       const newAccessToken = response.data.accessToken;
       const newRefreshToken = response.data.refreshToken;
 
@@ -165,12 +167,16 @@ apiClient.interceptors.response.use(
     const publicAuthPaths = ['/auth/signin', '/auth/signup', '/auth/forgot_password', '/auth/reset_password', '/auth/activate', '/auth/exchange-token'];
     const isPublicAuth = publicAuthPaths.some(path => originalRequest.url?.includes(path));
 
+    // The server returns 401 (missing header) OR 403 (expired/invalid token) —
+    // both should trigger a refresh attempt.
+    const isAuthError = error.response?.status === 401 || error.response?.status === 403;
+
     if (
-      error.response?.status === 401 &&
+      isAuthError &&
       !originalRequest._retry &&
       !isPublicAuth
     ) {
-      console.log("⚠️ 401 error detected, attempting token refresh");
+      console.log(`⚠️ ${error.response?.status} error detected, attempting token refresh`);
       
       // Prevent infinite loops
       originalRequest._retry = true;

@@ -75,6 +75,7 @@ const userSchema = mongoose.Schema({
         {
           assistantId: String,
           description: String,
+          clonedFrom: String, // source assistant id when created from a snapshot resource
           favorite: { type: Boolean, default: false },
           archived: { type: Boolean, default: false },
           calendar: { type: String, required: false },
@@ -122,6 +123,8 @@ const userSchema = mongoose.Schema({
       type: { type: String },
       amount: Number,
       phoneSid: String, // set on call charges to track per-number limits
+      subaccountId: String, // owning sub-account — used for snapshot usage caps
+      durationSec: Number, // call duration in seconds — used for call-minute caps
       processedAt: { type: Date, default: Date.now },
     },
   ],
@@ -130,7 +133,8 @@ const userSchema = mongoose.Schema({
     recordName:   { type: String },
     recordValue:  { type: String },
     domainName:   { type: String, default: "" },
-    domainStatus: { type: String, default: "not_configured" }, // "not_configured" | "active"
+    domainStatus: { type: String, default: "not_configured" }, // "not_configured" | "pending" | "active"
+    verification: { type: mongoose.Schema.Types.Mixed, default: null }, // Vercel-required DNS records
   },
   snapshot: {
     features: {
@@ -153,8 +157,9 @@ const userSchema = mongoose.Schema({
       phones:     { enabled: { type: Boolean, default: false }, value: { type: String, default: "" } },
     },
   },
-  adminLockPassword: { type: String, default: "" },
+  adminLockPassword: { type: String, default: "" }, // bcrypt-hashed
   resendApiKey:      { type: String, default: "" },
+  resendFromEmail:   { type: String, default: "" }, // white-label sender, e.g. "Acme <noreply@acme.com>"
   company: {
     name: { type: String, required: false },
     logoId: { type: String, required: false },

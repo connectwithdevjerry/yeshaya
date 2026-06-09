@@ -328,7 +328,7 @@ const exchangeToken = async (req, res, next) => {
       maxAge: 24 * 60 * 60 * 1000,
     });
 
-    return res.send({ accessToken: accessToken, refreshToken: refToken });
+    return res.send({ status: true, accessToken: accessToken, refreshToken: refToken });
   } catch (error) {
     next(error);
   }
@@ -749,6 +749,14 @@ const getDomainSettings = async (req, res) => {
   }
 };
 
+// Vercel domain helpers (host provisioning). No-op gracefully if env not set.
+const VERCEL_TOKEN   = process.env.VERCEL_API_TOKEN;
+const VERCEL_PROJECT = process.env.VERCEL_PROJECT_ID;
+const VERCEL_TEAM    = process.env.VERCEL_TEAM_ID; // optional
+const vercelConfigured = () => !!(VERCEL_TOKEN && VERCEL_PROJECT);
+const vercelQS = () => (VERCEL_TEAM ? `?teamId=${VERCEL_TEAM}` : "");
+const vercelHeaders = () => ({ Authorization: `Bearer ${VERCEL_TOKEN}`, "Content-Type": "application/json" });
+
 const saveDomainSettings = async (req, res) => {
   try {
     const { domainName, recordType, recordName, recordValue } = req.body;
@@ -757,9 +765,37 @@ const saveDomainSettings = async (req, res) => {
     user.whiteLabel.recordType   = recordType   || user.whiteLabel.recordType;
     user.whiteLabel.recordName   = recordName   || user.whiteLabel.recordName;
     user.whiteLabel.recordValue  = recordValue  || user.whiteLabel.recordValue;
-    user.whiteLabel.domainStatus = "not_configured"; // reset on save; verify separately
+    user.whiteLabel.domainStatus = "not_configured";
+    user.whiteLabel.verification = null;
+
+    // Provision the domain on the host (Vercel) so it actually serves the app
+    if (vercelConfigured() && user.whiteLabel.domainName) {
+      try {
+        // Add domain to the project (ignore "already exists")
+        await axios.post(
+          `https://api.vercel.com/v10/projects/${VERCEL_PROJECT}/domains${vercelQS()}`,
+          { name: user.whiteLabel.domainName },
+          { headers: vercelHeaders() },
+        ).catch((e) => { if (e.response?.status !== 409) throw e; });
+
+        // Fetch verification requirements + status
+        const cfg = await axios.get(
+          `https://api.vercel.com/v9/projects/${VERCEL_PROJECT}/domains/${user.whiteLabel.domainName}${vercelQS()}`,
+          { headers: vercelHeaders() },
+        );
+        user.whiteLabel.verification = cfg.data?.verification || null;
+        user.whiteLabel.domainStatus = cfg.data?.verified ? "active" : "pending";
+      } catch (e) {
+        console.error("⚠️ Vercel domain add failed:", e.response?.data?.error?.message || e.message);
+      }
+    }
+
     await user.save();
-    return res.send({ status: true, message: "Domain settings saved" });
+    return res.send({
+      status: true,
+      message: "Domain settings saved",
+      data: { domainStatus: user.whiteLabel.domainStatus, verification: user.whiteLabel.verification },
+    });
   } catch (error) {
     return res.send({ status: false, message: error.message });
   }
@@ -767,29 +803,53 @@ const saveDomainSettings = async (req, res) => {
 
 const verifyDomain = async (req, res) => {
   try {
-    const dns = require("dns").promises;
     const user = await userModel.findById(req.user);
     const { domainName, recordValue } = user.whiteLabel;
+    if (!domainName) return res.send({ status: false, message: "No domain configured" });
 
-    if (!domainName) {
-      return res.send({ status: false, message: "No domain configured" });
+    // Preferred: ask the host (Vercel) whether the domain is verified/live
+    if (vercelConfigured()) {
+      try {
+        // Trigger a verification attempt, then read status
+        await axios.post(
+          `https://api.vercel.com/v9/projects/${VERCEL_PROJECT}/domains/${domainName}/verify${vercelQS()}`,
+          {}, { headers: vercelHeaders() },
+        ).catch(() => {});
+        const cfg = await axios.get(
+          `https://api.vercel.com/v9/projects/${VERCEL_PROJECT}/domains/${domainName}${vercelQS()}`,
+          { headers: vercelHeaders() },
+        );
+        const verified = !!cfg.data?.verified;
+        user.whiteLabel.domainStatus = verified ? "active" : "pending";
+        user.whiteLabel.verification = cfg.data?.verification || null;
+        await user.save();
+        return res.send({
+          status: true,
+          domainStatus: user.whiteLabel.domainStatus,
+          verification: user.whiteLabel.verification,
+          message: verified ? "Domain verified and live" : "Pending — add the required DNS records, then retry.",
+        });
+      } catch (e) {
+        console.error("⚠️ Vercel verify failed:", e.response?.data?.error?.message || e.message);
+        // fall through to DNS check
+      }
     }
 
+    // Fallback: plain DNS A-record check (no host provisioning)
+    const dns = require("dns").promises;
     let resolved = false;
     try {
       const addresses = await dns.resolve4(domainName);
       resolved = addresses.includes(recordValue || "76.76.21.21");
-    } catch (_) {
-      resolved = false;
-    }
+    } catch (_) { resolved = false; }
 
-    if (resolved) {
-      user.whiteLabel.domainStatus = "active";
-      await user.save();
-      return res.send({ status: true, domainStatus: "active", message: "Domain verified successfully" });
-    } else {
-      return res.send({ status: true, domainStatus: "not_configured", message: "DNS records not yet propagated" });
-    }
+    user.whiteLabel.domainStatus = resolved ? "active" : "not_configured";
+    await user.save();
+    return res.send({
+      status: true,
+      domainStatus: user.whiteLabel.domainStatus,
+      message: resolved ? "DNS resolves correctly" : "DNS records not yet propagated",
+    });
   } catch (error) {
     return res.send({ status: false, message: error.message });
   }
@@ -851,6 +911,7 @@ const getAdminSettings = async (req, res) => {
       data: {
         hasAdminPassword:  !!user.adminLockPassword,
         resendConfigured:  !!user.resendApiKey,
+        resendFrom:        user.resendFromEmail || "",
       },
     });
   } catch (error) {
@@ -860,14 +921,39 @@ const getAdminSettings = async (req, res) => {
 
 const saveAdminSettings = async (req, res) => {
   try {
-    const { adminLockPassword, resendApiKey } = req.body;
+    const bcrypt = require("bcryptjs");
+    const { adminLockPassword, resendApiKey, resendFromEmail } = req.body;
     const user = await userModel.findById(req.user);
 
-    if (adminLockPassword !== undefined) user.adminLockPassword = adminLockPassword;
-    if (resendApiKey      !== undefined) user.resendApiKey      = resendApiKey;
+    // Hash the admin lock password before storing (never store plaintext)
+    if (adminLockPassword !== undefined && adminLockPassword !== "") {
+      user.adminLockPassword = await bcrypt.hash(adminLockPassword, 10);
+    }
+    if (resendApiKey    !== undefined) user.resendApiKey    = resendApiKey;
+    if (resendFromEmail !== undefined) user.resendFromEmail = resendFromEmail;
 
     await user.save();
     return res.send({ status: true, message: "Admin settings saved" });
+  } catch (error) {
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+// Verify the admin lock password (used to unlock admin areas in the UI)
+const verifyAdminLock = async (req, res) => {
+  try {
+    const bcrypt = require("bcryptjs");
+    const { password } = req.body;
+    const user = await userModel.findById(req.user);
+
+    if (!user?.adminLockPassword) {
+      // No lock set → nothing to unlock
+      return res.send({ status: true, valid: true, unlocked: true });
+    }
+    if (!password) return res.send({ status: false, valid: false, message: "Password required" });
+
+    const valid = await bcrypt.compare(password, user.adminLockPassword);
+    return res.send({ status: true, valid, message: valid ? "Unlocked" : "Incorrect password" });
   } catch (error) {
     return res.send({ status: false, message: error.message });
   }
@@ -892,6 +978,7 @@ module.exports = {
   getDomainSettings,
   saveDomainSettings,
   verifyDomain,
+  verifyAdminLock,
   getSnapshot,
   saveSnapshot,
   getAdminSettings,

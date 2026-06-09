@@ -356,6 +356,25 @@ export const saveSnapshot = createAsyncThunk(
 );
 
 /* ── Admin settings ── */
+export const verifyAdminLock = createAsyncThunk(
+  "auth/verifyAdminLock",
+  async (password, { rejectWithValue }) => {
+    try {
+      const res = await axios.post(
+        "https://api.yashayah.cloud/auth/admin-lock/verify",
+        { password },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` } },
+      );
+      if (!res.data.status || res.data.valid === false) {
+        return rejectWithValue(res.data.message || "Incorrect password");
+      }
+      return res.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || "Verification failed");
+    }
+  }
+);
+
 export const getAdminSettings = createAsyncThunk(
   "auth/getAdminSettings",
   async (_, { rejectWithValue }) => {

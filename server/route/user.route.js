@@ -23,6 +23,7 @@ const {
   saveSnapshot,
   getAdminSettings,
   saveAdminSettings,
+  verifyAdminLock,
 } = require("../controller/user.controller");
 const {
   USER_SIGNUP,
@@ -97,5 +98,6 @@ router.post(SAVE_SNAPSHOT, verifyAccessToken, saveSnapshot);
 // Admin settings
 router.get(GET_ADMIN_SETTINGS,  verifyAccessToken, getAdminSettings);
 router.post(SAVE_ADMIN_SETTINGS, verifyAccessToken, saveAdminSettings);
+router.post("/admin-lock/verify", verifyAccessToken, verifyAdminLock);
 
 module.exports = router;

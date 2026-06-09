@@ -25,6 +25,7 @@ export default function AdminTab() {
   const [password,       setPassword]       = useState("");
   const [showPass,       setShowPass]       = useState(false);
   const [resendKey,      setResendKey]      = useState("");
+  const [resendFrom,     setResendFrom]     = useState("");
   const [showResendForm, setShowResendForm] = useState(false);
   const [showResendKey,  setShowResendKey]  = useState(false);
 
@@ -32,15 +33,20 @@ export default function AdminTab() {
     dispatch(getAdminSettings());
   }, [dispatch]);
 
+  useEffect(() => {
+    if (adminSettings?.resendFrom) setResendFrom(adminSettings.resendFrom);
+  }, [adminSettings]);
+
   const resendConfigured = adminSettings?.resendConfigured ?? false;
 
   const handleSave = async () => {
     const payload = {};
-    if (password)  payload.adminLockPassword = password;
-    if (resendKey) payload.resendApiKey      = resendKey;
+    if (password)   payload.adminLockPassword = password;
+    if (resendKey)  payload.resendApiKey      = resendKey;
+    if (resendFrom !== (adminSettings?.resendFrom || "")) payload.resendFromEmail = resendFrom;
 
     if (!Object.keys(payload).length) {
-      toast("Nothing to save — enter a password or Resend API key.", { icon: "ℹ️" });
+      toast("Nothing to save — enter a password, Resend key, or sender.", { icon: "ℹ️" });
       return;
     }
 
@@ -124,23 +130,33 @@ export default function AdminTab() {
             </button>
           </div>
 
-          {/* Resend API key input (shown when configure clicked) */}
+          {/* Resend API key + sender (shown when configure clicked) */}
           {showResendForm && (
-            <div className="relative">
+            <div className="space-y-2.5">
+              <div className="relative">
+                <input
+                  type={showResendKey ? "text" : "password"}
+                  value={resendKey}
+                  onChange={(e) => setResendKey(e.target.value)}
+                  placeholder="re_••••••••••••••••••••••••"
+                  className={`${inputCls} pr-10 font-mono`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowResendKey((p) => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-500 transition-colors"
+                >
+                  {showResendKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               <input
-                type={showResendKey ? "text" : "password"}
-                value={resendKey}
-                onChange={(e) => setResendKey(e.target.value)}
-                placeholder="re_••••••••••••••••••••••••"
-                className={`${inputCls} pr-10 font-mono`}
+                type="text"
+                value={resendFrom}
+                onChange={(e) => setResendFrom(e.target.value)}
+                placeholder='Sender, e.g. "Acme <noreply@acme.com>" (must be a verified Resend domain)'
+                className={inputCls}
               />
-              <button
-                type="button"
-                onClick={() => setShowResendKey((p) => !p)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-500 transition-colors"
-              >
-                {showResendKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+              <p className="text-[11px] text-gray-400">Both a key and a verified sender are required for your branded emails to send.</p>
             </div>
           )}
         </div>
