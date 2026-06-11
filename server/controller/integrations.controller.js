@@ -736,16 +736,23 @@ const checkIntegrationStatus = async (req, res) => {
     };
   }
 
-  // try {
-  // expiry date for refresh token
-  intResponse = {
-    ...intResponse,
-    ghl: { status: true, expiryDate: key.ghlRefreshTokenExpiry },
-  };
+  // GHL is connected only when a refresh token exists and hasn't expired
+  const ghlConnected =
+    !!key.ghlRefreshToken &&
+    !!key.ghlRefreshTokenExpiry &&
+    new Date(key.ghlRefreshTokenExpiry).getTime() > Date.now();
 
   intResponse = {
     ...intResponse,
-    stripe: { status: true, presence: key.stripeAccessToken ? true : false },
+    ghl: { status: ghlConnected, expiryDate: key.ghlRefreshTokenExpiry || null },
+  };
+
+  // Stripe is connected only when we actually hold an access token
+  const stripeConnected = !!key.stripeAccessToken;
+
+  intResponse = {
+    ...intResponse,
+    stripe: { status: stripeConnected, presence: stripeConnected },
   };
 
   return res.send(intResponse);
