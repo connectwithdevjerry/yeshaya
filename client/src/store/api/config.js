@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -55,14 +55,18 @@ const refreshTokens = async () => {
       refreshToken
     });
 
-    if (response.data.status && response.data.accessToken) {
+    // Accept the response as long as a new access token came back.
+    // (Don't depend on a `status` flag — a valid accessToken is the contract.)
+    if (response.data.accessToken && response.data.status !== false) {
       const newAccessToken = response.data.accessToken;
       const newRefreshToken = response.data.refreshToken;
 
-      // Update tokens
+      // Update both storages so interceptor always reads the latest token
       localStorage.setItem("accessToken", newAccessToken);
+      sessionStorage.setItem("accessToken", newAccessToken);
       if (newRefreshToken) {
         localStorage.setItem("refreshToken", newRefreshToken);
+        sessionStorage.setItem("refreshToken", newRefreshToken);
       }
 
       return newAccessToken;
@@ -70,7 +74,11 @@ const refreshTokens = async () => {
       throw new Error("Token exchange failed");
     }
   } catch (error) {
-    console.error("❌ Token refresh failed:", error);
+    console.error("❌ Token refresh failed:", {
+      message: error?.message,
+      status: error?.response?.status,
+      data: error?.response?.data,
+    });
     throw error;
   }
 };
@@ -91,19 +99,9 @@ const clearAuthAndRedirect = () => {
 // ✅ Attach access token to each request
 apiClient.interceptors.request.use(
   async (config) => {
-    // List of auth endpoints that do not require a token
-    const publicAuthEndpoints = [
-      '/auth/signin',
-      '/auth/signup',
-      '/auth/forgot_password',
-      '/auth/exchange-token',
-      '/auth/activate'
-    ];
-    
-    const isPublicEndpoint = publicAuthEndpoints.some(endpoint => config.url?.includes(endpoint));
-
-    // Skip token check for public endpoints
-    if (isPublicEndpoint) {
+    // Skip token attachment only for public auth endpoints
+    const publicAuthPaths = ['/auth/signin', '/auth/signup', '/auth/forgot_password', '/auth/reset_password', '/auth/activate', '/auth/exchange-token'];
+    if (publicAuthPaths.some(path => config.url?.includes(path))) {
       return config;
     }
 
@@ -165,23 +163,20 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    const publicAuthEndpoints = [
-      '/auth/signin',
-      '/auth/signup',
-      '/auth/forgot_password',
-      '/auth/exchange-token',
-      '/auth/activate'
-    ];
-    
-    const isPublicEndpoint = publicAuthEndpoints.some(endpoint => originalRequest.url?.includes(endpoint));
-
     // Check if error is 401 and we haven't already tried to refresh
+    const publicAuthPaths = ['/auth/signin', '/auth/signup', '/auth/forgot_password', '/auth/reset_password', '/auth/activate', '/auth/exchange-token'];
+    const isPublicAuth = publicAuthPaths.some(path => originalRequest.url?.includes(path));
+
+    // The server returns 401 (missing header) OR 403 (expired/invalid token) —
+    // both should trigger a refresh attempt.
+    const isAuthError = error.response?.status === 401 || error.response?.status === 403;
+
     if (
-      error.response?.status === 401 &&
+      isAuthError &&
       !originalRequest._retry &&
-      !isPublicEndpoint
+      !isPublicAuth
     ) {
-      console.log("⚠️ 401 error detected, attempting token refresh");
+      console.log(`⚠️ ${error.response?.status} error detected, attempting token refresh`);
       
       // Prevent infinite loops
       originalRequest._retry = true;
@@ -209,7 +204,12 @@ apiClient.interceptors.response.use(
         isRefreshing = false;
         return apiClient(originalRequest);
       } catch (err) {
-        console.error("❌ Token refresh failed in response interceptor:", err);
+        console.error("❌ Token refresh failed in response interceptor:", {
+          message: err?.message,
+          status: err?.response?.status,
+          data: err?.response?.data,
+          url: `${API_BASE_URL}/auth/exchange-token`,
+        });
         processQueue(err, null);
         isRefreshing = false;
         

@@ -28,6 +28,8 @@ import apiClient from "./store/api/config.js";
 import Login from "./pages/pages-ui/Login";
 import Register from "./pages/pages-ui/Register";
 import ResetLink from "./pages/pages-ui/ResetLink";
+import AcceptInvite from "./pages/pages-ui/AcceptInvite";
+import ConfirmEmailChange from "./pages/pages-ui/ConfirmEmailChange";
 import VerifyEmail from "./pages/pages-ui/VerifyEmail";
 import HomePage from "./pages/pages-ghl/Homepage";
 import ResetPassword from "./pages/pages-ui/ForgotPassword";
@@ -176,26 +178,21 @@ useEffect(() => {
     ghlPaths.some((path) => location.pathname.startsWith(path));
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
       <GHLLocationCapture />
       <Toaster position="top-right" reverseOrder={false} />
-      {!isAuthPage &&
-        isAuthenticated &&
-        (isGHLPage ? (
-          <SidebarGHL
-            userInfo={userInfo}
-            navigationItems={navigationGHLItems}
-          />
+
+      {/* Sidebars — self-contained (desktop + mobile drawer) */}
+      {!isAuthPage && isAuthenticated && (
+        isGHLPage ? (
+          <SidebarGHL userInfo={userInfo} navigationItems={navigationGHLItems} />
         ) : (
           <Sidebar userInfo={userInfo} navigationItems={navigationItems} />
-        ))}
+        )
+      )}
 
       {/* Main Area */}
-      <div
-        className={`flex-1 ${
-          !isAuthPage && isAuthenticated ? "" : ""
-        } overflow-y-auto`}
-      >
+      <div className="flex-1 overflow-y-auto min-w-0">
         <Routes>
           {/* Auth Routes */}
           <Route path="/login" element={<Login />} />
@@ -206,6 +203,8 @@ useEffect(() => {
             element={<VerifyEmail />}
           />
           <Route path="/resetpassword/:token" element={<ResetPassword />} />
+          <Route path="/accept-invite/:token" element={<AcceptInvite />} />
+          <Route path="/confirm-email-change/:token" element={<ConfirmEmailChange />} />
           <Route path="/homepage" element={<HomePage />} />
 
           {/* Protected Routes */}

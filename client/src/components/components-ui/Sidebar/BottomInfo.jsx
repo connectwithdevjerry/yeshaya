@@ -1,243 +1,156 @@
-import React, { useState, useEffect, useMemo } from "react";
+// src/components/components-ui/Sidebar/BottomInfo.jsx
+import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import {
-  Settings,
-  HelpCircle,
-  CreditCard,
-  Phone,
-  ChevronLeft,
-} from "lucide-react";
+import { Settings, CreditCard, ChevronUp, Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import UserMenuPopup from "../UserMenu";
-import { fetchAssistants } from "../../../store/slices/assistantsSlice";
-import { fetchPurchasedNumbers } from "../../../store/slices/numberSlice";
-import { fetchSubAccounts } from "../../../store/slices/integrationSlice";
 import { getUserDetails } from "../../../store/slices/authSlice";
 
-export function BottomInfo({ balance }) {
+export function BottomInfo({ balance, collapsed = false }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  
   const [isOpen, setIsOpen] = useState(false);
-  const [subaccounts, setSubaccounts] = useState([]);
-  const [allAssistants, setAllAssistants] = useState([]);
-  const [loadingData, setLoadingData] = useState(false);
-  const [numbersFetched, setNumbersFetched] = useState(false);
-  const { purchasedNumbers, loadingPurchased } = useSelector((state) => state.numbers);
-  const { user, loading: userLoading } = useSelector((state) => state.auth);
 
+  const { user, loading: userLoading } = useSelector((s) => s.auth);
 
-  // Fetch user details on mount
-  useEffect(() => {
-    dispatch(getUserDetails());
-  }, [dispatch]);
-  // Step 1: Fetch all subaccounts on mount
-  useEffect(() => {
-    const getSubAccounts = async () => {
-      try {
-        setLoadingData(true);
-        console.log("🔄 Fetching all subaccounts...");
-        
-        const result = await dispatch(fetchSubAccounts()).unwrap();
-        
-        // Get all subaccounts from the fetched data
-        const fetchedSubaccounts = result?.locations || [];
-        
-        if (fetchedSubaccounts.length > 0) {
-          console.log("✅ Subaccounts fetched:", fetchedSubaccounts.length);
-          setSubaccounts(fetchedSubaccounts);
-        } else {
-          console.log("⚠️ No subaccounts found");
-          setSubaccounts([]);
-        }
-      } catch (error) {
-        console.error("❌ Error fetching subaccounts:", error);
-        setSubaccounts([]);
-      } finally {
-        setLoadingData(false);
-      }
-    };
+  // Fetch user details once on mount
+  useEffect(() => { dispatch(getUserDetails()); }, [dispatch]);
 
-    getSubAccounts();
-  }, [dispatch]);
+  const userInitial = user?.firstName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U";
+  const userName    = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : "";
 
-  // Step 2: Fetch assistants for ALL subaccounts
-  useEffect(() => {
-    const getAllAssistants = async () => {
-      if (subaccounts.length > 0 && allAssistants.length === 0) {
-        try {
-          setLoadingData(true);
-          console.log("🔄 Fetching assistants for all subaccounts...");
-          
-          // Fetch assistants for each subaccount in parallel
-          const promises = subaccounts.map((subaccount) =>
-            dispatch(fetchAssistants(subaccount.id)).unwrap()
-          );
+  /* ── Collapsed mode: just the avatar + tooltip ── */
+  if (collapsed) {
+    return (
+      <div className="border-t border-white/5 p-3 flex flex-col items-center gap-2">
+        {/* Settings icon */}
+        <Link
+          to="/settings"
+          title="Settings"
+          className="group relative p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
+        >
+          <Settings className="w-4 h-4" />
+          <div className="pointer-events-none absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50">
+            <div className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-xl whitespace-nowrap">
+              Settings
+            </div>
+          </div>
+        </Link>
 
-          const results = await Promise.all(promises);
-          
-          // Combine all assistants from all subaccounts
-          const combined = results.flatMap((assistants, index) =>
-            (assistants || []).map((assistant) => ({
-              ...assistant,
-              subaccountId: subaccounts[index].id,
-              subaccountName: subaccounts[index].name || subaccounts[index].companyName,
-            }))
-          );
+        {/* User avatar */}
+        <div className="relative group">
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            title={userName || "User"}
+            className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold shadow-md hover:shadow-indigo-500/25 transition-all"
+          >
+            {userLoading && !user ? <Loader2 className="w-3 h-3 animate-spin" /> : userInitial}
+          </button>
+          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#0a0f1e] rounded-full" />
 
-          if (combined.length > 0) {
-            console.log("✅ Total assistants fetched:", combined.length);
-            setAllAssistants(combined);
-          } else {
-            console.log("⚠️ No assistants found across all subaccounts");
-            setAllAssistants([]);
-          }
-        } catch (error) {
-          console.error("❌ Error fetching assistants:", error);
-          setAllAssistants([]);
-        } finally {
-          setLoadingData(false);
-        }
-      }
-    };
+          {/* Tooltip */}
+          <div className="pointer-events-none absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50">
+            <div className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-xl whitespace-nowrap">
+              {userName || "Account"}
+            </div>
+          </div>
+        </div>
 
-    getAllAssistants();
-  }, [dispatch, subaccounts, allAssistants.length]);
-
-  // Step 3: Fetch purchased numbers for ALL assistants across ALL subaccounts
-  useEffect(() => {
-    const fetchAllNumbers = async () => {
-      if (allAssistants.length > 0 && !numbersFetched) {
-        try {
-          console.log("🔄 Fetching purchased numbers for all assistants across all subaccounts...");
-          setNumbersFetched(true); // Prevent re-fetching
-          
-          // Fetch numbers for each assistant in parallel
-          const promises = allAssistants.map((assistant) =>
-            dispatch(
-              fetchPurchasedNumbers({
-                subaccountId: assistant.subaccountId,
-                assistantId: assistant.id || assistant.assistantId,
-              })
-            )
-          );
-
-          await Promise.all(promises);
-          console.log("✅ All purchased numbers fetched for all subaccounts");
-        } catch (error) {
-          console.error("❌ Error fetching numbers:", error);
-          // Reset flag on error to allow retry
-          setNumbersFetched(false);
-        }
-      }
-    };
-
-    fetchAllNumbers();
-  }, [dispatch, allAssistants, numbersFetched]);
-
-  // Calculate total unique numbers using memoization
-  const totalNumbers = useMemo(() => {
-    if (!purchasedNumbers || purchasedNumbers.length === 0) {
-      return 0;
-    }
-
-    // Remove duplicates based on phone number SID
-    const uniqueNumbers = purchasedNumbers.reduce((acc, current) => {
-      const sid = current.phoneNumberDetails?.sid || current.sid;
-      const exists = acc.find((item) => {
-        const itemSid = item.phoneNumberDetails?.sid || item.sid;
-        return itemSid === sid;
-      });
-      
-      if (!exists && sid) {
-        acc.push(current);
-      }
-      return acc;
-    }, []);
-
-    console.log("📊 Total unique numbers:", uniqueNumbers.length);
-    return uniqueNumbers.length;
-  }, [purchasedNumbers]);
-
-  const goToBilling = () => {
-    navigate("/settings?tab=billing");
-  };
-
-  const isLoading = loadingData || loadingPurchased;
+        <AnimatePresence>
+          {isOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+              <motion.div
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -8 }}
+                transition={{ duration: 0.15 }}
+                className="absolute bottom-0 left-full ml-3 z-50 w-64"
+              >
+                <UserMenuPopup />
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-4 border-t border-gray-200 space-y-3">
+    <div className="border-t border-white/5 px-3 pb-3 pt-2 space-y-1">
+
+      {/* Balance row */}
+      <div
+        onClick={() => navigate("/settings?tab=billing")}
+        className="flex items-center gap-2 px-2 py-1.5 cursor-pointer group"
+      >
+        <CreditCard className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+        <span className="text-xs text-slate-500 group-hover:text-slate-300 transition-colors flex-1">Balance</span>
+        <span className="text-xs font-semibold text-white tabular-nums">{balance || "$0.00"}</span>
+      </div>
+
+      {/* Settings link */}
       <Link
         to="/settings"
-        className="flex items-center space-x-3 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg w-full"
+        className="flex items-center gap-2.5 px-2 py-2 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-all duration-150"
       >
-        <Settings className="w-5 h-5" />
-        <span className="text-sm font-medium">Settings</span>
+        <Settings className="w-4 h-4" />
+        <span className="text-xs font-medium">Settings</span>
       </Link>
 
-      <div className="space-y-2">
-        <div
-          onClick={goToBilling}
-          className="flex hover:bg-gray-100 rounded-md items-center justify-between px-3 py-2 cursor-pointer transition-colors"
+      {/* Divider */}
+      <div className="border-t border-white/5 my-1" />
+
+      {/* User trigger */}
+      <div className="relative">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full flex items-center gap-2.5 px-2 py-2.5 rounded-xl hover:bg-white/5 transition-all duration-150 group"
         >
-          <div className="flex items-center space-x-2">
-            <CreditCard className="w-5 h-5 text-blue-600" />
-            <span className="text-sm font-medium text-gray-700">Balance</span>
-            <HelpCircle className="w-4 h-4 text-gray-400" />
+          {/* Avatar */}
+          <div className="relative flex-shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold shadow-md">
+              {userLoading && !user ? <Loader2 className="w-3 h-3 animate-spin" /> : userInitial}
+            </div>
+            {/* Online dot */}
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#0a0f1e] rounded-full" />
           </div>
-          <span className="text-sm font-semibold text-gray-900">
-            {balance || "$0.00"}
-          </span>
-        </div>
 
-        <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center space-x-2">
-            <Phone className="w-5 h-5 text-blue-600" />
-            <span className="text-sm font-medium text-gray-700">Numbers</span>
-            <HelpCircle className="w-4 h-4 text-gray-400" />
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-xs font-semibold text-white leading-none truncate">
+              {userName || (userLoading ? "Loading…" : "User")}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-0.5 truncate">
+              {user?.email || ""}
+            </p>
           </div>
-          <span className="text-sm font-semibold text-gray-900 flex items-center">
-            {isLoading ? (
-              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            ) : (
-              totalNumbers
-            )}
-          </span>
-        </div>
-      </div>
 
-      <div
-        className="relative flex items-center space-x-2 px-3 py-2 bg-gray-100 cursor-pointer rounded-lg hover:bg-gray-200 transition-colors"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white text-xs font-bold shrink-0">
-          {/* Use the first letter of firstName or email */}
-          {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
-        </div>
-        
-        <div className="flex-1 min-w-0">
-          <div className="text-xs font-semibold text-gray-900 truncate">
-            {user ? `${user.firstName} ${user.lastName}` : "Loading..."}
-          </div>
-          <div className="text-[10px] text-gray-500 truncate">
-            {user?.email || "No email"}
-          </div>
-        </div>
-        
-        <ChevronLeft className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+          <motion.div
+            animate={{ rotate: isOpen ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ChevronUp className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+          </motion.div>
+        </button>
+
+        <AnimatePresence>
+          {isOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+              <motion.div
+                initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                className="absolute bottom-full left-0 mb-2 z-50 w-full"
+              >
+                <UserMenuPopup />
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
-      
-      {isOpen && (
-        <>
-          <div 
-            className="fixed inset-0 z-40" 
-            onClick={() => setIsOpen(false)}
-          />
-          <div className="absolute bottom-20 left-0 mb-2 z-50">
-            <UserMenuPopup />
-          </div>
-        </>
-      )}
     </div>
   );
 }

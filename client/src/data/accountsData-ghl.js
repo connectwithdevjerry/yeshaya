@@ -40,6 +40,11 @@ export const navigationGHLItems = [
     link: "/call",
   },
   {
+    name: "Appointments",
+    icon: "appointments",
+    link: "/appointments",
+  },
+  {
     name: "Contacts",
     icon: "contacts",
     link: "/contacts",
@@ -54,11 +59,11 @@ export const navigationGHLItems = [
     icon: "assistants",
     link: "/assistants",
   },
-  // {
-  //   name: "Active Tags",
-  //   icon: "active-tags",
-  //   link: "/activetags",
-  // },
+  {
+    name: "Active Tags",
+    icon: "active-tags",
+    link: "/activetags",
+  },
   {
     name: "Numbers",
     icon: "numbers",

@@ -29,6 +29,7 @@ import Inbox from "./pages/pages-ghl/Inbox";
 import CallCenter from "./pages/pages-ghl/CallCenter";
 import Contacts from "./pages/pages-ghl/Contacts";
 import Knowledge from "./pages/pages-ghl/Knowledge";
+import Appointments from "./pages/pages-ghl/Appointments";
 import Assistants from "./pages/pages-ghl/Assistants";
 import Tags from "./pages/pages-ghl/Tags";
 import Numbers from "./pages/pages-ghl/Number/Numbers";
@@ -69,6 +70,7 @@ const AppRouter = () => {
     "/call": <CallCenter />,
     "/contacts": <Contacts />,
     "/knowledge": <Knowledge />,
+    "/appointments": <Appointments />,
     "/activetags": <Tags />,
     "/numbers": <Numbers />,
     "/pools": <NumberPool />,
@@ -102,6 +104,7 @@ export default function MainContent() {
       "/call": "Call Center",
       "/contacts": "Contacts",
       "/knowledge": "Knowledge",
+      "/appointments": "Appointments",
       "/assistants": "Assistants",
       "/activetags": "Active Tags",
       "/numbers": "Numbers",

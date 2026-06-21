@@ -1,88 +1,131 @@
+// src/components/components-ghl/Sidebar/BottomInfo.jsx
 import React, { useState, useEffect } from "react";
-import { Settings, HelpCircle, ChevronLeft, Loader2 } from "lucide-react";
+import { ChevronUp, Loader2 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
+import { AnimatePresence, motion } from "framer-motion";
 import UserMenuPopup from "../UserMenu";
 import { useCurrentAccount } from "../../../hooks/useCurrentAccount";
-import { getUserDetails } from "../../../store/slices/authSlice"; // Adjust path as needed
+import { getUserDetails } from "../../../store/slices/authSlice";
 
-export function BottomInfo() {
+export function BottomInfo({ collapsed = false }) {
   const [isOpen, setIsOpen] = useState(false);
-  const account = useCurrentAccount();
+  const account  = useCurrentAccount();
   const dispatch = useDispatch();
 
-  // ✅ Connect to Auth State
-  const { user, loading } = useSelector((state) => state.auth);
+  const { user, loading } = useSelector((s) => s.auth);
 
-  // ✅ Fetch user details on mount if not already present
-  useEffect(() => {
-    dispatch(getUserDetails());
-  }, [dispatch]);
+  useEffect(() => { dispatch(getUserDetails()); }, [dispatch]);
 
-  // Handle Initials logic
-  const getInitial = () => {
-    if (user?.firstName) return user.firstName[0].toUpperCase();
-    if (user?.email) return user.email[0].toUpperCase();
-    return "U";
-  };
+  const userInitial = user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U";
+  const userName    = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : "";
+
+  /* ── Collapsed ── */
+  if (collapsed) {
+    return (
+      <div className="border-t border-white/5 p-3 flex flex-col items-center gap-3">
+        {/* Account connected pulse */}
+        {account && (
+          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Account connected" />
+        )}
+
+        {/* User avatar */}
+        <div className="relative group">
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            title={userName || "Account"}
+            className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold shadow-md hover:shadow-indigo-500/25 transition-all"
+          >
+            {loading && !user ? <Loader2 className="w-3 h-3 animate-spin" /> : userInitial}
+          </button>
+          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#0a0f1e] rounded-full" />
+          <div className="pointer-events-none absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50">
+            <div className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-xl whitespace-nowrap">
+              {userName || "Account"}
+            </div>
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {isOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+              <motion.div
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -8 }}
+                transition={{ duration: 0.15 }}
+                className="absolute bottom-0 left-full ml-3 z-50 w-64"
+              >
+                <UserMenuPopup />
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-4 border-t border-gray-200 space-y-3">
-      {/* Account Connected Indicator */}
+    <div className="border-t border-white/5 px-3 pb-3 pt-2">
+      {/* Account connected indicator */}
       {account && (
-        <div className="px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-center space-x-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-xs font-medium text-green-700">
-              Account Connected
-            </span>
+        <div className="flex items-center gap-2 px-2 py-2 mb-1 rounded-lg bg-emerald-500/8 border border-emerald-500/15">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-semibold text-emerald-400">Connected</p>
+            <p className="text-[10px] text-emerald-500/70 truncate">
+              {decodeURIComponent(account.myname || "Account")}
+            </p>
           </div>
-          <p className="text-xs text-green-600 mt-1 truncate">
-            {decodeURIComponent(account.myname || "Account")}
-          </p>
         </div>
       )}
 
-      {/* User Menu Trigger */}
+      {/* User trigger */}
       <div className="relative">
-        <div
-          className="flex items-center space-x-2 px-3 py-2 bg-gray-100 cursor-pointer rounded-lg hover:bg-gray-200 transition-colors"
+        <button
           onClick={() => setIsOpen(!isOpen)}
+          className="w-full flex items-center gap-2.5 px-2 py-2.5 rounded-xl hover:bg-white/5 transition-all duration-150 group"
         >
-          <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white text-xs font-bold shrink-0">
-            {loading && !user ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              getInitial()
-            )}
+          <div className="relative flex-shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold shadow-md">
+              {loading && !user ? <Loader2 className="w-3 h-3 animate-spin" /> : userInitial}
+            </div>
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#0a0f1e] rounded-full" />
           </div>
-          
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-bold text-gray-900 truncate">
-              {user?.firstName 
-                ? `${user.firstName} ${user.lastName}` 
-                : loading ? "Loading..." : "User Account"}
-            </div>
-            <div className="text-[10px] text-gray-500 truncate">
-              {user?.email || "No email found"}
-            </div>
+
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-xs font-semibold text-white leading-none truncate">
+              {userName || (loading ? "Loading…" : "User")}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-0.5 truncate">
+              {user?.email || ""}
+            </p>
           </div>
-          
-          <ChevronLeft className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-        </div>
 
-        {/* User Menu Popup */}
-        {isOpen && (
-          <>
+          <motion.div
+            animate={{ rotate: isOpen ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ChevronUp className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+          </motion.div>
+        </button>
 
-            <div 
-              className="fixed inset-0 z-40" 
-              onClick={() => setIsOpen(false)} 
-            />
-            <div className="absolute bottom-full left-0 mb-2 z-50 w-56">
-              <UserMenuPopup />
-            </div>
-          </>
-        )}
+        <AnimatePresence>
+          {isOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+              <motion.div
+                initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                className="absolute bottom-full left-0 mb-2 z-50 w-full"
+              >
+                <UserMenuPopup />
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

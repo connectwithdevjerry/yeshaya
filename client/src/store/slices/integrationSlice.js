@@ -235,6 +235,172 @@ export const authorizeGoHighLevel = createAsyncThunk(
 );
 
 // Fetch Charging Details
+// 🔹 Toggle Favorite
+export const toggleSubAccountFavorite = createAsyncThunk(
+  "integrations/toggleFavorite",
+  async (subaccountId, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.put(`/integrations/subaccount/${subaccountId}/favorite`);
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return { id: subaccountId, isFavorite: res.data.isFavorite };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to toggle favorite");
+    }
+  }
+);
+
+// 🔹 Toggle Archive
+export const toggleSubAccountArchive = createAsyncThunk(
+  "integrations/toggleArchive",
+  async (subaccountId, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.put(`/integrations/subaccount/${subaccountId}/archive`);
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return { id: subaccountId, isArchived: res.data.isArchived };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to toggle archive");
+    }
+  }
+);
+
+// 🔹 Update Sub-account metadata
+export const updateSubAccountMeta = createAsyncThunk(
+  "integrations/updateSubAccountMeta",
+  async ({ id, customName, notes }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.put(`/integrations/subaccount/${id}/meta`, { customName, notes });
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return { id, customName, notes };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to update sub-account");
+    }
+  }
+);
+
+// 🔹 Fetch live GHL client info for a sub-account
+export const fetchSubAccountGhlDetails = createAsyncThunk(
+  "integrations/fetchSubAccountGhlDetails",
+  async (subaccountId, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.get(`/assistants/subaccount-ghl-details?subaccountId=${subaccountId}`);
+      return res.data; // { status, data?, reconnectRequired? }
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to fetch client info");
+    }
+  }
+);
+
+// 🔹 Fetch single sub-account details
+export const fetchSubAccountDetails = createAsyncThunk(
+  "integrations/fetchSubAccountDetails",
+  async (subaccountId, { rejectWithValue }) => {
+    try {
+      console.log("🔄 fetchSubAccountDetails →", subaccountId);
+      const res = await apiClient.get(`/integrations/subaccount/${subaccountId}/details`);
+      console.log("✅ fetchSubAccountDetails →", res.data);
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return res.data.data;
+    } catch (err) {
+      console.error("❌ fetchSubAccountDetails →", err.response?.data);
+      return rejectWithValue(err.response?.data?.message || "Failed to fetch sub-account details");
+    }
+  }
+);
+
+// 🔹 Disconnect GoHighLevel
+export const disconnectGoHighLevel = createAsyncThunk(
+  "integrations/disconnectGoHighLevel",
+  async (_, { rejectWithValue }) => {
+    try {
+      console.log("🔄 disconnectGoHighLevel → sending request");
+      const response = await apiClient.delete("/integrations/disconnect/ghl");
+      console.log("✅ disconnectGoHighLevel → response:", response.data);
+      if (response.data?.status === false) return rejectWithValue(response.data.message);
+      return true;
+    } catch (err) {
+      console.error("❌ disconnectGoHighLevel error:", err.response?.data);
+      return rejectWithValue(err.response?.data?.message || "Failed to disconnect GoHighLevel");
+    }
+  }
+);
+
+// 🔹 Disconnect OpenAI
+export const disconnectOpenAI = createAsyncThunk(
+  "integrations/disconnectOpenAI",
+  async (_, { rejectWithValue }) => {
+    try {
+      console.log("🔄 disconnectOpenAI → sending request");
+      const response = await apiClient.delete("/integrations/disconnect/openai");
+      console.log("✅ disconnectOpenAI → response:", response.data);
+      if (response.data?.status === false) return rejectWithValue(response.data.message);
+      return true;
+    } catch (err) {
+      console.error("❌ disconnectOpenAI error:", err.response?.data);
+      return rejectWithValue(err.response?.data?.message || "Failed to disconnect OpenAI");
+    }
+  }
+);
+
+// 🔹 Disconnect Stripe
+export const disconnectStripe = createAsyncThunk(
+  "integrations/disconnectStripe",
+  async (_, { rejectWithValue }) => {
+    try {
+      console.log("🔄 disconnectStripe → sending request");
+      const response = await apiClient.delete("/integrations/disconnect/stripe");
+      console.log("✅ disconnectStripe → response:", response.data);
+      if (response.data?.status === false) return rejectWithValue(response.data.message);
+      return true;
+    } catch (err) {
+      console.error("❌ disconnectStripe error:", err.response?.data);
+      return rejectWithValue(err.response?.data?.message || "Failed to disconnect Stripe");
+    }
+  }
+);
+
+// 🔹 Rebilling breakdown (per sub-account billable amounts)
+export const fetchRebillingBreakdown = createAsyncThunk(
+  "integrations/fetchRebillingBreakdown",
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.get("/rebilling/breakdown");
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return res.data; // { prices, data: [...] }
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to fetch rebilling breakdown");
+    }
+  }
+);
+
+// 🔹 Generate a rebilling invoice for one sub-account
+export const generateRebillingInvoice = createAsyncThunk(
+  "integrations/generateRebillingInvoice",
+  async (subaccountId, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.post("/rebilling/invoice", { subaccountId });
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return res.data.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to generate invoice");
+    }
+  }
+);
+
+export const deleteSubAccount = createAsyncThunk(
+  "integrations/deleteSubAccount",
+  async (subaccountId, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.delete(`/integrations/delete-subaccount/${subaccountId}`);
+      if (response.data?.status === false) {
+        return rejectWithValue(response.data.message || "Failed to delete sub-account");
+      }
+      return subaccountId;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Failed to delete sub-account");
+    }
+  }
+);
+
 export const getChargingDetails = createAsyncThunk(
   "integrations/getChargingDetails",
   async (_, { rejectWithValue }) => {
@@ -311,6 +477,12 @@ const integrationSlice = createSlice({
     chargingLoading: false,
     chargingError: null,
     updateLoading: false,
+    subAccountDetails: null,
+    fetchingSubAccountDetails: false,
+    subAccountDetailsError: null,
+    rebillingBreakdown: [],
+    rebillingPrices: null,
+    fetchingRebilling: false,
   },
   reducers: {
     setIntegrationStatus: (state, action) => {
@@ -475,6 +647,100 @@ const integrationSlice = createSlice({
       .addCase(importSubAccounts.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload || action.error;
+      })
+
+      // Delete SubAccount
+      .addCase(deleteSubAccount.fulfilled, (state, action) => {
+        const deletedId = action.payload;
+        if (state.subAccounts) {
+          state.subAccounts = state.subAccounts.filter(acc => acc.id !== deletedId);
+        }
+      })
+
+      // Toggle Favorite
+      .addCase(toggleSubAccountFavorite.fulfilled, (state, action) => {
+        const { id, isFavorite } = action.payload;
+        const sub = (state.subAccounts || []).find(a => a.id === id);
+        if (sub) sub.isFavorite = isFavorite;
+      })
+
+      // Toggle Archive
+      .addCase(toggleSubAccountArchive.fulfilled, (state, action) => {
+        const { id, isArchived } = action.payload;
+        const sub = (state.subAccounts || []).find(a => a.id === id);
+        if (sub) sub.isArchived = isArchived;
+      })
+
+      // Update Meta
+      .addCase(updateSubAccountMeta.fulfilled, (state, action) => {
+        const { id, customName, notes } = action.payload;
+        const sub = (state.subAccounts || []).find(a => a.id === id);
+        if (sub) {
+          if (customName !== undefined) sub.customName = customName;
+          if (notes      !== undefined) sub.notes      = notes;
+        }
+        // Also keep the open details object in sync
+        if (state.subAccountDetails && state.subAccountDetails.accountId === id) {
+          if (customName !== undefined) state.subAccountDetails.customName = customName;
+          if (notes      !== undefined) state.subAccountDetails.notes      = notes;
+        }
+      })
+
+      // Rebilling breakdown
+      .addCase(fetchRebillingBreakdown.pending, (state) => {
+        state.fetchingRebilling = true;
+      })
+      .addCase(fetchRebillingBreakdown.fulfilled, (state, action) => {
+        state.fetchingRebilling = false;
+        state.rebillingBreakdown = action.payload.data || [];
+        state.rebillingPrices = action.payload.prices || null;
+      })
+      .addCase(fetchRebillingBreakdown.rejected, (state) => {
+        state.fetchingRebilling = false;
+      })
+
+      // Fetch single sub-account details
+      .addCase(fetchSubAccountDetails.pending, (state) => {
+        state.fetchingSubAccountDetails = true;
+        state.subAccountDetailsError = null;
+      })
+      .addCase(fetchSubAccountDetails.fulfilled, (state, action) => {
+        state.fetchingSubAccountDetails = false;
+        state.subAccountDetails = action.payload;
+      })
+      .addCase(fetchSubAccountDetails.rejected, (state, action) => {
+        state.fetchingSubAccountDetails = false;
+        state.subAccountDetailsError = action.payload;
+      })
+
+      // Disconnect GoHighLevel
+      .addCase(disconnectGoHighLevel.pending,   (state) => { state.goHighLevel.loading = true; })
+      .addCase(disconnectGoHighLevel.fulfilled, (state) => {
+        state.goHighLevel = { connected: false, loading: false, error: null, expiryDate: null };
+      })
+      .addCase(disconnectGoHighLevel.rejected,  (state, action) => {
+        state.goHighLevel.loading = false;
+        state.goHighLevel.error   = action.payload;
+      })
+
+      // Disconnect OpenAI
+      .addCase(disconnectOpenAI.pending,   (state) => { state.openAI.loading = true; })
+      .addCase(disconnectOpenAI.fulfilled, (state) => {
+        state.openAI = { connected: false, loading: false, error: null, message: "" };
+      })
+      .addCase(disconnectOpenAI.rejected,  (state, action) => {
+        state.openAI.loading = false;
+        state.openAI.error   = action.payload;
+      })
+
+      // Disconnect Stripe
+      .addCase(disconnectStripe.pending,   (state) => { state.stripe.loading = true; })
+      .addCase(disconnectStripe.fulfilled, (state) => {
+        state.stripe = { connected: false, loading: false, error: null, presence: null };
+      })
+      .addCase(disconnectStripe.rejected,  (state, action) => {
+        state.stripe.loading = false;
+        state.stripe.error   = action.payload;
       })
 
       // Authorize GoHighLevel for Subaccount

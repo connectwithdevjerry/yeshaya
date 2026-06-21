@@ -5,7 +5,20 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        sidebar: {
+          bg:     '#0f172a',
+          hover:  '#1e293b',
+          border: '#1e293b',
+          muted:  '#94a3b8',
+          text:   '#cbd5e1',
+        },
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      },
+    },
   },
   plugins: [],
 }

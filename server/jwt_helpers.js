@@ -52,24 +52,47 @@ const signRefreshToken = (userId) => {
 };
 
 const verifyAccessToken = (req, res, next) => {
-  if (!req.headers["authorization"])
-    return { status: false, message: "Unauthorized" };
+  if (!req.headers["authorization"]) {
+    console.warn("⚠️ verifyAccessToken → no Authorization header on", req.method, req.path);
+    return res.status(401).json({ status: false, message: "Unauthorized" });
+  }
 
   const authHeader = req.headers["authorization"];
   const bearerToken = authHeader.split(" ");
   const token = bearerToken[1];
-  console.log({ token });
+
+  if (!token) {
+    console.warn("⚠️ verifyAccessToken → Bearer token missing on", req.method, req.path);
+    return res.status(401).json({ status: false, message: "Unauthorized" });
+  }
+
   JWT.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, payload) => {
     if (err) {
-      const message =
-        err.name === "JsonWebTokenError" ? "Unauthorized" : err.message;
-      return res.status(403).json({ message });
+      const message = err.name === "JsonWebTokenError" ? "Unauthorized" : err.message;
+      console.warn("⚠️ verifyAccessToken → JWT error:", message, "on", req.method, req.path);
+      return res.status(403).json({ status: false, message });
     }
-    console.log({ payload });
     req.payload = payload;
-    req.user = payload.aud;
+    // The acting person (used for profile + team actions)
+    req.actingUserId = payload.aud;
+    // The agency whose data is operated on. Team members act on behalf of the
+    // owner, so all existing controllers (which use req.user) keep working.
+    req.user = payload.agencyOwnerId || payload.aud;
+    req.role = payload.role || "owner";
     next();
   });
+};
+
+// Gate a route to specific roles. Use after verifyAccessToken.
+const requireRole = (...allowedRoles) => (req, res, next) => {
+  if (!allowedRoles.includes(req.role)) {
+    console.warn(`⚠️ requireRole → role "${req.role}" blocked on ${req.method} ${req.path}`);
+    return res.status(403).json({
+      status: false,
+      message: "You don't have permission to perform this action.",
+    });
+  }
+  next();
 };
 
 const verifyRefreshToken = (refreshToken) => {
@@ -140,4 +163,5 @@ module.exports = {
   verifyForgotToken,
   verifyAccessToken,
   verifyRefreshToken,
+  requireRole,
 };

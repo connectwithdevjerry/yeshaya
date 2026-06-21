@@ -1,69 +1,55 @@
+// src/components/components-ghl/Knowledge/UploadModal/TextInputView.jsx
 import React, { useState } from "react";
-import { X, Info } from "lucide-react";
+import { ArrowLeft, ArrowRight, Type } from "lucide-react";
+
+const MAX_CHARS = 50000;
 
 const TextInputView = ({ onClose, onBack, onNext }) => {
-  const [inputText, setInputText] = useState("");
-
-  const handleNext = () => {
-    if (inputText.trim()) {
-      onNext(inputText.trim());
-    }
-  };
+  const [text, setText] = useState("");
+  const remaining = MAX_CHARS - text.length;
+  const canNext   = text.trim().length > 0;
 
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold text-gray-800">Upload</h2>
-          <div className="group relative">
-            <Info size={18} className="text-gray-400 cursor-help" />
-            {/* Tooltip on hover */}
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-800 text-white text-xs rounded shadow-lg">
-              Paste the text you want to be processed and stored.
-            </div>
+      <div className="p-5 space-y-3">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+            <Type className="w-4 h-4 text-indigo-500" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Paste your text</p>
+            <p className="text-xs text-gray-400 mt-0.5">This content will be chunked and embedded into the model.</p>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-          aria-label="Close modal"
-        >
-          <X className="w-6 h-6" />
-        </button>
+
+        <div className="relative">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
+            placeholder="Paste or type your content here…"
+            autoFocus
+            className="w-full h-72 p-4 border border-gray-200 rounded-xl text-sm bg-white outline-none resize-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-mono leading-relaxed placeholder:text-gray-300"
+          />
+          <span className={`absolute bottom-3 right-3 text-[10px] font-medium transition-colors
+            ${remaining < 1000 ? "text-rose-400" : "text-gray-300"}`}>
+            {remaining.toLocaleString()} left
+          </span>
+        </div>
       </div>
 
-      {/* Body */}
-      <div className="p-6">
-        <label className="block text-sm font-medium text-gray-700 mb-3">
-          Input text to be embedded
-        </label>
-        <textarea
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          placeholder="Paste or type your content here..."
-          className="w-full h-80 p-4 border border-gray-200 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none resize-none text-gray-800 font-mono text-sm placeholder:text-gray-300"
-        />
-      </div>
-
-      {/* Footer */}
-      <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+      <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-100 bg-gray-50/50">
         <button
           onClick={onBack}
-          className="px-5 py-2 text-gray-600 font-medium hover:text-gray-800 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-700 hover:bg-white border border-transparent hover:border-gray-200 transition-all"
         >
-          Back
+          <ArrowLeft className="w-3.5 h-3.5" /> Back
         </button>
         <button
-          onClick={handleNext}
-          disabled={!inputText.trim()}
-          className={`px-8 py-2 rounded-lg font-semibold text-white transition-all shadow-sm ${
-            inputText.trim() 
-              ? 'bg-[#a389f4] hover:bg-[#9175e6] active:scale-95' 
-              : 'bg-purple-300 cursor-not-allowed'
-          }`}
+          onClick={() => canNext && onNext(text.trim())}
+          disabled={!canNext}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Next
+          Next <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
     </>

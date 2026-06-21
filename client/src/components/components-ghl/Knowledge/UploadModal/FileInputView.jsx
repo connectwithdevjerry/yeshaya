@@ -1,121 +1,148 @@
-import React, { useState, useRef } from 'react';
-import { X, Info, FileText, UploadCloud } from 'lucide-react';
+// src/components/components-ghl/Knowledge/UploadModal/FileInputView.jsx
+import React, { useState, useRef } from "react";
+import { FolderUp, FileText, X, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+
+const ACCEPTED = ".pdf,.doc,.docx,.txt,.md,.csv";
 
 const FileInputView = ({ onClose, onBack, onNext }) => {
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef(null);
+  const [file,     setFile]     = useState(null);
+  const [progress, setProgress] = useState(0);
+  const [done,     setDone]     = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef(null);
 
-  const handleFileChange = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-      simulateUpload();
-    }
-  };
-
-  const simulateUpload = () => {
-    setIsUploading(true);
-    setUploadProgress(0);
-    const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 200);
+  const loadFile = (f) => {
+    if (!f) return;
+    setFile(f);
+    setProgress(0);
+    setDone(false);
+    let p = 0;
+    const iv = setInterval(() => {
+      p += 12;
+      if (p >= 100) { p = 100; clearInterval(iv); setDone(true); }
+      setProgress(p);
+    }, 150);
   };
 
   const clearFile = () => {
-    setSelectedFile(null);
-    setUploadProgress(0);
-    setIsUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    setFile(null);
+    setProgress(0);
+    setDone(false);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  };
+
+  const fmt = (bytes) => {
+    if (bytes < 1024)       return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold text-gray-800">Upload</h2>
-          <Info size={18} className="text-gray-400 cursor-help" />
-        </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-          <X className="w-6 h-6" />
-        </button>
-      </div>
-
-      {/* Body */}
-      <div className="p-6 space-y-4">
-        {/* Dropzone Area */}
-        <div 
-          onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-gray-300 rounded-xl p-12 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors"
-        >
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileChange} 
-            className="hidden" 
-          />
-          <p className="text-gray-500 font-medium text-center">
-            Click here to choose file to upload
-          </p>
+      <div className="p-5 space-y-4">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center flex-shrink-0">
+            <FolderUp className="w-4 h-4 text-violet-500" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Upload a file</p>
+            <p className="text-xs text-gray-400 mt-0.5">PDF, DOCX, TXT, MD or CSV — up to 10 MB.</p>
+          </div>
         </div>
 
-        {/* Upload Progress Card */}
-        {selectedFile && (
-          <div className="border border-gray-200 rounded-xl p-4 flex flex-col gap-2 relative">
-            <div className="flex items-center gap-3">
-              <div className="bg-[#10b981]/10 p-2 rounded-lg">
-                <FileText className="text-[#10b981] w-6 h-6" />
-              </div>
-              <div className="flex-grow">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold text-gray-800">Uploading</span>
-                  <button onClick={clearFile} className="text-gray-400 hover:text-gray-600">
-                    <X size={16} />
-                  </button>
-                </div>
-                <span className="text-xs text-gray-400">
-                  {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB
-                </span>
-              </div>
-              <div className="text-xs font-bold text-gray-800 self-end mb-1">
-                {uploadProgress === 100 ? "Finished" : `${uploadProgress}%`}
-              </div>
+        {/* Dropzone */}
+        {!file && (
+          <div
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+            className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all
+              ${dragging
+                ? "border-violet-400 bg-violet-50/60"
+                : "border-gray-200 hover:border-violet-300 hover:bg-violet-50/30"
+              }`}
+          >
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all
+              ${dragging ? "bg-violet-100" : "bg-gray-50"}`}>
+              <FolderUp className={`w-6 h-6 transition-colors ${dragging ? "text-violet-500" : "text-gray-300"}`} />
             </div>
-            
-            {/* Progress Bar */}
-            <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-              <div 
-                className="bg-[#10b981] h-full transition-all duration-300" 
-                style={{ width: `${uploadProgress}%` }}
-              />
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-600">
+                {dragging ? "Drop it here!" : "Click or drag & drop a file"}
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">PDF · DOCX · TXT · MD · CSV</p>
             </div>
+            <input ref={inputRef} type="file" accept={ACCEPTED} className="hidden" onChange={(e) => loadFile(e.target.files[0])} />
           </div>
         )}
+
+        {/* File progress card */}
+        <AnimatePresence>
+          {file && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="border border-gray-100 rounded-2xl p-4 space-y-3 bg-white"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all
+                  ${done ? "bg-emerald-50" : "bg-violet-50"}`}>
+                  {done
+                    ? <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                    : <FileText className="w-5 h-5 text-violet-500" />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{file.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{fmt(file.size)}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold tabular-nums ${done ? "text-emerald-500" : "text-violet-500"}`}>
+                    {done ? "Done" : `${progress}%`}
+                  </span>
+                  <button onClick={clearFile} className="p-1 rounded-lg text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* progress bar */}
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <motion.div
+                  className={`h-full rounded-full transition-colors ${done ? "bg-emerald-500" : "bg-violet-500"}`}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ duration: 0.15 }}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Footer */}
-      <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
-        <button onClick={onBack} className="px-5 py-2 text-gray-600 font-medium hover:text-gray-800">
-          Close
+      <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-100 bg-gray-50/50">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-700 hover:bg-white border border-transparent hover:border-gray-200 transition-all"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Back
         </button>
         <button
-          onClick={() => onNext(selectedFile)}
-          disabled={!selectedFile || uploadProgress < 100}
-          className={`px-8 py-2 rounded-lg font-semibold text-white transition-all shadow-sm ${
-            selectedFile && uploadProgress === 100
-              ? 'bg-[#a389f4] hover:bg-[#9175e6]' 
-              : 'bg-purple-300 cursor-not-allowed'
-          }`}
+          onClick={() => done && onNext(file)}
+          disabled={!done}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold shadow-md shadow-violet-500/20 hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Upload
+          Next <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
     </>

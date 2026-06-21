@@ -1,61 +1,52 @@
+// src/components/components-ghl/AssistantsBuilder/components/VoiceLab.jsx
 import React, { useEffect, useRef, useState } from "react";
-import { Info, Loader2, Wallet } from "lucide-react";
+import { Info, Loader2, Wallet, Phone, PhoneOff, Mic, Bot, Sparkles } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import Vapi from "@vapi-ai/web";
-import { getAssistantIdFromUrl } from "../../../../utils/urlUtils";
-import { useSearchParams } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { fetchWalletBalance } from "../../../../store/slices/assistantsSlice";
 import toast from "react-hot-toast";
 
+<<<<<<< HEAD
 let globalVapiInstance = null;
 const getVapiInstance = () => {
   if (!globalVapiInstance) {
     globalVapiInstance = new Vapi(import.meta.env.VITE_VAPI_PUBLIC_KEY);
   }
   return globalVapiInstance;
+=======
+const ROLE_STYLES = {
+  AI:     "bg-gray-50 border border-gray-100 text-gray-800 rounded-tl-sm",
+  User:   "bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-tr-sm",
+  System: "bg-amber-50 border border-amber-100 text-amber-700 text-xs",
+>>>>>>> projects-ui
 };
 
 export const VoiceLabView = () => {
-  const vapiRef = useRef(null);
-  const [searchParams] = useSearchParams();
-  const assistantId = getAssistantIdFromUrl(searchParams);
-  const chatEndRef = useRef(null);
-  const dispatch = useDispatch();
+  const vapiRef      = useRef(null);
+  const chatEndRef   = useRef(null);
+  const dispatch     = useDispatch();
 
-  const [isCallActive, setIsCallActive] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-
-  const [messages, setMessages] = useState([
-    {
-      role: "System",
-      text: 'Hello! Click "Start Call" to begin the conversation.',
-    },
+  const [isCallActive,        setIsCallActive]        = useState(false);
+  const [isConnecting,        setIsConnecting]        = useState(false);
+  const [messages,            setMessages]            = useState([
+    { role: "System", text: 'Click "Start Call" to begin the conversation.' },
   ]);
-
   const [currentUserTranscript, setCurrentUserTranscript] = useState("");
-  const [currentAITranscript, setCurrentAITranscript] = useState("");
-  const [isThinking, setIsThinking] = useState(false);
+  const [currentAITranscript,   setCurrentAITranscript]   = useState("");
 
-  const assistantName = useSelector(
-    (state) => state.assistants?.selectedAssistant?.name || "Assistant",
-  );
+  const selectedAssistant = useSelector((s) => s.assistants?.selectedAssistant);
+  const assistantId   = selectedAssistant?.id;
+  const assistantName = selectedAssistant?.name || "Assistant";
+  const { walletBalance, fetchingBalance } = useSelector((s) => s.assistants);
 
-  const { walletBalance, fetchingBalance } = useSelector(
-    (state) => state.assistants,
-  );
-
-  // Initial fetch of balance
-  useEffect(() => {
-    dispatch(fetchWalletBalance());
-  }, [dispatch]);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, currentUserTranscript, currentAITranscript]);
+  useEffect(() => { dispatch(fetchWalletBalance()); }, [dispatch]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, currentUserTranscript, currentAITranscript]);
 
   // Ref to track call status for safe unmounting
   const isCallActiveRef = useRef(false);
   useEffect(() => {
+<<<<<<< HEAD
     isCallActiveRef.current = isCallActive;
   }, [isCallActive]);
 
@@ -81,30 +72,42 @@ export const VoiceLabView = () => {
 
     const onCallEnd = () => {
       console.log("🔴 Vapi: Call ended.");
+=======
+    vapiRef.current = new Vapi(import.meta.env.VITE_VAPI_PUBLIC_KEY);
+    const v = vapiRef.current;
+
+    v.on("call-start", () => {
+      setIsCallActive(true);
+      setIsConnecting(false);
+      setMessages((p) => [...p, { role: "System", text: "Call connected!" }]);
+    });
+    v.on("call-end", () => {
+>>>>>>> projects-ui
       setIsCallActive(false);
       setIsConnecting(false);
-      setIsThinking(false);
       setCurrentUserTranscript("");
       setCurrentAITranscript("");
+<<<<<<< HEAD
       setMessages((prev) => [...prev, { role: "System", text: "Call ended." }]);
       dispatch(fetchWalletBalance());
     };
 
     const onSpeechUpdate = (update) => {
       // console.log("🎙️ Vapi Speech Update:", update); // disabled for spam
+=======
+      setMessages((p) => [...p, { role: "System", text: "Call ended." }]);
+      dispatch(fetchWalletBalance());
+    });
+    v.on("speech-update", (update) => {
+>>>>>>> projects-ui
       if (update.role === "user") {
         setCurrentUserTranscript(update.transcript || "");
-        if (
-          update.status === "stopped" &&
-          update.transcript.trim().length > 0
-        ) {
-          setMessages((prev) => [
-            ...prev,
-            { role: "User", text: update.transcript },
-          ]);
+        if (update.status === "stopped" && update.transcript.trim()) {
+          setMessages((p) => [...p, { role: "User", text: update.transcript }]);
           setCurrentUserTranscript("");
         }
       }
+<<<<<<< HEAD
     };
 
     const onMessage = (msg) => {
@@ -117,20 +120,26 @@ export const VoiceLabView = () => {
           }
       }
 
+=======
+    });
+    v.on("message", (msg) => {
+>>>>>>> projects-ui
       if (msg.type === "transcript" && msg.role === "assistant") {
         if (msg.transcriptType === "partial") {
           setCurrentAITranscript(msg.transcript);
         } else {
-          setMessages((prev) => [
-            ...prev,
-            { role: "AI", text: msg.transcript },
-          ]);
+          setMessages((p) => [...p, { role: "AI", text: msg.transcript }]);
           setCurrentAITranscript("");
         }
       }
+<<<<<<< HEAD
     };
 
     const onError = (e) => {
+=======
+    });
+    v.on("error", (e) => {
+>>>>>>> projects-ui
       console.error(e);
       setIsConnecting(false);
       toast.error("An error occurred during the call.");
@@ -159,144 +168,172 @@ export const VoiceLabView = () => {
 
   const handleToggleCall = async () => {
     if (!isCallActive) {
+      if (!assistantId) {
+        toast.error("No assistant selected.");
+        return;
+      }
       try {
         setIsConnecting(true);
         const balance = await dispatch(fetchWalletBalance()).unwrap();
         if (balance < 0) {
           setIsConnecting(false);
-          toast.error("Call blocked: Due to insufficient balance.");
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "System",
-              text: `Insufficient balance ($${Number(balance).toFixed(2)}). Please top up to use the Voice Lab.`,
-            },
-          ]);
+          toast.error("Insufficient balance.");
+          setMessages((p) => [...p, { role: "System", text: `Insufficient balance ($${Number(balance).toFixed(2)}). Please top up.` }]);
           return;
         }
         console.log("🚀 Vapi: Attempting to start call with Assistant ID:", assistantId);
         await vapiRef.current.start(assistantId);
+<<<<<<< HEAD
       } catch (error) {
         console.error("❌ Vapi: Failed to start call:", error);
+=======
+      } catch {
+>>>>>>> projects-ui
         setIsConnecting(false);
-        toast.error("Failed to verify account status.");
-        setMessages((prev) => [
-          ...prev,
-          { role: "System", text: "Connection failed." },
-        ]);
+        toast.error("Failed to start call.");
+        setMessages((p) => [...p, { role: "System", text: "Connection failed." }]);
       }
     } else {
       setIsConnecting(true);
       vapiRef.current.stop();
     }
   };
+
   return (
-    <div className="flex flex-col flex-1 h-full bg-[#f8f9fa] p-6 relative">
-      <div className="w-full p-2 mb-4 bg-yellow-50 rounded-lg border border-yellow-200 text-yellow-800 flex items-center justify-center text-sm font-medium">
-        <Info className="w-4 h-4 mr-2" />
+    <div className="flex flex-col h-full bg-gray-50/40">
+      {/* Info banner */}
+      <div className="mx-5 mt-4 mb-0 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700 font-medium">
+        <Info className="w-3.5 h-3.5 flex-shrink-0" />
         Labs do not call tools or book appointments
       </div>
 
-      <div className="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-gray-50 bg-white">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <span
-                className={`w-2.5 h-2.5 rounded-full ${isCallActive ? "bg-green-500 animate-pulse" : "bg-gray-400"}`}
-              ></span>
-              <span className="text-sm font-medium text-gray-700">
-                {assistantName}
-              </span>
+      <div className="flex-1 flex flex-col m-5 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {/* Call header */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-white">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+                <Bot className="w-4 h-4 text-white" />
+              </div>
+              <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${isCallActive ? "bg-emerald-400" : "bg-gray-300"}`} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-800">{assistantName}</p>
+              <p className={`text-[10px] font-medium ${isCallActive ? "text-emerald-500" : "text-gray-400"}`}>
+                {isCallActive ? "● Live" : "● Offline"}
+              </p>
             </div>
 
-            {/* Wallet Balance Display */}
-            <div
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-                walletBalance < 0
-                  ? "bg-red-50 text-red-600 border-red-100"
-                  : "bg-gray-50 text-gray-600 border-gray-100"
-              }`}
-            >
-              <Wallet size={12} />
-              {fetchingBalance ? "..." : `$${Number(walletBalance).toFixed(2)}`}
+            {/* Wallet */}
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border ${
+              walletBalance < 0 ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-gray-50 text-gray-600 border-gray-100"
+            }`}>
+              <Wallet className="w-3 h-3" />
+              {fetchingBalance ? "…" : `$${Number(walletBalance).toFixed(2)}`}
             </div>
           </div>
 
-          <button
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
             onClick={handleToggleCall}
             disabled={isConnecting}
-            className={`flex items-center justify-center min-w-[120px] px-5 py-1.5 rounded-md font-bold text-sm transition-all shadow-sm ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold shadow-md transition-all disabled:opacity-70 ${
               isCallActive
-                ? "bg-red-500 text-white hover:bg-red-600"
-                : "bg-green-500 text-white hover:bg-green-600"
-            } disabled:opacity-70`}
+                ? "bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-rose-500/20"
+                : "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-emerald-500/20"
+            }`}
           >
-            {isConnecting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+            {isConnecting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : isCallActive ? (
+              <PhoneOff className="w-4 h-4" />
+            ) : (
+              <Phone className="w-4 h-4" />
+            )}
             {isConnecting
-              ? isCallActive
-                ? "Ending..."
-                : "Connecting..."
-              : isCallActive
-                ? "End Call"
-                : "Start Call"}
-          </button>
+              ? isCallActive ? "Ending…" : "Connecting…"
+              : isCallActive ? "End Call" : "Start Call"
+            }
+          </motion.button>
         </div>
 
-        {/* Chat Area */}
-        <div className="flex-1 p-6 flex flex-col space-y-4 overflow-y-auto bg-[#fafafa]">
-          {messages.map((msg, index) => (
-            <div
-              key={index}
-              className={`flex items-start gap-3 ${
-                msg.role === "User"
-                  ? "flex-row-reverse"
-                  : msg.role === "System"
-                    ? "justify-center"
-                    : ""
-              }`}
-            >
-              {msg.role !== "System" && (
-                <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 flex-shrink-0 shadow-sm">
-                  {msg.role === "AI" ? "AI" : "You"}
-                </div>
-              )}
-              <div
-                className={`max-w-[70%] p-3 rounded-2xl text-sm shadow-sm ${
-                  msg.role === "AI"
-                    ? "bg-white text-gray-800 rounded-tl-none border border-gray-100"
-                    : msg.role === "User"
-                      ? "bg-[#2563eb] text-white rounded-tr-none"
-                      : "bg-yellow-50 text-yellow-800 border border-yellow-100 text-xs"
+        {/* Chat area */}
+        <div className="flex-1 p-5 flex flex-col gap-3 overflow-y-auto bg-gray-50/30">
+          <AnimatePresence>
+            {messages.map((msg, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15 }}
+                className={`flex items-start gap-2 ${
+                  msg.role === "User" ? "flex-row-reverse" :
+                  msg.role === "System" ? "justify-center" : ""
                 }`}
               >
-                {msg.text}
-              </div>
-            </div>
-          ))}
+                {msg.role !== "System" && (
+                  <div className={`w-7 h-7 rounded-xl flex items-center justify-center text-[9px] font-black flex-shrink-0 ${
+                    msg.role === "AI"
+                      ? "bg-gradient-to-br from-indigo-500 to-violet-600 text-white"
+                      : "bg-gradient-to-br from-gray-700 to-gray-900 text-white"
+                  }`}>
+                    {msg.role === "AI" ? "AI" : "U"}
+                  </div>
+                )}
+                <div className={`max-w-[70%] px-3.5 py-2.5 rounded-2xl text-sm shadow-sm ${ROLE_STYLES[msg.role]}`}>
+                  {msg.text}
+                </div>
+              </motion.div>
+            ))}
 
-          {/* Current Live AI Speech */}
-          {currentAITranscript && (
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 flex-shrink-0">
-                AI
-              </div>
-              <div className="max-w-[70%] p-3 rounded-2xl text-sm shadow-sm bg-white text-gray-800 rounded-tl-none border border-gray-100 opacity-60">
-                {currentAITranscript}
-              </div>
-            </div>
-          )}
+            {/* Live AI partial */}
+            {currentAITranscript && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-start gap-2"
+              >
+                <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-[9px] font-black text-white flex-shrink-0">AI</div>
+                <div className="bg-gray-50 border border-gray-100 text-gray-500 px-3.5 py-2.5 rounded-2xl rounded-tl-sm text-sm italic opacity-70">
+                  {currentAITranscript}
+                </div>
+              </motion.div>
+            )}
 
-          {/* Current Live User Speech */}
-          {currentUserTranscript && (
-            <div className="flex items-start gap-3 flex-row-reverse">
-              <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600 flex-shrink-0">
-                You
+            {/* Live user partial */}
+            {currentUserTranscript && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-start gap-2 flex-row-reverse"
+              >
+                <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-[9px] font-black text-white flex-shrink-0">U</div>
+                <div className="bg-gradient-to-br from-indigo-400 to-violet-500 text-white px-3.5 py-2.5 rounded-2xl rounded-tr-sm text-sm italic opacity-70">
+                  {currentUserTranscript}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {isCallActive && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-center justify-center gap-2 pt-2"
+            >
+              <div className="flex items-center gap-1">
+                {[0, 1, 2].map((j) => (
+                  <motion.div
+                    key={j}
+                    className="w-1.5 h-1.5 rounded-full bg-emerald-400"
+                    animate={{ scaleY: [1, 2.5, 1] }}
+                    transition={{ duration: 0.8, delay: j * 0.15, repeat: Infinity }}
+                  />
+                ))}
               </div>
-              <div className="max-w-[70%] p-3 rounded-2xl text-sm shadow-sm bg-[#2563eb] text-white rounded-tr-none opacity-60 italic">
-                {currentUserTranscript}
-              </div>
-            </div>
+              <span className="text-xs text-emerald-500 font-medium">Listening…</span>
+            </motion.div>
           )}
 
           <div ref={chatEndRef} />

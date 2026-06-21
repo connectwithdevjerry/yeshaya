@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const OpenAI = require("openai");
 const stateModel = require("../model/state.model");
 const axios = require("axios");
@@ -282,9 +283,10 @@ const callGetSubaccounts = async (req, res) => {
     const { status, subAccounts } = reqDetails;
 
     const user = await userModel.findById(userId);
-    const installedSubAccounts = user.ghlSubAccountIds.map(
-      (account) => account.connected === true && account.accountId,
-    );
+
+    // All imported account IDs (regardless of connection status) so a
+    // disconnected sub-account still appears (and can be reconnected).
+    const importedIds = user.ghlSubAccountIds.map((account) => account.accountId);
 
     if (userType == "anon") {
       return res.send({
@@ -294,12 +296,37 @@ const callGetSubaccounts = async (req, res) => {
     }
 
     const filteredSubAccounts = subAccounts.locations.filter((subAccount) =>
-      installedSubAccounts.includes(subAccount.id),
+      importedIds.includes(subAccount.id),
     );
+
+    // Merge local metadata + real connection status into GHL data.
+    // Treat as connected if the flag is set OR there's a non-expired refresh
+    // token (covers accounts reconnected before the flag-setting fix deployed).
+    const nowMs = Date.now();
+    const metaMap = {};
+    user.ghlSubAccountIds.forEach(acc => {
+      const hasLiveToken =
+        !!acc.ghlSubRefreshToken &&
+        acc.ghlSubRefreshTokenExpiry &&
+        new Date(acc.ghlSubRefreshTokenExpiry).getTime() > nowMs;
+
+      metaMap[acc.accountId] = {
+        isFavorite:  acc.isFavorite  || false,
+        isArchived:  acc.isArchived  || false,
+        customName:  acc.customName  || "",
+        notes:       acc.notes       || "",
+        connected:   acc.connected === true || hasLiveToken,
+      };
+    });
+
+    const enriched = filteredSubAccounts.map(sub => ({
+      ...sub,
+      ...(metaMap[sub.id] || {}),
+    }));
 
     return res.send({
       status: true,
-      data: filteredSubAccounts,
+      data: enriched,
       agencyId: user.ghlAgencyId,
     });
   } catch (error) {
@@ -353,6 +380,66 @@ const getSubAccount = async (accessToken, subAccountId) => {
   }
 };
 
+// ─── Snapshot "Resources": clone the agency's template assistants into a new
+// sub-account. `user.snapshot.resources` is an array of source Vapi assistant IDs.
+// Best-effort: failures on individual assistants are logged, never thrown.
+const cloneSnapshotResources = async (user, subAccount) => {
+  const resourceIds = Array.isArray(user?.snapshot?.resources)
+    ? user.snapshot.resources.filter(Boolean)
+    : [];
+  if (!resourceIds.length || !subAccount) return;
+
+  if (!Array.isArray(subAccount.vapiAssistants)) subAccount.vapiAssistants = [];
+
+  for (const sourceId of resourceIds) {
+    try {
+      // Skip if this template was already cloned into the sub-account
+      const already = subAccount.vapiAssistants.some(
+        (a) => a.clonedFrom === sourceId,
+      );
+      if (already) continue;
+
+      // 1) Fetch the source assistant config
+      const srcRes = await axios.get(
+        `https://api.vapi.ai/assistant/${sourceId}`,
+        { headers: { Authorization: `Bearer ${VAPI_API_KEY}` } },
+      );
+      const src = srcRes.data || {};
+
+      // 2) Strip read-only fields and create a copy
+      const body = { ...src };
+      [
+        "id", "orgId", "createdAt", "updatedAt", "isServerUrlSecretSet",
+      ].forEach((k) => delete body[k]);
+
+      const created = await axios.post("https://api.vapi.ai/assistant", body, {
+        headers: {
+          Authorization: `Bearer ${VAPI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      });
+      const newAssistant = created.data || {};
+
+      // 3) Attach the clone to the sub-account
+      subAccount.vapiAssistants.push({
+        assistantId: newAssistant.id,
+        description: newAssistant.name || src.name || "Snapshot Assistant",
+        clonedFrom: sourceId,
+        numberDetails: [],
+        connectedTools: [],
+      });
+      console.log(
+        `✅ Snapshot clone: assistant ${sourceId} → ${newAssistant.id} for sub ${subAccount.accountId}`,
+      );
+    } catch (e) {
+      console.error(
+        `⚠️ Snapshot clone failed for assistant ${sourceId}:`,
+        e.response?.data?.message || e.message,
+      );
+    }
+  }
+};
+
 const importGhlSubaccount = async (req, res) => {
   const { subAccountId } = req.body;
   const userId = req.user;
@@ -403,6 +490,11 @@ const importGhlSubaccount = async (req, res) => {
     numberDetails: [],
   });
 
+  // Apply snapshot "Resources" (clone template assistants) into the new sub-account
+  const newSub = user.ghlSubAccountIds.find((a) => a.accountId === subAccountId);
+  await cloneSnapshotResources(user, newSub);
+  user.markModified("ghlSubAccountIds");
+
   await user.save();
 
   return res.send({ status: true, data, subaccounts: user.ghlSubAccountIds });
@@ -451,6 +543,7 @@ const importGhlSubaccounts = async (req, res) => {
   const results = await Promise.all(promises);
   console.log({ results });
 
+  const newlyAdded = [];
   results.forEach((result) => {
     if (result.status) {
       // true shows the subaccount id is linked to the agency account
@@ -460,8 +553,16 @@ const importGhlSubaccounts = async (req, res) => {
         vapiAssistants: [],
         numberDetails: [],
       });
+      newlyAdded.push(result.subAccountId);
     }
   });
+
+  // Apply snapshot "Resources" (clone template assistants) into each new sub-account
+  for (const accId of newlyAdded) {
+    const newSub = user.ghlSubAccountIds.find((a) => a.accountId === accId);
+    await cloneSnapshotResources(user, newSub);
+  }
+  user.markModified("ghlSubAccountIds");
 
   await user.save();
 
@@ -635,16 +736,23 @@ const checkIntegrationStatus = async (req, res) => {
     };
   }
 
-  // try {
-  // expiry date for refresh token
-  intResponse = {
-    ...intResponse,
-    ghl: { status: true, expiryDate: key.ghlRefreshTokenExpiry },
-  };
+  // GHL is connected only when a refresh token exists and hasn't expired
+  const ghlConnected =
+    !!key.ghlRefreshToken &&
+    !!key.ghlRefreshTokenExpiry &&
+    new Date(key.ghlRefreshTokenExpiry).getTime() > Date.now();
 
   intResponse = {
     ...intResponse,
-    stripe: { status: true, presence: key.stripeAccessToken ? true : false },
+    ghl: { status: ghlConnected, expiryDate: key.ghlRefreshTokenExpiry || null },
+  };
+
+  // Stripe is connected only when we actually hold an access token
+  const stripeConnected = !!key.stripeAccessToken;
+
+  intResponse = {
+    ...intResponse,
+    stripe: { status: stripeConnected, presence: stripeConnected },
   };
 
   return res.send(intResponse);
@@ -870,7 +978,7 @@ const chargeUserCustomers = async (req, res) => {
     const paymentIntent = await stripe.paymentIntents.create(
       {
         payment_method_types: ["card"],
-        amount: amount * 100, // in cents ($10.00 for 1000 cents)
+        amount: Math.round(amount * 100), // in cents (integer)
         currency: "usd",
         // CRITICAL: Use the Stripe-Account header to act on their behalf
       },
@@ -935,22 +1043,18 @@ const buyUsPhoneNumber = async (req, res) => {
       });
     }
 
-    // ---- BILLING CHECK ----
-    const BASE_PHONE_COST = 1.15;
-    const phoneResell = user.resellConfig?.phoneNumbers;
-    let amountToDeduct = BASE_PHONE_COST;
-
-    if (phoneResell?.enabled) {
-      amountToDeduct += phoneResell.resellPrice || 0;
-    }
-
-    if (user.walletBalance < amountToDeduct) {
-      return res.send({
-        status: false,
-        message: `Insufficient wallet balance. Cost: $${amountToDeduct.toFixed(
-          2,
-        )}`,
-      });
+    // Feature gate + "Maximum Phone Numbers" limit per sub-account
+    {
+      const { checkSnapshotLimit, checkFeature } = require("../helpers/snapshotLimits");
+      const phonesOff = checkFeature(user, "phones");
+      if (phonesOff) return res.send({ status: false, message: phonesOff });
+      const phoneCap = checkSnapshotLimit(user, getSubAccount[0], "phones");
+      if (phoneCap.exceeded) {
+        return res.send({
+          status: false,
+          message: `Phone number limit reached (${phoneCap.limit}) for this sub-account. Increase it in Agency → Snapshot → Limits.`,
+        });
+      }
     }
 
     const client = twilio(ACCOUNT_SID, ACCOUNT_AUTH_TOKEN);
@@ -960,25 +1064,27 @@ const buyUsPhoneNumber = async (req, res) => {
 
     const purchasedNumber = await client.incomingPhoneNumbers.create({
       phoneNumber: numberToBuy,
+      // Optional: Configure webhook URLs for voice and SMS handling
+      // voiceUrl: `${process.env.SERVER_URL}/integrations/voiceurl/${userId}/${subaccount}/${assistant}`,
+      // smsUrl: `${process.env.SERVER_URL}/integrations/smsurl/${userId}/${subaccount}/${assistant}`,
+      // voiceFallbackUrl: "",
+      // smsFallbackUrl: "",
     });
 
-    // ---- DEDUCT WALLET ----
-    user.walletBalance -= amountToDeduct;
+    console.log({ purchasedNumber });
+
+    // console.log("SUCCESS! Phone number purchased.");
+    // console.log(`SID: ${purchasedNumber.sid}`);
+    // console.log(`Number: ${purchasedNumber.phoneNumber}`);
+
+    // console.log(getSubAccount);
 
     getAssistant[0].numberDetails.push({
       phoneNum: purchasedNumber?.phoneNumber,
       phoneSid: purchasedNumber?.sid,
     });
 
-    user.billingEvents.push({
-      type: "PHONE_NUMBER_PURCHASE",
-      amount: amountToDeduct,
-      callId: purchasedNumber.sid,
-    });
-
     await user.save();
-
-    console.log(`Phone number purchased and wallet charged: $${amountToDeduct}`);
 
     return res.send({ status: true, purchasedNumber });
   } catch (error) {
@@ -1488,8 +1594,32 @@ const deleteTwilioNumber = async (req, res) => {
 const ghlSubAuthorize = async (req, res) => {
   const userId = req.user;
   const { accountId } = req.query;
+
+  console.log("🔄 ghlSubAuthorize → userId:", userId, "accountId:", accountId);
+
+  // Guard: req.user must be a valid Mongo ObjectId (not an email / empty / SSO value)
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    console.error("❌ ghlSubAuthorize → invalid userId:", userId);
+    return res.status(401).json({
+      status: false,
+      message: "Your session is invalid. Please log in to the agency dashboard before reconnecting.",
+    });
+  }
+
+  if (!accountId) {
+    return res.status(400).json({ status: false, message: "accountId is required" });
+  }
+
+  // Scopes only — no version_id mixed in here
   const scopes =
-    "locations.readonly+oauth.write+oauth.readonly+businesses.write+businesses.readonly+calendars.write+calendars.readonly+calendars%2Fevents.readonly+calendars%2Fevents.write+calendars%2Fgroups.readonly+calendars%2Fgroups.write+calendars%2Fresources.readonly+calendars%2Fresources.write&version_id=696ade02ea0d940c862c9efd";
+    "locations.readonly+oauth.write+oauth.readonly+businesses.write+businesses.readonly+contacts.readonly+contacts.write+calendars.write+calendars.readonly+calendars%2Fevents.readonly+calendars%2Fevents.write+calendars%2Fgroups.readonly+calendars%2Fgroups.write+calendars%2Fresources.readonly+calendars%2Fresources.write";
+
+  // The sub-account app's version id (single, correct param)
+  // NOTE: we intentionally do NOT pin version_id. GHL locks scopes to a specific
+  // app version, so a pinned id rejects any scope added after that version was
+  // created ("Invalid scope(s)"). Omitting it makes GHL use the app's latest
+  // version, which always reflects the currently-enabled scopes.
+  const VERSION_ID = "696ade02ea0d940c862c9efd"; // kept for reference / fallback
 
   const REDIRECT_URI = encodeURIComponent(
     `${process.env.SERVER_URL}${SUB_PATH}${GHL_SUB_OAUTH_CALLBACK}`,
@@ -1498,7 +1628,7 @@ const ghlSubAuthorize = async (req, res) => {
   // The 'state' parameter is crucial for security (CSRF protection)
   const state = await generateSecureState(userId, accountId);
 
-  const authUrl = `https://marketplace.leadconnectorhq.com/oauth/chooselocation?response_type=code&redirect_uri=${REDIRECT_URI}&client_id=${SUB_CLIENT_ID}&scope=${scopes}&version_id=6905111141b5e7b749099891&state=${state}`;
+  const authUrl = `https://marketplace.leadconnectorhq.com/oauth/chooselocation?response_type=code&redirect_uri=${REDIRECT_URI}&client_id=${SUB_CLIENT_ID}&scope=${scopes}&version_id=${VERSION_ID}&state=${state}`;
 
   console.log("Redirecting to GHL OAuth URL:", authUrl);
 
@@ -1523,6 +1653,18 @@ const ghlSubOauthCallback = async (req, res) => {
   const storedState = reqState ? reqState.state : null;
   const userId = reqState ? reqState.cust_id : null;
   const accountId = reqState ? reqState.accountId : null;
+
+  console.log("🔄 ghlSubOauthCallback → userId:", userId, "accountId:", accountId);
+
+  // Guard against a malformed/missing userId reaching findById (would otherwise throw)
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    console.error("❌ ghlSubOauthCallback → invalid userId in state:", userId);
+    await stateModel.deleteOne({ state: receivedState });
+    const errorMsg = "Invalid session. Please log in and reconnect from the dashboard.";
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/connection-failed/${encodeURIComponent(errorMsg)}`,
+    );
+  }
 
   // 1. STATE VERIFICATION (CSRF Protection)
   if (!receivedState || receivedState !== storedState) {
@@ -1584,8 +1726,12 @@ const ghlSubOauthCallback = async (req, res) => {
     subAccount.ghlSubRefreshTokenExpiry = new Date(
       Date.now() + response.expires_in * 1000,
     );
+    subAccount.connected = true; // clear "Reconnect needed" status
+    updateUser.markModified("ghlSubAccountIds");
 
     await updateUser.save();
+
+    console.log(`✅ Sub-account ${accountId} reconnected — connected=true`);
 
     const successMsg = "GHL Connection successful!";
     return res.redirect(
@@ -1611,9 +1757,572 @@ const ghlSubOauthCallback = async (req, res) => {
   }
 };
 
+const deleteSubAccount = async (req, res) => {
+  try {
+    const userId       = req.user;
+    const { id }       = req.params;
+
+    if (!id) {
+      return res.status(400).json({ status: false, message: "Sub-account ID is required" });
+    }
+
+    const user = await userModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({ status: false, message: "User not found" });
+    }
+
+    const exists = user.ghlSubAccountIds.some(acc => acc.accountId === id);
+    if (!exists) {
+      return res.status(404).json({ status: false, message: "Sub-account not found" });
+    }
+
+    user.ghlSubAccountIds = user.ghlSubAccountIds.filter(acc => acc.accountId !== id);
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    return res.status(200).json({ status: true, message: "Sub-account removed successfully" });
+  } catch (err) {
+    console.error("deleteSubAccount error:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to delete sub-account" });
+  }
+};
+
+// ─── Get single sub-account details + stats ──────────────────────────────────
+const getSubAccountDetails = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { id } = req.params;
+    console.log("🔄 getSubAccountDetails → userId:", userId, "subaccount:", id);
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    const sub = user.ghlSubAccountIds.find((a) => a.accountId === id);
+    if (!sub) return res.status(404).json({ status: false, message: "Sub-account not found" });
+
+    const assistantCount = (sub.vapiAssistants || []).length;
+    const contactCount   = (sub.savedContacts  || []).length;
+    const numberCount    = (sub.vapiAssistants || []).reduce(
+      (acc, a) => acc + (a.numberDetails?.length || 0), 0
+    );
+
+    const hasLiveToken =
+      !!sub.ghlSubRefreshToken &&
+      sub.ghlSubRefreshTokenExpiry &&
+      new Date(sub.ghlSubRefreshTokenExpiry).getTime() > Date.now();
+
+    const data = {
+      accountId:        sub.accountId,
+      customName:       sub.customName || "",
+      notes:            sub.notes || "",
+      connected:        sub.connected === true || hasLiveToken,
+      isFavorite:       sub.isFavorite || false,
+      isArchived:       sub.isArchived || false,
+      installationType: sub.installationType || "",
+      tokenExpiry:      sub.ghlSubRefreshTokenExpiry || null,
+      assistantCount,
+      contactCount,
+      numberCount,
+    };
+
+    console.log("✅ getSubAccountDetails →", data);
+    return res.status(200).json({ status: true, data });
+  } catch (err) {
+    console.error("❌ getSubAccountDetails error:", err.message);
+    return res.status(500).json({ status: false, message: err.message });
+  }
+};
+
+// ─── Toggle Favorite ──────────────────────────────────────────────────────────
+const toggleSubAccountFavorite = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { id } = req.params;
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    const sub = user.ghlSubAccountIds.find(a => a.accountId === id);
+    if (!sub) return res.status(404).json({ status: false, message: "Sub-account not found" });
+
+    sub.isFavorite = !sub.isFavorite;
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    console.log(`✅ toggleFavorite → ${id} isFavorite=${sub.isFavorite}`);
+    return res.status(200).json({ status: true, isFavorite: sub.isFavorite });
+  } catch (err) {
+    console.error("❌ toggleSubAccountFavorite:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to toggle favorite" });
+  }
+};
+
+// ─── Toggle Archive ───────────────────────────────────────────────────────────
+const toggleSubAccountArchive = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { id } = req.params;
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    const sub = user.ghlSubAccountIds.find(a => a.accountId === id);
+    if (!sub) return res.status(404).json({ status: false, message: "Sub-account not found" });
+
+    sub.isArchived = !sub.isArchived;
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    console.log(`✅ toggleArchive → ${id} isArchived=${sub.isArchived}`);
+    return res.status(200).json({ status: true, isArchived: sub.isArchived });
+  } catch (err) {
+    console.error("❌ toggleSubAccountArchive:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to toggle archive" });
+  }
+};
+
+// ─── Update Sub-account metadata (name, notes) ────────────────────────────────
+const updateSubAccountMeta = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { id } = req.params;
+    const { customName, notes } = req.body;
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    const sub = user.ghlSubAccountIds.find(a => a.accountId === id);
+    if (!sub) return res.status(404).json({ status: false, message: "Sub-account not found" });
+
+    if (customName !== undefined) sub.customName = customName.trim();
+    if (notes      !== undefined) sub.notes      = notes.trim();
+
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    console.log(`✅ updateSubAccountMeta → ${id}`, { customName, notes });
+    return res.status(200).json({ status: true, message: "Updated successfully", data: { customName: sub.customName, notes: sub.notes } });
+  } catch (err) {
+    console.error("❌ updateSubAccountMeta:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to update sub-account" });
+  }
+};
+
+// ─── Disconnect GoHighLevel ───────────────────────────────────────────────────
+const disconnectGoHighLevel = async (req, res) => {
+  try {
+    const userId = req.user;
+    console.log("🔄 disconnectGoHighLevel → userId:", userId);
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    user.ghlAgencyId            = undefined;
+    user.ghlRefreshToken        = undefined;
+    user.ghlRefreshTokenExpiry  = undefined;
+
+    await user.save();
+
+    console.log("✅ GoHighLevel disconnected for user:", userId);
+    return res.status(200).json({ status: true, message: "GoHighLevel disconnected successfully" });
+  } catch (err) {
+    console.error("❌ disconnectGoHighLevel error:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to disconnect GoHighLevel" });
+  }
+};
+
+// ─── Disconnect OpenAI ────────────────────────────────────────────────────────
+const disconnectOpenAI = async (req, res) => {
+  try {
+    const userId = req.user;
+    console.log("🔄 disconnectOpenAI → userId:", userId);
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    user.openAIApiKey = undefined;
+
+    await user.save();
+
+    console.log("✅ OpenAI disconnected for user:", userId);
+    return res.status(200).json({ status: true, message: "OpenAI disconnected successfully" });
+  } catch (err) {
+    console.error("❌ disconnectOpenAI error:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to disconnect OpenAI" });
+  }
+};
+
+// ─── Disconnect Stripe ────────────────────────────────────────────────────────
+const disconnectStripe = async (req, res) => {
+  try {
+    const userId = req.user;
+    console.log("🔄 disconnectStripe → userId:", userId);
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    user.stripeAccessToken    = undefined;
+    user.stripeUserId         = undefined;
+    user.stripePublishableKey = undefined;
+
+    await user.save();
+
+    console.log("✅ Stripe disconnected for user:", userId);
+    return res.status(200).json({ status: true, message: "Stripe disconnected successfully" });
+  } catch (err) {
+    console.error("❌ disconnectStripe error:", err.message);
+    return res.status(500).json({ status: false, message: "Failed to disconnect Stripe" });
+  }
+};
+
+// ─── Import a BYO (bring-your-own) SIP number into Vapi ────────────────────────
+const importByoNumber = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { number, terminationUri, sipUsername, sipPassword, assistantId, subaccountId } = req.body;
+    if (!number || !terminationUri) {
+      return res.send({ status: false, message: "number and terminationUri are required" });
+    }
+    if (!subaccountId) {
+      return res.send({ status: false, message: "subaccountId is required" });
+    }
+
+    // Enforce the agency snapshot "Maximum Phone Numbers" limit per sub-account
+    {
+      const capUser = await userModel.findById(userId);
+      const capSub = capUser?.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+      if (capSub) {
+        const { checkSnapshotLimit, checkFeature } = require("../helpers/snapshotLimits");
+        const phonesOff = checkFeature(capUser, "phones");
+        if (phonesOff) return res.send({ status: false, message: phonesOff });
+        const phoneCap = checkSnapshotLimit(capUser, capSub, "phones");
+        if (phoneCap.exceeded) {
+          return res.send({
+            status: false,
+            message: `Phone number limit reached (${phoneCap.limit}) for this sub-account. Increase it in Agency → Snapshot → Limits.`,
+          });
+        }
+      }
+    }
+
+    // Derive the SIP gateway host from the termination URI
+    // e.g. "sip:user@my.pstn.twilio.com" → "my.pstn.twilio.com"
+    const host = terminationUri
+      .replace(/^sips?:/i, "")
+      .split("@").pop()
+      .split(/[:/?]/)[0]
+      .trim();
+    if (!host) return res.send({ status: false, message: "Could not parse the termination URI host" });
+
+    // 1) Create a BYO SIP trunk credential in Vapi
+    const credentialBody = {
+      provider: "byo-sip-trunk",
+      name: `trunk-${number}`,
+      gateways: [{ ip: host }],
+    };
+    if (sipUsername) {
+      credentialBody.outboundAuthenticationPlan = {
+        authUsername: sipUsername,
+        authPassword: sipPassword || "",
+      };
+    }
+
+    let credentialId;
+    try {
+      const credRes = await axios.post("https://api.vapi.ai/credential", credentialBody, {
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}`, "Content-Type": "application/json" },
+      });
+      credentialId = credRes.data?.id;
+    } catch (e) {
+      const m = e.response?.data?.message;
+      return res.send({ status: false, message: `SIP trunk step failed: ${Array.isArray(m) ? m.join(", ") : (m || e.message)}` });
+    }
+
+    // 2) Create the BYO phone number
+    const numberBody = {
+      provider: "byo-phone-number",
+      name: `BYO ${number}`,
+      number,
+      numberE164CheckEnabled: false,
+      credentialId,
+    };
+    if (assistantId) numberBody.assistantId = assistantId;
+
+    try {
+      const numRes = await axios.post("https://api.vapi.ai/phone-number", numberBody, {
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}`, "Content-Type": "application/json" },
+      });
+
+      // Persist the external number at the sub-account level so the UI can show it
+      try {
+        const user = await userModel.findById(userId);
+        const sub = user?.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+        if (sub) {
+          if (!Array.isArray(sub.byoNumbers)) sub.byoNumbers = [];
+          sub.byoNumbers.push({
+            phoneNumber: number,
+            vapiPhoneNumId: numRes.data?.id || "",
+            credentialId,
+            terminationUri,
+            friendlyName: `BYO ${number}`,
+          });
+          user.markModified("ghlSubAccountIds");
+          await user.save();
+        }
+      } catch (e) {
+        console.error("⚠️ byoNumber persist failed:", e.message);
+      }
+
+      return res.send({ status: true, data: numRes.data, message: "Number imported successfully" });
+    } catch (e) {
+      const m = e.response?.data?.message;
+      return res.send({ status: false, message: `Number import failed: ${Array.isArray(m) ? m.join(", ") : (m || e.message)}` });
+    }
+  } catch (e) {
+    console.error("importByoNumber error:", e.message);
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+// ─── Reassign a phone number to a different assistant ──────────────────────────
+const reassignNumberAssistant = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId, phoneSid, toAssistantId } = req.body;
+    if (!subaccountId || !phoneSid || !toAssistantId) {
+      return res.send({ status: false, message: "subaccountId, phoneSid and toAssistantId are required" });
+    }
+
+    const user = await userModel.findById(userId);
+    const sub = user?.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+    if (!sub) return res.send({ status: false, message: "Sub-account not found" });
+
+    // Find which assistant currently holds this number
+    let fromAssistant = null, numEntry = null;
+    for (const ast of sub.vapiAssistants) {
+      const found = (ast.numberDetails || []).find((n) => n.phoneSid === phoneSid);
+      if (found) { fromAssistant = ast; numEntry = found; break; }
+    }
+    if (!numEntry) return res.send({ status: false, message: "This number isn't assigned to any assistant yet." });
+
+    const toAssistant = sub.vapiAssistants.find((a) => a.assistantId === toAssistantId);
+    if (!toAssistant) return res.send({ status: false, message: "Target assistant not found" });
+    if (fromAssistant.assistantId === toAssistantId) {
+      return res.send({ status: true, message: "Number is already assigned to that assistant." });
+    }
+
+    // Point the Vapi phone number at the new assistant (if it's connected to Vapi)
+    if (numEntry.vapiPhoneNumId) {
+      try {
+        await axios.patch(
+          `https://api.vapi.ai/phone-number/${numEntry.vapiPhoneNumId}`,
+          { assistantId: toAssistantId },
+          { headers: { Authorization: `Bearer ${VAPI_API_KEY}`, "Content-Type": "application/json" } },
+        );
+      } catch (e) {
+        console.error("⚠️ Vapi reassign failed:", e.response?.data?.message || e.message);
+      }
+    }
+
+    // Repoint Twilio's voice webhook to the new assistant (best-effort)
+    try {
+      const client = twilio(ACCOUNT_SID, ACCOUNT_AUTH_TOKEN);
+      await client.incomingPhoneNumbers(phoneSid).update({
+        voiceUrl: `${process.env.SERVER_URL}/integrations/voiceurl/${userId}/${subaccountId}/${toAssistantId}`,
+      });
+    } catch (e) {
+      console.error("⚠️ Twilio voiceUrl update failed:", e.message);
+    }
+
+    // Move the number record between assistants in our DB
+    fromAssistant.numberDetails = (fromAssistant.numberDetails || []).filter((n) => n.phoneSid !== phoneSid);
+    if (!Array.isArray(toAssistant.numberDetails)) toAssistant.numberDetails = [];
+    toAssistant.numberDetails.push({
+      phoneNum: numEntry.phoneNum,
+      vapiPhoneNumId: numEntry.vapiPhoneNumId,
+      phoneSid: numEntry.phoneSid,
+    });
+
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    return res.send({ status: true, message: "Number reassigned successfully." });
+  } catch (e) {
+    console.error("reassignNumberAssistant error:", e.message);
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+// ─── List a sub-account's external (BYO) numbers, shaped like the table rows ────
+const getByoNumbers = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId } = req.query;
+    if (!subaccountId) return res.send({ status: false, message: "subaccountId is required" });
+
+    const user = await userModel.findById(userId);
+    const sub = user?.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+    const list = (sub?.byoNumbers || []).map((n) => ({
+      status: true,
+      // Mirror the Twilio phoneNumberDetails shape so the UI renders it uniformly
+      phoneNumberDetails: {
+        sid: n.vapiPhoneNumId || n.phoneNumber,
+        phoneNumber: n.phoneNumber,
+        friendlyName: n.friendlyName || n.phoneNumber,
+        origin: "byo",
+        status: "active",
+        capabilities: {},
+        dateUpdated: n.createdAt,
+      },
+    }));
+
+    return res.send({ status: true, data: list });
+  } catch (e) {
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+// ─── Webhooks: configure + test ────────────────────────────────────────────────
+const webhookModel = require("../model/webhook.model");
+const { signPayload } = require("../helpers/webhookDispatch");
+
+const getWebhookConfig = async (req, res) => {
+  try {
+    const cfg = await webhookModel.findOne({ userId: req.user }).lean();
+    return res.send({
+      status: true,
+      data: cfg || {
+        endpointUrl: "", active: true, secret: "",
+        events: { calls: false, payments: false, contacts: false, account: false, all: false },
+      },
+    });
+  } catch (e) {
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+const saveWebhookConfig = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { endpointUrl, events, active } = req.body;
+    if (endpointUrl && !/^https?:\/\/.+/i.test(endpointUrl)) {
+      return res.send({ status: false, message: "Endpoint URL must be a valid http(s) URL" });
+    }
+
+    const existing = await webhookModel.findOne({ userId });
+    const secret = existing?.secret || `whsec_${crypto.randomBytes(24).toString("hex")}`;
+
+    const doc = await webhookModel.findOneAndUpdate(
+      { userId },
+      {
+        $set: {
+          endpointUrl: endpointUrl || "",
+          active: active !== undefined ? !!active : true,
+          secret,
+          events: {
+            calls:    !!events?.calls,
+            payments: !!events?.payments,
+            contacts: !!events?.contacts,
+            account:  !!events?.account,
+            all:      !!events?.all,
+          },
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    return res.send({ status: true, data: doc, message: "Webhook settings saved" });
+  } catch (e) {
+    console.error("saveWebhookConfig error:", e.message);
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+const testWebhook = async (req, res) => {
+  try {
+    const cfg = await webhookModel.findOne({ userId: req.user });
+    if (!cfg || !cfg.endpointUrl) {
+      return res.send({ status: false, message: "Save an endpoint URL first." });
+    }
+    const body = JSON.stringify({
+      event: "test", group: "test", title: "Test event",
+      message: "This is a test webhook from your dashboard.",
+      data: { ok: true }, timestamp: new Date().toISOString(),
+    });
+    const resp = await axios.post(cfg.endpointUrl, body, {
+      headers: {
+        "Content-Type": "application/json",
+        "X-Webhook-Event": "test",
+        "X-Webhook-Signature": signPayload(body, cfg.secret),
+      },
+      timeout: 8000,
+    });
+    return res.send({ status: true, message: `Test delivered (HTTP ${resp.status})` });
+  } catch (e) {
+    return res.send({ status: false, message: `Delivery failed: ${e.response?.status || e.message}` });
+  }
+};
+
+// ─── Per-number settings (Edit Account / Limits / Permissions / Rename) ────────
+const numberSettingModel = require("../model/numberSetting.model");
+
+const getNumberSettings = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { phoneSid } = req.query;
+
+    // No phoneSid → return all of this user's number settings (for list labels)
+    if (!phoneSid) {
+      const all = await numberSettingModel.find({ userId }).lean();
+      return res.send({ status: true, data: all });
+    }
+
+    const doc = await numberSettingModel.findOne({ userId, phoneSid }).lean();
+    return res.send({
+      status: true,
+      data: doc || {
+        phoneSid, label: "", notes: "",
+        limits: { maxCallsPerDay: 0, monthlyBudget: 0 },
+        permissions: { allowedRoles: ["owner", "admin", "member"] },
+      },
+    });
+  } catch (e) {
+    return res.send({ status: false, message: e.message });
+  }
+};
+
+const saveNumberSettings = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { phoneSid, label, notes, limits, permissions } = req.body;
+    if (!phoneSid) return res.send({ status: false, message: "phoneSid is required" });
+
+    const update = {};
+    if (label !== undefined)       update.label = label;
+    if (notes !== undefined)       update.notes = notes;
+    if (limits !== undefined)      update.limits = limits;
+    if (permissions !== undefined) update.permissions = permissions;
+
+    const doc = await numberSettingModel.findOneAndUpdate(
+      { userId, phoneSid },
+      { $set: update },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    return res.send({ status: true, data: doc, message: "Saved" });
+  } catch (e) {
+    console.error("saveNumberSettings error:", e.message);
+    return res.send({ status: false, message: e.message });
+  }
+};
+
 module.exports = {
   ghlAuthorize,
   ghlOauthCallback,
+  getNumberSettings,
+  saveNumberSettings,
+  getWebhookConfig,
+  saveWebhookConfig,
+  testWebhook,
+  importByoNumber,
+  getByoNumbers,
+  reassignNumberAssistant,
   ghlSubAuthorize,
   ghlSubOauthCallback,
   ghlSsoLoginHandler,
@@ -1634,7 +2343,12 @@ module.exports = {
   getPurchasedNumbers,
   getVapiNumberImportStatus,
   deleteTwilioNumber,
+  deleteSubAccount,
+  disconnectGoHighLevel,
+  disconnectOpenAI,
+  disconnectStripe,
+  toggleSubAccountFavorite,
+  toggleSubAccountArchive,
+  updateSubAccountMeta,
+  getSubAccountDetails,
 };
-
-
-// emmanuel

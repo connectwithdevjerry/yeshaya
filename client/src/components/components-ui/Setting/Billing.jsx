@@ -1,72 +1,106 @@
-// src/components/BillingSettings.jsx (Updated)
+// src/components/components-ui/Setting/Billing.jsx
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Download, Package } from "lucide-react";
+import WalletUsageContent from "./Wallet";
+import InvoicesContent from "./Invoices";
 
-import React, { useState } from 'react';
-import Card from '../ui/Card';
-import { Download } from 'lucide-react'; 
-import WalletUsageContent from './Wallet'; // <-- Import the new component
+const SUBTABS = [
+  { id: "walletUsage",   label: "Wallet & Usage"  },
+  { id: "invoices",      label: "Invoices"        },
+  { id: "subscriptions", label: "Subscriptions"   },
+];
 
-const SubTabButton = ({ isActive, children, onClick }) => (
-  <button
-    className={`px-4 py-2 text-sm font-medium transition-colors ${
-      isActive
-        ? 'text-indigo-600 border-b-2 border-indigo-600'
-        : 'text-gray-500 hover:text-gray-700'
-    }`}
-    onClick={onClick}
-  >
-    {children}
-  </button>
-);
+const SUBSCRIPTIONS = [
+  { name: "Platform Phone Numbers", quantity: 1, price: 2.50, unit: "mo" },
+  { name: "Voice Knowledge Base",   quantity: 0, price: 0.00, unit: "mo" },
+];
 
-const SubscriptionsContent = () => {
-  // Mock data for subscriptions
-  const subscriptions = [
-    { name: 'Platform Phone Numbers', quantity: 1, price: 2.50, unit: 'mo' },
-    { name: 'Voice knowledge base', quantity: 0, price: 0.00, unit: 'mo' },
-  ];
-
-  return (
-    <div className="mt-4">
-      {subscriptions.map((sub, index) => (
-        <div key={index} className="flex justify-between items-center py-3 border-b last:border-b-0">
-          <div className="flex items-center">
-            <span className="text-base font-medium text-gray-800">
-              {sub.name} x {sub.quantity}
-            </span>
-            {sub.name === 'Platform Phone Numbers' && (
-              <button className="ml-4 flex items-center text-indigo-600 hover:text-indigo-800 text-sm">
-                <Download className="w-4 h-4 mr-1" /> Download as CSV
-              </button>
-            )}
+const SubscriptionsContent = () => (
+  <div className="space-y-3">
+    {SUBSCRIPTIONS.length === 0 ? (
+      <div className="flex flex-col items-center justify-center py-14 text-center">
+        <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3">
+          <Package className="w-5 h-5 text-indigo-400" />
+        </div>
+        <p className="text-sm font-semibold text-gray-700">No active subscriptions</p>
+        <p className="text-xs text-gray-400 mt-1">Subscriptions you purchase will appear here.</p>
+      </div>
+    ) : (
+      SUBSCRIPTIONS.map((sub, i) => (
+        <div
+          key={i}
+          className="flex items-center justify-between px-4 py-3.5 bg-white rounded-xl border border-gray-100 hover:border-gray-200 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
+              <Package className="w-4 h-4 text-indigo-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">
+                {sub.name} <span className="text-gray-400 font-normal">× {sub.quantity}</span>
+              </p>
+              {sub.name === "Platform Phone Numbers" && (
+                <button className="text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-1 mt-0.5 transition-colors">
+                  <Download className="w-3 h-3" /> Download as CSV
+                </button>
+              )}
+            </div>
           </div>
-          <span className="text-base font-semibold text-gray-800">
-            ${sub.price.toFixed(2)} / {sub.unit}
+          <span className="text-sm font-semibold text-gray-800">
+            ${sub.price.toFixed(2)}<span className="text-gray-400 font-normal text-xs"> /{sub.unit}</span>
           </span>
         </div>
-      ))}
-    </div>
-  );
-};
+      ))
+    )}
+  </div>
+);
 
 const BillingSettings = () => {
-  const [activeSubTab, setActiveSubTab] = useState('walletUsage'); // Changed default to show new content
+  const [activeSubTab, setActiveSubTab] = useState("walletUsage");
 
   return (
-    <Card>
-      {/* Sub-Tabs Navigation */}
-      <div className="flex border-b border-gray-200 mb-6 -mx-6 px-6">
-        <SubTabButton isActive={activeSubTab === 'subscriptions'} onClick={() => setActiveSubTab('subscriptions')}>
-          Subscriptions
-        </SubTabButton>
-        <SubTabButton isActive={activeSubTab === 'walletUsage'} onClick={() => setActiveSubTab('walletUsage')}>
-          Wallet & Usage
-        </SubTabButton>
+    <div className="space-y-5">
+      {/* Sub-tab strip */}
+      <div className="flex gap-1 border-b border-gray-100 pb-0">
+        {SUBTABS.map(({ id, label }) => {
+          const isActive = activeSubTab === id;
+          return (
+            <motion.button
+              key={id}
+              onClick={() => setActiveSubTab(id)}
+              whileHover={{ y: -1 }}
+              transition={{ duration: 0.12 }}
+              className={`relative px-4 py-2.5 text-sm font-medium transition-colors duration-150
+                ${isActive ? "text-indigo-600" : "text-gray-500 hover:text-gray-800"}`}
+            >
+              {label}
+              {isActive && (
+                <motion.span
+                  layoutId="billingSubTab"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t bg-gradient-to-r from-indigo-500 to-violet-600"
+                />
+              )}
+            </motion.button>
+          );
+        })}
       </div>
 
-      {/* Conditional Rendering */}
-      {activeSubTab === 'subscriptions' && <SubscriptionsContent />}
-      {activeSubTab === 'walletUsage' && <WalletUsageContent />}
-    </Card>
+      {/* Content */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeSubTab}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.18 }}
+        >
+          {activeSubTab === "walletUsage"   && <WalletUsageContent />}
+          {activeSubTab === "invoices"      && <InvoicesContent />}
+          {activeSubTab === "subscriptions" && <SubscriptionsContent />}
+        </motion.div>
+      </AnimatePresence>
+    </div>
   );
 };
 

@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { authAPI } from "../api/authApi";
 import axios from "axios";
+import apiClient from "../api/config";
 
 export const login = createAsyncThunk(
   "auth/login",
@@ -37,7 +38,10 @@ export const register = createAsyncThunk(
   "auth/signup",
   async (formData, { rejectWithValue }) => {
     try {
-      const response = await authAPI.register(formData);
+      const response = await axios.post(
+        "https://api.yashayah.cloud/auth/signup",
+        formData,
+      );
 
       console.log("Registration response:", response.data);
 
@@ -88,7 +92,10 @@ export const resetPassword = createAsyncThunk(
   "auth/forgot_password",
   async (email, { rejectWithValue }) => {
     try {
-      const response = await authAPI.resetPassword(email);
+      const response = await axios.post(
+        "https://api.yashayah.cloud/auth/forgot_password",
+        { email },
+      );
 
       return (
         response.data.message || "Reset link sent! Please check your email."
@@ -113,7 +120,9 @@ export const verifyToken = createAsyncThunk(
       const token = tokenFromLink || localStorage.getItem("accessToken");
       if (!token) throw new Error("No token found");
       const response = await authAPI.verifyToken(token);
-      localStorage.setItem("accessToken", response.data.token || response.data.accessToken || token);
+      if (response.data.token) {
+        localStorage.setItem("accessToken", response.data.token);
+      }
 
       return response.data;
     } catch (error) {
@@ -135,7 +144,7 @@ export const refreshAccessToken = createAsyncThunk(
   async (refreshToken, { rejectWithValue }) => {
     try {
       console.log("🔄 Attempting to refresh token...");
-      const response = await authAPI.exchangeToken(refreshToken);
+      const response = await authAPI.refreshToken(refreshToken);
       const data = response.data;
 
       if (data.status === false) {
@@ -183,7 +192,14 @@ export const getCompanyDetails = createAsyncThunk(
   "auth/getCompanyDetails",
   async (_, { rejectWithValue }) => {
     try {
-      const response = await authAPI.getCompanyDetails();
+      const response = await axios.get(
+        "https://api.yashayah.cloud/auth/company-details",
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          },
+        },
+      );
 
       const data = response.data;
       if (data.status === false) {
@@ -206,7 +222,16 @@ export const registerCompany = createAsyncThunk(
   "auth/registerCompany",
   async (formData, { rejectWithValue }) => {
     try {
-      const response = await authAPI.registerCompany(formData);
+      const response = await axios.post(
+        "https://api.yashayah.cloud/auth/register-company",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          },
+        },
+      );
 
       const data = response.data;
       if (data.status === false) {
@@ -226,7 +251,16 @@ export const updateCompanyDetails = createAsyncThunk(
   "auth/updateCompanyDetails",
   async (formData, { rejectWithValue }) => {
     try {
-      const response = await authAPI.updateCompanyDetails(formData);
+      const response = await axios.post(
+        "https://api.yashayah.cloud/auth/company-details/update",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          },
+        },
+      );
 
       const data = response.data;
       if (data.status === false) {
@@ -242,23 +276,210 @@ export const updateCompanyDetails = createAsyncThunk(
   },
 );
 
+/* ── Domain settings ── */
+export const getDomainSettings = createAsyncThunk(
+  "auth/getDomainSettings",
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await axios.get("https://api.yashayah.cloud/auth/domain-settings", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+export const saveDomainSettings = createAsyncThunk(
+  "auth/saveDomainSettings",
+  async (payload, { rejectWithValue }) => {
+    try {
+      const res = await axios.post("https://api.yashayah.cloud/auth/domain-settings/save", payload, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+export const verifyDomain = createAsyncThunk(
+  "auth/verifyDomain",
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await axios.post("https://api.yashayah.cloud/auth/domain-settings/verify", {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data; // { domainStatus, message }
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+/* ── Snapshot settings ── */
+export const getSnapshot = createAsyncThunk(
+  "auth/getSnapshot",
+  async (_, { rejectWithValue }) => {
+    try {
+      console.log("🔄 getSnapshot → fetching");
+      const res = await apiClient.get("/auth/snapshot");
+      console.log("✅ getSnapshot →", res.data);
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data.data;
+    } catch (e) {
+      console.error("❌ getSnapshot →", e.response?.data || e.message);
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+export const saveSnapshot = createAsyncThunk(
+  "auth/saveSnapshot",
+  async (payload, { rejectWithValue }) => {
+    try {
+      console.log("🔄 saveSnapshot → payload:", payload);
+      const res = await apiClient.post("/auth/snapshot/save", payload);
+      console.log("✅ saveSnapshot →", res.data);
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data.data;
+    } catch (e) {
+      console.error("❌ saveSnapshot →", e.response?.data || e.message);
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+/* ── Admin settings ── */
+export const verifyAdminLock = createAsyncThunk(
+  "auth/verifyAdminLock",
+  async (password, { rejectWithValue }) => {
+    try {
+      const res = await axios.post(
+        "https://api.yashayah.cloud/auth/admin-lock/verify",
+        { password },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` } },
+      );
+      if (!res.data.status || res.data.valid === false) {
+        return rejectWithValue(res.data.message || "Incorrect password");
+      }
+      return res.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || "Verification failed");
+    }
+  }
+);
+
+export const getAdminSettings = createAsyncThunk(
+  "auth/getAdminSettings",
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.get("/auth/admin-settings");
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
+export const saveAdminSettings = createAsyncThunk(
+  "auth/saveAdminSettings",
+  async (payload, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.post("/auth/admin-settings/save", payload);
+      if (!res.data.status) return rejectWithValue(res.data.message);
+      return res.data;
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.message || e.message);
+    }
+  }
+);
+
 // Fetch User Details Thunk
 export const getUserDetails = createAsyncThunk(
   "auth/getUserDetails",
   async (_, { rejectWithValue }) => {
     try {
-      const response = await authAPI.getUserDetails();
-
+      const response = await apiClient.get("/auth/get-user-details");
       const data = response.data;
       if (data.status === false) {
         return rejectWithValue(data.message || "Failed to load user details");
       }
-
       localStorage.setItem("user", JSON.stringify(data.data || null));
       return data.data;
     } catch (error) {
-      const msg =
-        error.response?.data?.message || error.message || "Network error";
+      const msg = error.response?.data?.message || error.message || "Network error";
+      return rejectWithValue(msg);
+    }
+  },
+);
+
+// Request Email Change Thunk
+export const requestEmailChange = createAsyncThunk(
+  "auth/requestEmailChange",
+  async ({ newEmail, password }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.post("/auth/request-email-change", { newEmail, password });
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return res.data.message;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to request email change");
+    }
+  }
+);
+
+// Confirm Email Change Thunk (public, token-gated)
+export const confirmEmailChange = createAsyncThunk(
+  "auth/confirmEmailChange",
+  async (token, { rejectWithValue }) => {
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/auth/confirm-email-change/${token}`);
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return res.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to confirm email change");
+    }
+  }
+);
+
+// Change Password Thunk
+export const changePassword = createAsyncThunk(
+  "auth/changePassword",
+  async ({ currentPassword, newPassword }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.post("/auth/change-password", { currentPassword, newPassword });
+      if (res.data?.status === false) return rejectWithValue(res.data.message);
+      return res.data.message;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to change password");
+    }
+  }
+);
+
+// Update User Profile Thunk
+export const updateUserProfile = createAsyncThunk(
+  "auth/updateUserProfile",
+  async (profileData, { rejectWithValue }) => {
+    try {
+      console.log("🔄 updateUserProfile → sending:", profileData);
+      const response = await apiClient.put("/auth/update-profile", profileData);
+      console.log("✅ updateUserProfile → response:", response.data);
+      const data = response.data;
+      if (data.status === false) {
+        console.error("❌ updateUserProfile → server returned false:", data.message);
+        return rejectWithValue(data.message || "Failed to update profile");
+      }
+      localStorage.setItem("user", JSON.stringify(data.data || null));
+      return data.data;
+    } catch (error) {
+      const msg = error.response?.data?.message || error.message || "Failed to update profile";
+      console.error("❌ updateUserProfile → caught error:", msg, error.response?.data);
       return rejectWithValue(msg);
     }
   },
@@ -272,6 +493,7 @@ const authSlice = createSlice({
     refreshToken: localStorage.getItem("refreshToken") || null,
     isAuthenticated: !!localStorage.getItem("accessToken"),
     loading: false,
+    saving: false,
     error: null,
     successMessage: null,
     registrationSuccess: false,
@@ -287,6 +509,16 @@ const authSlice = createSlice({
     companyLoading: false,
     companyError: null,
     company: null,
+    // Domain
+    domainSettings: null,
+    domainLoading: false,
+    domainVerifying: false,
+    // Snapshot
+    snapshot: null,
+    snapshotLoading: false,
+    // Admin
+    adminSettings: null,
+    adminLoading: false,
   },
   reducers: {
     clearError: (state) => {
@@ -467,7 +699,7 @@ const authSlice = createSlice({
       })
       .addCase(registerCompany.fulfilled, (state, action) => {
         state.loading = false;
-        state.companyDetails = action.payload;
+        state.company = action.payload;
         state.registrationSuccess = true;
       })
       .addCase(registerCompany.rejected, (state, action) => {
@@ -483,7 +715,7 @@ const authSlice = createSlice({
       })
       .addCase(updateCompanyDetails.fulfilled, (state, action) => {
         state.loading = false;
-        state.companyDetails = action.payload;
+        state.company = action.payload;
       })
       .addCase(updateCompanyDetails.rejected, (state, action) => {
         state.loading = false;
@@ -504,7 +736,51 @@ const authSlice = createSlice({
       .addCase(getUserDetails.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
-      });
+      })
+
+      // Update User Profile
+      .addCase(updateUserProfile.pending, (state) => {
+        state.saving = true;
+        state.error = null;
+      })
+      .addCase(updateUserProfile.fulfilled, (state, action) => {
+        state.saving = false;
+        state.user = { ...state.user, ...action.payload };
+      })
+      .addCase(updateUserProfile.rejected, (state, action) => {
+        state.saving = false;
+        state.error = action.payload;
+      })
+
+      // Domain Settings
+      .addCase(getDomainSettings.pending,  (state) => { state.domainLoading = true; })
+      .addCase(getDomainSettings.fulfilled, (state, action) => { state.domainLoading = false; state.domainSettings = action.payload; })
+      .addCase(getDomainSettings.rejected,  (state) => { state.domainLoading = false; })
+      .addCase(saveDomainSettings.pending,  (state) => { state.domainLoading = true; })
+      .addCase(saveDomainSettings.fulfilled, (state) => { state.domainLoading = false; })
+      .addCase(saveDomainSettings.rejected,  (state) => { state.domainLoading = false; })
+      .addCase(verifyDomain.pending,  (state) => { state.domainVerifying = true; })
+      .addCase(verifyDomain.fulfilled, (state, action) => {
+        state.domainVerifying = false;
+        if (state.domainSettings) state.domainSettings.domainStatus = action.payload.domainStatus;
+      })
+      .addCase(verifyDomain.rejected,  (state) => { state.domainVerifying = false; })
+
+      // Snapshot
+      .addCase(getSnapshot.pending,  (state) => { state.snapshotLoading = true; })
+      .addCase(getSnapshot.fulfilled, (state, action) => { state.snapshotLoading = false; state.snapshot = action.payload; })
+      .addCase(getSnapshot.rejected,  (state) => { state.snapshotLoading = false; })
+      .addCase(saveSnapshot.pending,  (state) => { state.snapshotLoading = true; })
+      .addCase(saveSnapshot.fulfilled, (state, action) => { state.snapshotLoading = false; if (action.payload) state.snapshot = action.payload; })
+      .addCase(saveSnapshot.rejected,  (state) => { state.snapshotLoading = false; })
+
+      // Admin Settings
+      .addCase(getAdminSettings.pending,  (state) => { state.adminLoading = true; })
+      .addCase(getAdminSettings.fulfilled, (state, action) => { state.adminLoading = false; state.adminSettings = action.payload; })
+      .addCase(getAdminSettings.rejected,  (state) => { state.adminLoading = false; })
+      .addCase(saveAdminSettings.pending,  (state) => { state.adminLoading = true; })
+      .addCase(saveAdminSettings.fulfilled, (state) => { state.adminLoading = false; })
+      .addCase(saveAdminSettings.rejected,  (state) => { state.adminLoading = false; });
   },
 });
 

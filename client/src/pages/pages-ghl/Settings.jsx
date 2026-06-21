@@ -1,79 +1,92 @@
-// src/pages/SettingsPage.jsx
-
+// src/pages/pages-ghl/Settings.jsx
 import React, { useState } from "react";
+import { Building2, Plug } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-// Import Feature Components
-import AccountSettings from "../../components/components-ghl/Setting/Account.jsx";
-import WorkspaceSettings from "../../components/components-ghl/Setting/WorkSpace.jsx";
-import MembersSettings from "../../components/components-ghl/Setting/Members.jsx";
-import Integration from "../../components/components-ghl/Setting/Integration.jsx";
+import SubAccountTab from "../../components/components-ghl/Setting/SubAccountTab.jsx";
+import Integration   from "../../components/components-ghl/Setting/Integration.jsx";
 
-const TopTabButton = ({ isActive, children, onClick }) => (
-  <button
-    className={`px-4 py-2 text-sm font-medium transition-colors rounded-t-md ${
-      isActive ? "bg-gray-100 border" : "text-gray-500 hover:text-gray-700"
-    }`}
-    onClick={onClick}
-  >
-    {children}
-  </button>
-);
+const TABS = [
+  { id: "subaccount",  label: "Sub-account",    icon: Building2 },
+  { id: "integration", label: "CRM Connection", icon: Plug      },
+];
 
 const GHLSettings = () => {
-  const [activeTopTab, setActiveTopTab] = useState("account"); // 'account', 'workspace', 'members', 'billing'
+  const [activeTab, setActiveTab] = useState("subaccount");
 
-  let content;
-  switch (activeTopTab) {
-    case "workspace":
-      content = <WorkspaceSettings />;
-      break;
-    case "members":
-      content = <MembersSettings />;
-      break;
-    case "integration":
-      content = <Integration />;
-      break;
-    case "account":
-    default:
-      content = <AccountSettings />;
-      break;
-  }
+  const content = {
+    subaccount:  <SubAccountTab />,
+    integration: <Integration />,
+  }[activeTab] ?? <SubAccountTab />;
 
   return (
-    <div className=" bg-gray-50">
-      <div className=" mx-auto">
-        {/* Top-level Tabs Navigation */}
-        <div className="flex space-x-2 mb-6 py-3 bg-white">
-          <TopTabButton
-            isActive={activeTopTab === "account"}
-            onClick={() => setActiveTopTab("account")}
-          >
-            Account
-          </TopTabButton>
-          <TopTabButton
-            isActive={activeTopTab === "workspace"}
-            onClick={() => setActiveTopTab("workspace")}
-          >
-            Workspace
-          </TopTabButton>
-          {/* <TopTabButton
-            isActive={activeTopTab === "members"}
-            onClick={() => setActiveTopTab("members")}
-          >
-            Members
-          </TopTabButton> */}
-          <TopTabButton
-            isActive={activeTopTab === "integration"}
-            onClick={() => setActiveTopTab("integration")}
-          >
-            Integrations
-          </TopTabButton>
-        </div>
+    <div className="min-h-screen bg-gray-50/60">
+      <div className="max-w-5xl mx-auto px-5 sm:px-8 py-8">
 
-        <div className="flex justify-center">
-          {/* Tab Content Area */}
-          {content}
-        </div>
+        {/* ── Page header ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="mb-8"
+        >
+          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Manage this sub-account's profile and CRM connection.
+          </p>
+        </motion.div>
+
+        {/* ── Card with tabs ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.07 }}
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+        >
+          {/* Tab strip */}
+          <div className="flex border-b border-gray-100 px-2 pt-2 gap-1">
+            {TABS.map(({ id, label, icon: Icon }) => {
+              const isActive = activeTab === id;
+              return (
+                <motion.button
+                  key={id}
+                  onClick={() => setActiveTab(id)}
+                  whileHover={{ y: -1 }}
+                  transition={{ duration: 0.12 }}
+                  className={`relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors duration-150
+                    ${isActive
+                      ? "text-indigo-600"
+                      : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                    }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                  {isActive && (
+                    <motion.span
+                      layoutId="ghlSettingsTabUnderline"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t bg-gradient-to-r from-indigo-500 to-violet-600"
+                    />
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
+
+          {/* Tab content */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2 }}
+              className="p-6 sm:p-8"
+            >
+              {content}
+            </motion.div>
+          </AnimatePresence>
+        </motion.div>
+
       </div>
     </div>
   );

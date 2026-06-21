@@ -10,8 +10,12 @@ const {
   generatePrompt,
   deleteNumberFromAssistant,
   addATool,
+  importToolById,
+  createCustomTool,
   deleteAssistantTool,
   addCalendarId,
+  removeCalendarId,
+  setAssistantMeta,
   getAssistantTools,
   addDynamicFMessageToDB,
   addKnowledgeBase,
@@ -27,6 +31,9 @@ const {
   linkKnowledgeBaseToAssistant,
   getAssistantKnowledgeBases,
   getAllKnowledgeBases,
+  kbSearch,
+  getGhlCustomFields,
+  saveCustomFieldMap,
   removeKnowledgeBaseFromAssistant,
   deleteKnowledgeBase,
   executeToolFromVapi,
@@ -40,6 +47,9 @@ const {
   getUserAnalytics,
   getTeamNotes,
   updateTeamNotes,
+  getSubAccountSpend,
+  getSubAccountGhlDetails,
+  importContacts,
 } = require("../controller/assistant.controller");
 const { verifyAccessToken } = require("../jwt_helpers");
 
@@ -54,6 +64,10 @@ const {
   ADD_TOOL,
   DELETE_TOOL,
   ADD_CALENDAR,
+  REMOVE_CALENDAR,
+  SET_ASSISTANT_META,
+  IMPORT_TOOL,
+  CREATE_CUSTOM_TOOL,
   GET_TOOLS,
   ADD_DYNAMIC_MESSAGE,
   ADD_KNOWLEDGE_BASES,
@@ -68,6 +82,9 @@ const {
   GET_TOOL_DETAILS,
   GET_FILE_DETAILS,
   GET_ALL_KNOWLEDGE_BASES,
+  KB_SEARCH,
+  GET_GHL_CUSTOM_FIELDS,
+  SAVE_CUSTOM_FIELD_MAP,
   LINK_KNOWLEDGE_BASES_2_ASSISTANT,
   RMV_ASSISTANT_KNOWLEDGE,
   EXECUTE_TOOL,
@@ -82,6 +99,8 @@ const {
   GET_ANALYTICS,
   GET_TEAM_NOTES,
   UPDATE_TEAM_NOTES,
+  GET_SUBACCOUNT_SPEND,
+  IMPORT_CONTACTS,
 } = require("../constants");
 
 const upload = multer({
@@ -95,7 +114,10 @@ router.get(GET_ASSISTANT, verifyAccessToken, getAssistant);
 router.get(GET_ASSISTANTS, verifyAccessToken, getAssistants);
 router.get(GET_CONTACTS, verifyAccessToken, getContacts);
 router.get(GET_CONTACT, verifyAccessToken, getContact);
-router.get(GET_ANALYTICS, verifyAccessToken, getUserAnalytics);
+router.get(GET_ANALYTICS,        verifyAccessToken, getUserAnalytics);
+router.get(GET_SUBACCOUNT_SPEND, verifyAccessToken, getSubAccountSpend);
+router.get("/subaccount-ghl-details", verifyAccessToken, getSubAccountGhlDetails);
+router.post(IMPORT_CONTACTS,     verifyAccessToken, importContacts);
 router.post(CREATE_CONTACT, verifyAccessToken, createContact);
 router.put(UPDATE_CONTACT, verifyAccessToken, updateContact);
 router.delete(DELETE_CONTACT, verifyAccessToken, deleteContact);
@@ -109,10 +131,14 @@ router.delete(
 
 // new routers
 router.post(ADD_TOOL, verifyAccessToken, addATool);
+router.post(IMPORT_TOOL, verifyAccessToken, importToolById);
+router.post(CREATE_CUSTOM_TOOL, verifyAccessToken, createCustomTool);
 router.post(SEND_CHAT_MESSAGE, verifyAccessToken, sendChatMessage);
 router.post(EXECUTE_TOOL, executeToolFromVapi);
 router.delete(DELETE_TOOL, verifyAccessToken, deleteAssistantTool);
 router.post(ADD_CALENDAR, verifyAccessToken, addCalendarId);
+router.post(REMOVE_CALENDAR, verifyAccessToken, removeCalendarId);
+router.post(SET_ASSISTANT_META, verifyAccessToken, setAssistantMeta);
 router.get(GET_TOOLS, verifyAccessToken, getAssistantTools);
 router.post(ADD_DYNAMIC_MESSAGE, verifyAccessToken, addDynamicFMessageToDB);
 router.get(GET_DYNAMIC_MESSAGE, verifyAccessToken, getDynamicFMessage);
@@ -136,6 +162,9 @@ router.get(
   getAssistantKnowledgeBases,
 );
 router.get(GET_ALL_KNOWLEDGE_BASES, verifyAccessToken, getAllKnowledgeBases);
+router.get(KB_SEARCH, verifyAccessToken, kbSearch);
+router.get(GET_GHL_CUSTOM_FIELDS, verifyAccessToken, getGhlCustomFields);
+router.post(SAVE_CUSTOM_FIELD_MAP, verifyAccessToken, saveCustomFieldMap);
 router.post(
   LINK_KNOWLEDGE_BASES_2_ASSISTANT,
   verifyAccessToken,

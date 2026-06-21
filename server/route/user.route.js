@@ -12,7 +12,18 @@ const {
   createCompanyDetails,
   updateCompanyDetails,
   getUserDetails,
-  // admin_super_signup,
+  updateUserProfile,
+  requestEmailChange,
+  confirmEmailChange,
+  changePassword,
+  getDomainSettings,
+  saveDomainSettings,
+  verifyDomain,
+  getSnapshot,
+  saveSnapshot,
+  getAdminSettings,
+  saveAdminSettings,
+  verifyAdminLock,
 } = require("../controller/user.controller");
 const {
   USER_SIGNUP,
@@ -26,6 +37,17 @@ const {
   REGISTER_COMPANY,
   UPDATE_COMPANY_DETAILS,
   GET_USER_DETAILS,
+  UPDATE_USER_PROFILE,
+  REQUEST_EMAIL_CHANGE,
+  CONFIRM_EMAIL_CHANGE,
+  CHANGE_PASSWORD,
+  GET_DOMAIN_SETTINGS,
+  SAVE_DOMAIN_SETTINGS,
+  VERIFY_DOMAIN,
+  GET_SNAPSHOT,
+  SAVE_SNAPSHOT,
+  GET_ADMIN_SETTINGS,
+  SAVE_ADMIN_SETTINGS,
 } = require("../constants");
 const { verifyAccessToken } = require("../jwt_helpers");
 const multer = require("multer");
@@ -43,7 +65,14 @@ router.post(USER_RESET_PASS, handleResetPassword);
 router.delete(USER_LOGOUT, logout);
 router.post(EXCHANGE_TOKEN, exchangeToken);
 router.get(GET_COMPANY_DETAILS, verifyAccessToken, getCompanyDetails);
-router.get(GET_USER_DETAILS, verifyAccessToken, getUserDetails);
+router.get(GET_USER_DETAILS,     verifyAccessToken, getUserDetails);
+router.put(UPDATE_USER_PROFILE,  (req, res, next) => {
+  console.log("📥 PUT /auth/update-profile hit — auth header present:", !!req.headers["authorization"]);
+  next();
+}, verifyAccessToken, updateUserProfile);
+router.post(REQUEST_EMAIL_CHANGE, verifyAccessToken, requestEmailChange);
+router.get(CONFIRM_EMAIL_CHANGE,  confirmEmailChange); // public — token-gated
+router.post(CHANGE_PASSWORD,      verifyAccessToken, changePassword);
 router.post(
   REGISTER_COMPANY,
   verifyAccessToken,
@@ -56,5 +85,19 @@ router.post(
   upload.single("logo"),
   updateCompanyDetails,
 );
+
+// Domain settings
+router.get(GET_DOMAIN_SETTINGS,  verifyAccessToken, getDomainSettings);
+router.post(SAVE_DOMAIN_SETTINGS, verifyAccessToken, saveDomainSettings);
+router.post(VERIFY_DOMAIN,        verifyAccessToken, verifyDomain);
+
+// Snapshot settings
+router.get(GET_SNAPSHOT,  verifyAccessToken, getSnapshot);
+router.post(SAVE_SNAPSHOT, verifyAccessToken, saveSnapshot);
+
+// Admin settings
+router.get(GET_ADMIN_SETTINGS,  verifyAccessToken, getAdminSettings);
+router.post(SAVE_ADMIN_SETTINGS, verifyAccessToken, saveAdminSettings);
+router.post("/admin-lock/verify", verifyAccessToken, verifyAdminLock);
 
 module.exports = router;

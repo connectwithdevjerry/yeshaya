@@ -1,50 +1,90 @@
+// src/components/components-ghl/AssistantsBuilder/components/PromptEditor.jsx
 import React, { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import {
-  HelpCircle,
-  ChevronsRight,
   X,
   Phone,
   Tag,
   Settings,
-  ArrowLeft,
-  Tags,
   Pencil,
-  Sparkle,
   Volume2,
   AlertCircle,
   Sparkles,
   Copy,
-  Code, // ✅ Added for JSON button
+  Code,
   Loader2,
-  Check, // ✅ Added for feedback
+  Check,
+  Wand2,
+  MessageSquare,
+  Mic,
+  Wrench,
+  ChevronRight,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { ChatLabView } from "./ChatLab";
 import { VoiceLabView } from "./VoiceLab";
 import { ToolkitSidebar } from "./AssistantSidebar";
 import { GeneratePromptModal } from "./GeneratePromptModal";
 import DynamicGreetingModal from "./DynamicGreetingModal";
-import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { VoiceMenuDrawer } from "./VoiceMenu";
 import { VoiceSettingsDropdown } from "./VoiceMenuModals/VoiceSettingsDropdown";
 import { PromptSnippetsDropdown } from "./PromptSnippetsModal";
 import { toast } from "react-hot-toast";
 import { generateOutboundCallUrl } from "../../../../store/slices/assistantsSlice";
+import { fetchPurchasedNumbers } from "../../../../store/slices/numberSlice";
+import apiClient from "../../../../store/api/config";
 
-const TabButton = ({ text, isActive, onClick }) => (
+const TABS = [
+  { id: "Builder",   label: "Builder",   icon: Wrench },
+  { id: "Voice Lab", label: "Voice Lab", icon: Mic },
+  { id: "Chat Lab",  label: "Chat Lab",  icon: MessageSquare },
+];
+
+const TabButton = ({ tab, isActive, onClick }) => {
+  const Icon = tab.icon;
+  return (
+    <button
+      onClick={onClick}
+      className={`relative flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl transition-all ${
+        isActive
+          ? "text-indigo-600 bg-indigo-50"
+          : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+      }`}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {tab.label}
+      {isActive && (
+        <motion.div
+          layoutId="tab-indicator"
+          className="absolute inset-0 rounded-xl ring-2 ring-indigo-500/30 pointer-events-none"
+          transition={{ type: "spring", damping: 28, stiffness: 300 }}
+        />
+      )}
+    </button>
+  );
+};
+
+const PillButton = ({ icon: Icon, label, onClick, className = "" }) => (
   <button
     onClick={onClick}
+<<<<<<< HEAD
     className={`px-4 py-2 text-sm font-medium transition-all duration-200 border-b-2 ${
       isActive
         ? "border-indigo-600 bg-indigo-50/50 text-indigo-700 font-bold"
         : "border-transparent text-gray-500 hover:bg-gray-50"
     }`}
+=======
+    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all ${className}`}
+>>>>>>> projects-ui
   >
-    {text}
+    <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+    {label}
   </button>
 );
 
 export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
+<<<<<<< HEAD
   const dispatch = useDispatch();
   const [activeTab, setActiveTab] = useState("Builder");
   const [isToolkitOpen, setIsToolkitOpen] = useState(false);
@@ -61,53 +101,130 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
   const maxChars = 8024;
   const charCount = promptContent.length;
   const navigate = useNavigate();
+=======
+  const dispatch    = useDispatch();
+  const navigate    = useNavigate();
+>>>>>>> projects-ui
   const [searchParams] = useSearchParams();
 
-  const { selectedAssistant } = useSelector((state) => state.assistants);
-  const [voiceDisplay, setVoiceDisplay] = useState("Select Voice");
-  const [phoneNumber, setPhoneNumber] = useState("+1222342743");
-  const [assistantTag, setAssistantTag] = useState("");
+  const [activeTab,                   setActiveTab]                   = useState(
+    () => searchParams.get("tab") || "Builder",
+  );
 
-  // ✅ Unified Logic for URL and Full JSON copying
-  const handleCopyAction = async (type) => {
-    if (!selectedAssistant?.id) {
-      toast.error("No Assistant ID found");
-      return;
+  // Honor ?tab= from the URL (e.g. the header's "Testing Lab" button)
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t && TABS.some((tab) => tab.id === t) && t !== activeTab) setActiveTab(t);
+  }, [searchParams]);
+  const [isToolkitOpen,               setIsToolkitOpen]               = useState(true);
+  const [isGeneratePromptModalOpen,   setIsGeneratePromptModalOpen]   = useState(false);
+  const [isDynamicGreetingModalOpen,  setIsDynamicGreetingModalOpen]  = useState(false);
+  const [isSnippetsOpen,              setIsSnippetsOpen]              = useState(false);
+  const [isVoiceMenuOpen,             setIsVoiceMenuOpen]             = useState(false);
+  const [isVoiceSettingsOpen,         setIsVoiceSettingsOpen]         = useState(false);
+  const [isGenerating,                setIsGenerating]                = useState(false);
+  const [copySuccess,                 setCopySuccess]                 = useState(null);
+
+  const maxChars  = 8024;
+  const charCount = promptContent.length;
+  const pct       = Math.min((charCount / maxChars) * 100, 100);
+
+  const { selectedAssistant } = useSelector((s) => s.assistants);
+  const [voiceDisplay,  setVoiceDisplay]  = useState("Select Voice");
+  const [phoneNumber,   setPhoneNumber]   = useState("No number");
+  const [assistantTag,  setAssistantTag]  = useState("");
+  const [assignedTags,  setAssignedTags]  = useState([]); // active tags linked to this assistant
+
+  const formatVoiceDisplay = (voice) => {
+    if (!voice) return "Select Voice";
+    if (voice.provider === "azure" && voice.voiceId) {
+      const parts = voice.voiceId.split("-");
+      return parts[parts.length - 1].replace("Neural", "");
     }
+    return voice.voiceId || "Select Voice";
+  };
 
+  useEffect(() => {
+<<<<<<< HEAD
+    if (selectedAssistant) {
+      if (selectedAssistant.voice)
+        setVoiceDisplay(formatVoiceDisplay(selectedAssistant.voice));
+=======
+    if (selectedAssistant && !promptContent) {
+      const systemPrompt = selectedAssistant.model?.systemPrompt || "";
+      setPromptContent(systemPrompt);
+>>>>>>> projects-ui
+      if (selectedAssistant.id) setAssistantTag(selectedAssistant.id);
+    }
+  }, [selectedAssistant]);
+
+  // Load the active tags assigned to this assistant
+  useEffect(() => {
+    const subaccountId = searchParams.get("subaccount");
+    const assistantId  = selectedAssistant?.id;
+    if (!subaccountId || !assistantId) return;
+    apiClient.get(`/active-tags?subaccountId=${subaccountId}`)
+      .then((res) => {
+        if (res.data.status) {
+          setAssignedTags((res.data.data || []).filter((t) => t.assistantId === assistantId));
+        }
+      })
+      .catch(() => {});
+  }, [searchParams, selectedAssistant?.id]);
+
+  // Resolve the phone number actually connected to this assistant
+  useEffect(() => {
+    const subaccountId = searchParams.get("subaccount");
+    const assistantId  = selectedAssistant?.id;
+    if (!subaccountId || !assistantId) return;
+    dispatch(fetchPurchasedNumbers({ subaccountId, assistantId })).unwrap()
+      .then((list) => {
+        const first = (list || []).find((n) => n?.phoneNumberDetails?.phoneNumber);
+        setPhoneNumber(first?.phoneNumberDetails?.phoneNumber || "No number");
+      })
+      .catch(() => setPhoneNumber("No number"));
+  }, [dispatch, searchParams, selectedAssistant?.id]);
+
+  // Keep the voice pill in sync whenever the selected voice changes (e.g. after
+  // picking one in the Voice Library) — not gated by promptContent.
+  useEffect(() => {
+    setVoiceDisplay(formatVoiceDisplay(selectedAssistant?.voice));
+  }, [selectedAssistant?.voice?.voiceId, selectedAssistant?.voice?.provider]);
+
+  useEffect(() => {
+    if (activeTab !== "Builder") setIsToolkitOpen(false);
+  }, [activeTab]);
+
+  const getContextualPath = (targetRoute) => {
+    const params = new URLSearchParams({
+      agencyid:   searchParams.get("agencyid") || "",
+      subaccount: searchParams.get("subaccount") || "",
+      route:      targetRoute,
+    });
+    return `/app?${params.toString()}`;
+  };
+
+  const handleCopyAction = async (type) => {
+    if (!selectedAssistant?.id) { toast.error("No Assistant ID found"); return; }
     setIsGenerating(true);
     try {
-      const resultAction = await dispatch(
-        generateOutboundCallUrl({ assistantId: selectedAssistant.id }),
-      );
-
+      const resultAction = await dispatch(generateOutboundCallUrl({ assistantId: selectedAssistant.id }));
       if (generateOutboundCallUrl.fulfilled.match(resultAction)) {
         const responseData = resultAction.payload;
-
         if (type === "url") {
-          // Copy only the nested URL string
           const urlOnly = responseData?.data?.url || responseData?.url;
-          if (!urlOnly) throw new Error("URL not found in response");
-
+          if (!urlOnly) throw new Error("URL not found");
           await navigator.clipboard.writeText(urlOnly);
           toast.success("Outbound URL copied!");
         } else {
-
           const jsonTemplate = {
-            fromNumber: selectedAssistant?.phoneNumber || "+18302895783",
+            fromNumber:    selectedAssistant?.phoneNumber || "+18302895783",
             customerNumber: "+2349137628206",
-            dynamicValues: {
-              firstName: "Jeremiah",
-            },
+            dynamicValues:  { firstName: "Jeremiah" },
           };
-
-          await navigator.clipboard.writeText(
-            JSON.stringify(jsonTemplate, null, 4),
-          );
-          toast.success("JSON Payload Template copied!");
+          await navigator.clipboard.writeText(JSON.stringify(jsonTemplate, null, 4));
+          toast.success("JSON Payload copied!");
         }
-
-        // Show brief success icon feedback
         setCopySuccess(type);
         setTimeout(() => setCopySuccess(null), 2000);
       } else {
@@ -121,84 +238,17 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
     }
   };
 
-  const handleAddSnippet = (snippetText) => {
-    setPromptContent((prev) => prev + snippetText);
-  };
+  const handleAddSnippet = (snippetText) => setPromptContent((prev) => prev + snippetText);
 
-  const formatVoiceDisplay = (voice) => {
-    if (!voice) return "Select Voice";
-    if (voice.provider === "azure" && voice.voiceId) {
-      const parts = voice.voiceId.split("-");
-      return parts[parts.length - 1].replace("Neural", "");
-    }
-    return voice.voiceId || "Select Voice";
-  };
+  const renderBuilderContent = () => (
+    <div className="flex h-full">
+      <div className="flex-1 flex flex-col bg-gray-50 border-r border-gray-100 overflow-hidden">
+        {/* Toolbar */}
+        <div className="flex flex-wrap justify-between items-center bg-white px-5 py-3 border-b border-gray-100 gap-3">
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-bold text-gray-800">Global Prompt</h2>
 
-  useEffect(() => {
-    if (selectedAssistant) {
-      if (selectedAssistant.voice)
-        setVoiceDisplay(formatVoiceDisplay(selectedAssistant.voice));
-      if (selectedAssistant.id) setAssistantTag(selectedAssistant.id);
-      if (selectedAssistant.phoneNumber)
-        setPhoneNumber(selectedAssistant.phoneNumber);
-    }
-  }, [selectedAssistant]);
-
-  const getContextualPath = (targetRoute) => {
-    const params = new URLSearchParams({
-      agencyid: searchParams.get("agencyid") || "",
-      subaccount: searchParams.get("subaccount") || "",
-      route: targetRoute,
-    });
-    return `/app?${params.toString()}`;
-  };
-
-  const toggleToolkit = () => setIsToolkitOpen((prev) => !prev);
-  const openGeneratePromptModal = () => setIsGeneratePromptModalOpen(true);
-  const closeGeneratePromptModal = () => setIsGeneratePromptModalOpen(false);
-  const openDynamicGreetingModal = () => setIsDynamicGreetingModalOpen(true);
-  const closeDynamicGreetingModal = () => setIsDynamicGreetingModalOpen(false);
-  const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
-  const openVoiceMenu = () => setIsVoiceMenuOpen(true);
-  const closeVoiceMenu = () => setIsVoiceMenuOpen(false);
-  const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState(false);
-
-  useEffect(() => {
-    if (activeTab !== "Builder") setIsToolkitOpen(false);
-  }, [activeTab]);
-
-  const renderContentView = () => {
-    if (activeTab === "Chat Lab") return <ChatLabView />;
-    if (activeTab === "Voice Lab") return <VoiceLabView />;
-
-    return (
-      <div className="flex h-full">
-        <div className="flex-1 bg-gray-50 border-r overflow-y-auto no-scrollbar">
-          <div className="flex flex-wrap justify-between items-center bg-white px-6 py-1 border-b shadow-sm gap-3">
-            <h2 className="text-md font-semibold text-gray-800 flex items-center space-x-2">
-              <span>Global Prompt</span>
-              <span className="text-[10px] font-normal text-gray-500">
-                {charCount} / {maxChars}
-              </span>
-              <AlertCircle
-                className="w-4 h-4 text-gray-400 cursor-pointer"
-                title="Help"
-              />
-            </h2>
-
-            <div className="flex flex-wrap items-center space-x-4 text-sm text-blue-600 gap-y-2">
-              <button
-                className="flex items-center p-2 space-x-1 hover:bg-blue-50"
-                onClick={openDynamicGreetingModal}
-              >
-                <X className="w-3 h-3" />
-                <span>Dynamic Greeting</span>
-              </button>
-
-              <button className="hover:bg-blue-50 p-2 flex items-center gap-1">
-                <Tags size={15} /> Fields
-              </button>
-
+<<<<<<< HEAD
               {/* ✅ ACTION GROUP: Split URL & JSON Button */}
               <div className="flex items-center border border-blue-200 rounded-md bg-white overflow-hidden shadow-sm">
                 <button
@@ -244,111 +294,149 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
                   isOpen={isSnippetsOpen}
                   onClose={() => setIsSnippetsOpen(false)}
                   onAddSnippet={handleAddSnippet}
+=======
+            {/* Character bar */}
+            <div className="flex items-center gap-2">
+              <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <motion.div
+                  className={`h-full rounded-full ${pct > 90 ? "bg-rose-500" : pct > 70 ? "bg-amber-400" : "bg-indigo-500"}`}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.3 }}
+>>>>>>> projects-ui
                 />
               </div>
-            </div>
-
-            <div className="mt-2 sm:mt-0">
-              <button
-                className="flex text-sm items-center p-2 rounded-md space-x-1 hover:bg-blue-50 text-blue-600"
-                onClick={openGeneratePromptModal}
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>Generate</span>
-              </button>
+              <span className={`text-[10px] font-medium tabular-nums ${pct > 90 ? "text-rose-500" : "text-gray-400"}`}>
+                {charCount.toLocaleString()} / {maxChars.toLocaleString()}
+              </span>
             </div>
           </div>
 
-          <div className="p-2">
-            <textarea
-              className="w-full no-scrollbar h-[600px] p-4 text-gray-800 bg-gray-50 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 overflow-y-auto"
-              value={promptContent}
-              onChange={(e) => setPromptContent(e.target.value)}
-              placeholder="Enter your prompt here..."
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            <PillButton icon={X}      label="Dynamic Greeting" onClick={() => setIsDynamicGreetingModalOpen(true)} />
+
+            {/* URL + JSON split button */}
+            <div className="flex items-center overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              <button
+                onClick={() => handleCopyAction("url")}
+                disabled={isGenerating}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 border-r border-gray-200 transition-all disabled:opacity-50"
+                title="Copy Outbound URL"
+              >
+                {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : copySuccess === "url" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                URL
+              </button>
+              <button
+                onClick={() => handleCopyAction("json")}
+                disabled={isGenerating}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all disabled:opacity-50"
+                title="Copy JSON Payload"
+              >
+                {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : copySuccess === "json" ? <Check className="w-3 h-3 text-emerald-500" /> : <Code className="w-3 h-3" />}
+                JSON
+              </button>
+            </div>
+
+            <div className="relative">
+              <PillButton icon={Pencil} label="Snippet" onClick={() => setIsSnippetsOpen(!isSnippetsOpen)} />
+              <PromptSnippetsDropdown
+                isOpen={isSnippetsOpen}
+                onClose={() => setIsSnippetsOpen(false)}
+                onAddSnippet={handleAddSnippet}
+              />
+            </div>
+
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              onClick={() => setIsGeneratePromptModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-xs font-semibold shadow-sm hover:brightness-110 transition-all"
+            >
+              <Wand2 className="w-3.5 h-3.5" /> Generate
+            </motion.button>
           </div>
         </div>
 
-        <ToolkitSidebar
-          isOpen={isToolkitOpen}
-          onToggle={setIsToolkitOpen}
-          activeTab={activeTab}
-        />
+        {/* Textarea */}
+        <div className="flex-1 p-3 overflow-hidden">
+          <textarea
+            className="w-full h-full p-4 text-sm text-gray-800 bg-white border border-gray-100 rounded-2xl resize-none outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 font-mono leading-relaxed transition-all no-scrollbar shadow-sm placeholder:text-gray-300"
+            value={promptContent}
+            onChange={(e) => setPromptContent(e.target.value)}
+            placeholder="Write your assistant's system prompt here…"
+          />
+        </div>
       </div>
-    );
-  };
+
+      <ToolkitSidebar
+        isOpen={isToolkitOpen}
+        onToggle={setIsToolkitOpen}
+        activeTab={activeTab}
+        promptContent={promptContent}
+        setPromptContent={setPromptContent}
+      />
+    </div>
+  );
 
   return (
-    <div className="flex flex-col flex-1 bg-white relative">
-      <div className="flex justify-between items-center py-2 px-4 border-b border-gray-200">
-        <div className="flex space-x-1">
-          {["Builder", "Voice Lab", "Chat Lab"].map((tab) => (
+    <div className="flex flex-col flex-1 bg-white relative overflow-hidden">
+      {/* Tab bar + pill controls */}
+      <div className="flex justify-between items-center py-2 px-4 border-b border-gray-100 bg-white">
+        <div className="flex gap-1">
+          {TABS.map((tab) => (
             <TabButton
-              key={tab}
-              text={tab}
-              isActive={activeTab === tab}
-              onClick={() => setActiveTab(tab)}
+              key={tab.id}
+              tab={tab}
+              isActive={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
             />
           ))}
         </div>
 
-        <div className="flex gap-2 items-center">
-          <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
-            <div
-              className="flex items-center space-x-2"
-              onClick={() => navigate(getContextualPath("/activetags"))}
-            >
-              <Tag className="w-4 h-4 text-gray-400" />
-              <span className="text-sm font-mono text-gray-700 truncate max-w-[140px]">
-                {assistantTag
-                  ? `${assistantTag.slice(0, 8)}...${assistantTag.slice(-8)}`
-                  : "No ID"}
-              </span>
-            </div>
-            <div className="flex items-center space-x-2 border-l-2 pl-2">
-              <button className="text-gray-400 p-1 rounded-full hover:bg-gray-100">
-                <Settings size={16} />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
-            <div
-              onClick={() => navigate(getContextualPath("/call"))}
-              className="flex items-center space-x-2"
-            >
-              <Phone size={16} className="text-gray-400" />
-              <span className="text-sm font-mono text-gray-700">
-                {phoneNumber}
-              </span>
-            </div>
-            <div className="flex items-center space-x-2 border-l-2 pl-2">
-              <button className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100">
-                <Settings size={16} />
-              </button>
+        <div className="flex items-center gap-2">
+          {/* Assistant tags pill — shows active tags assigned to this assistant */}
+          <div
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 bg-white cursor-pointer hover:border-indigo-200 hover:bg-indigo-50 transition-all"
+            onClick={() => navigate(getContextualPath("/activetags"))}
+            title={assignedTags.length ? `Tags: ${assignedTags.map((t) => t.name).join(", ")}` : "No active tags assigned — click to manage"}
+          >
+            <Tag className="w-3.5 h-3.5 text-gray-400" />
+            <span className="text-xs font-medium text-gray-600 truncate max-w-[140px]">
+              {assignedTags.length === 0
+                ? "No tags"
+                : assignedTags.length === 1
+                  ? assignedTags[0].name
+                  : `${assignedTags[0].name} +${assignedTags.length - 1}`}
+            </span>
+            <div className="border-l border-gray-200 pl-1.5 ml-0.5">
+              <Settings className="w-3 h-3 text-gray-400" />
             </div>
           </div>
 
+          {/* Phone pill — shows the connected number; opens the Call Center */}
+          <div
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 bg-white cursor-pointer hover:border-indigo-200 hover:bg-indigo-50 transition-all"
+            onClick={() => navigate(getContextualPath("/call"))}
+            title={phoneNumber === "No number" ? "No phone number connected" : `Connected number: ${phoneNumber}`}
+          >
+            <Phone className="w-3.5 h-3.5 text-gray-400" />
+            <span className="text-xs font-mono text-gray-600">{phoneNumber}</span>
+            <div className="border-l border-gray-200 pl-1.5 ml-0.5">
+              <Settings className="w-3 h-3 text-gray-400" />
+            </div>
+          </div>
+
+          {/* Voice pill */}
           <div className="relative">
-            <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-3 py-1 cursor-pointer">
-              <div
-                className="flex items-center space-x-2"
-                onClick={openVoiceMenu}
-              >
-                <Volume2 size={16} className="text-gray-400" />
-                <span className="text-sm font-mono text-gray-700">
-                  {voiceDisplay}
-                </span>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 bg-white cursor-pointer hover:border-violet-200 hover:bg-violet-50 transition-all">
+              <div className="flex items-center gap-1.5" onClick={() => setIsVoiceMenuOpen(true)}>
+                <Volume2 className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-xs font-mono text-gray-600">{voiceDisplay}</span>
               </div>
-              <div className="flex items-center space-x-2 border-l-2 pl-2">
+              <div className="border-l border-gray-200 pl-1.5 ml-0.5">
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsVoiceSettingsOpen(!isVoiceSettingsOpen);
-                  }}
-                  className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                  onClick={(e) => { e.stopPropagation(); setIsVoiceSettingsOpen(!isVoiceSettingsOpen); }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
-                  <Settings size={16} />
+                  <Settings className="w-3 h-3" />
                 </button>
               </div>
             </div>
@@ -357,9 +445,27 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
               onClose={() => setIsVoiceSettingsOpen(false)}
             />
           </div>
+
+          {/* Toolkit toggle */}
+          {activeTab === "Builder" && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              onClick={() => setIsToolkitOpen((p) => !p)}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl border transition-all text-xs font-medium ${
+                isToolkitOpen
+                  ? "border-indigo-200 bg-indigo-50 text-indigo-600"
+                  : "border-gray-200 bg-white text-gray-500 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+              }`}
+            >
+              <Wrench className="w-3.5 h-3.5" />
+              Toolkit
+              <ChevronRight className={`w-3 h-3 transition-transform ${isToolkitOpen ? "rotate-180" : ""}`} />
+            </motion.button>
+          )}
         </div>
       </div>
 
+<<<<<<< HEAD
       <div className="flex-1 overflow-hidden">{renderContentView()}</div>
 
       {activeTab === "Builder" && !isToolkitOpen && (
@@ -370,16 +476,37 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
           <ArrowLeft size={20} />
         </button>
       )}
+=======
+      {/* Content */}
+      <div className="flex-1 overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18 }}
+            className="h-full"
+          >
+            {activeTab === "Chat Lab"  && <ChatLabView />}
+            {activeTab === "Voice Lab" && <VoiceLabView />}
+            {activeTab === "Builder"   && renderBuilderContent()}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+>>>>>>> projects-ui
 
       <GeneratePromptModal
         isOpen={isGeneratePromptModalOpen}
-        onClose={closeGeneratePromptModal}
+        onClose={() => setIsGeneratePromptModalOpen(false)}
+        onPromptGenerated={(p) => setPromptContent(p)}
+        currentPrompt={promptContent}
       />
       <DynamicGreetingModal
         isOpen={isDynamicGreetingModalOpen}
-        onClose={closeDynamicGreetingModal}
+        onClose={() => setIsDynamicGreetingModalOpen(false)}
       />
-      <VoiceMenuDrawer isOpen={isVoiceMenuOpen} onClose={closeVoiceMenu} />
+      <VoiceMenuDrawer isOpen={isVoiceMenuOpen} onClose={() => setIsVoiceMenuOpen(false)} />
     </div>
   );
 };

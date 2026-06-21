@@ -1,77 +1,72 @@
-import React, { useState } from 'react';
-import { X, Info, Globe } from 'lucide-react';
+// src/components/components-ghl/Knowledge/UploadModal/UrlInputView.jsx
+import React, { useState } from "react";
+import { Globe, ArrowLeft, ArrowRight, AlertCircle } from "lucide-react";
+
+const isValidUrl = (s) => { try { new URL(s); return true; } catch { return false; } };
 
 const UrlInputView = ({ onClose, onBack, onNext }) => {
-  const [url, setUrl] = useState('');
-
-  // Simple URL validation
-  const isValidUrl = (string) => {
-    try {
-      new URL(string);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  };
+  const [url, setUrl] = useState("");
+  const valid   = isValidUrl(url);
+  const hasText = url.length > 0;
 
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold text-gray-800">Upload</h2>
-          <div className="group relative">
-            <Info size={18} className="text-gray-400 cursor-help" />
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50">
-              Enter a website URL to scrape its content.
-            </div>
+      <div className="p-5 space-y-4">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
+            <Globe className="w-4 h-4 text-orange-500" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Enter a website URL</p>
+            <p className="text-xs text-gray-400 mt-0.5">We'll scrape the page content and embed it for you.</p>
           </div>
         </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-          <X className="w-6 h-6" />
-        </button>
-      </div>
 
-      {/* Body */}
-      <div className="p-10 flex flex-col items-center justify-center">
-        <div className="w-full max-w-md">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Globe size={18} className="text-gray-400" />
-            </div>
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="URL"
-              className="w-full pl-10 pr-4 py-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-gray-800 shadow-sm transition-all"
-              autoFocus
-            />
-          </div>
-          {!isValidUrl(url) && url.length > 0 && (
-            <p className="mt-2 text-xs text-red-500 pl-1">Please enter a valid URL (e.g., https://example.com)</p>
-          )}
+        <div className="relative">
+          <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && valid && onNext(url)}
+            placeholder="https://example.com/docs"
+            autoFocus
+            className={`w-full pl-9 pr-4 py-2.5 border rounded-xl text-sm bg-white outline-none transition-all
+              ${hasText && !valid
+                ? "border-rose-300 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400"
+                : "border-gray-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              } placeholder:text-gray-300`}
+          />
         </div>
+
+        {hasText && !valid && (
+          <div className="flex items-center gap-2 text-xs text-rose-500 px-1">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            Please enter a valid URL (e.g. https://example.com)
+          </div>
+        )}
+
+        {valid && (
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-orange-50 border border-orange-100 rounded-xl">
+            <Globe className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
+            <p className="text-xs text-orange-600 truncate">{url}</p>
+          </div>
+        )}
       </div>
 
-      {/* Footer */}
-      <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
-        <button 
-          onClick={onBack} 
-          className="px-5 py-2 text-gray-600 font-medium hover:text-gray-800 transition-colors"
+      <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-100 bg-gray-50/50">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-gray-500 hover:text-gray-700 hover:bg-white border border-transparent hover:border-gray-200 transition-all"
         >
-          Back
+          <ArrowLeft className="w-3.5 h-3.5" /> Back
         </button>
         <button
-          onClick={() => onNext(url)}
-          disabled={!isValidUrl(url)}
-          className={`px-8 py-2 rounded-lg font-semibold text-white transition-all shadow-sm ${
-            isValidUrl(url) 
-              ? 'bg-[#a389f4] hover:bg-[#9175e6] active:scale-95' 
-              : 'bg-purple-300 cursor-not-allowed'
-          }`}
+          onClick={() => valid && onNext(url)}
+          disabled={!valid}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-semibold shadow-md shadow-orange-500/20 hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Upload
+          Next <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
     </>

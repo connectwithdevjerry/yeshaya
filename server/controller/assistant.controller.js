@@ -8,6 +8,16 @@ const fs = require("fs");
 const { fillTemplate, extractText } = require("../helperFunctions");
 const { MAKE_OUTBOUND_CALL } = require("../constants");
 const emailHelper = require("../resendObject");
+const { createNotification } = require("./notification.controller");
+const {
+  validateContact,
+  findDuplicateContact,
+  mergeContactData,
+} = require("../helpers/contactValidator");
+const appointmentModel = require("../model/appointment.model");
+const { fmtWhen, confirmationEmail } = require("../helpers/appointmentEmails");
+const kbFileModel = require("../model/kbFile.model");
+const { saveImageToDB } = require("../cloudinaryImageHandler");
 
 const toolsProperties = {
   scrape_website: {
@@ -29,6 +39,11 @@ const toolsProperties = {
         type: "string",
         description:
           "Any additional context or preferences the customer mentioned",
+      },
+      customFields: {
+        type: "object",
+        description:
+          "Any mapped CRM custom fields collected from the customer, as a map of field name to value (e.g. { \"Budget\": \"500k\", \"Property Type\": \"condo\" }).",
       },
     },
     required: ["firstName"],
@@ -98,6 +113,38 @@ const toolsProperties = {
       },
     },
     required: ["startDate"],
+  },
+  add_tag: {
+    description:
+      "Adds one or more tags to the contact in the CRM. Use this to label or segment the contact (e.g. 'interested', 'callback', 'qualified-lead').",
+    properties: {
+      customerEmail: {
+        type: "string",
+        description: "The email address of the contact to tag",
+      },
+      tags: {
+        type: "array",
+        items: { type: "string" },
+        description: "The list of tag names to add to the contact",
+      },
+    },
+    required: ["customerEmail", "tags"],
+  },
+  remove_tag: {
+    description:
+      "Removes one or more tags from the contact in the CRM. Use this to unlabel a contact (e.g. remove 'callback' once the call is complete).",
+    properties: {
+      customerEmail: {
+        type: "string",
+        description: "The email address of the contact to untag",
+      },
+      tags: {
+        type: "array",
+        items: { type: "string" },
+        description: "The list of tag names to remove from the contact",
+      },
+    },
+    required: ["customerEmail", "tags"],
   },
   send_message: {
     description:
@@ -384,7 +431,7 @@ const getDynamicFMessage = async (req, res) => {
   try {
     const user = await userModel.findById(userId);
     const targetSubaccount = user.ghlSubAccountIds.find(
-      (sub) => sub.accountId === subaccountId && sub.connected,
+      (sub) => sub.accountId === subaccountId,
     );
 
     if (!targetSubaccount)
@@ -431,17 +478,25 @@ const createAssistantAndSave = async (req, res) => {
 
   console.log({ subaccountId });
 
-  const targetSubaccount = user?.ghlSubAccountIds?.find(
-    (sub) => sub.accountId == subaccountId && sub.connected
+  const targetSubaccount = user.ghlSubAccountIds.find(
+    (sub) => sub.accountId == subaccountId
   );
-
-  console.log({ targetSubaccount });
 
   if (!targetSubaccount)
     return res.send({
       status: false,
       message: "This subaccount does not exist!",
     });
+
+  // Enforce the agency snapshot "Maximum Assistants" limit per sub-account
+  const { checkSnapshotLimit } = require("../helpers/snapshotLimits");
+  const assistantCap = checkSnapshotLimit(user, targetSubaccount, "assistants");
+  if (assistantCap.exceeded) {
+    return res.send({
+      status: false,
+      message: `Assistant limit reached (${assistantCap.limit}) for this sub-account. Increase it in Agency → Snapshot → Limits.`,
+    });
+  }
 
   try {
     // Using axios.post. The request body (VAPI_ASSISTANT_CONFIG) is passed directly.
@@ -482,7 +537,7 @@ const createAssistantAndSave = async (req, res) => {
     // save data inside database
 
     const targetSubaccount = user.ghlSubAccountIds.find(
-      (sub) => sub.accountId === subaccountId && sub.connected,
+      (sub) => sub.accountId === subaccountId,
     );
 
     targetSubaccount.vapiAssistants.push({ assistantId, description });
@@ -534,7 +589,7 @@ const getAssistant = async (req, res) => {
     // check if the assistant is present, (important because, if this isn't done, someone that doen't own this can do so too once they have the assistant id)
 
     const targetSubaccount = user.ghlSubAccountIds.find(
-      (sub) => sub.accountId === subaccountId && sub.connected,
+      (sub) => sub.accountId === subaccountId,
     );
 
     if (!targetSubaccount)
@@ -630,11 +685,16 @@ const getAssistants = async (req, res) => {
 
     console.log({ responses });
 
-    // Extract the assistant data
-    const assistants = responses.map((res) => res && res.data);
+    // Extract the assistant data + merge our DB flags (favorite/archived)
+    const flagMap = {};
+    (myVapiAssistants || []).forEach((a) => {
+      flagMap[a.assistantId] = { favorite: !!a.favorite, archived: !!a.archived };
+    });
 
-    console.log("Assistants fetched successfully:");
-    console.log(assistants);
+    const assistants = responses
+      .map((res) => res && res.data)
+      .filter(Boolean)
+      .map((a) => ({ ...a, ...(flagMap[a.id] || { favorite: false, archived: false }) }));
 
     return res.send({
       status: true,
@@ -657,8 +717,12 @@ const updateAssistant = async (req, res) => {
   try {
     const user = await userModel.findById(userId);
 
+    // Updating an assistant (voice, model, etc.) is a pure Vapi operation and
+    // does NOT require a live GoHighLevel connection — resolve by accountId only.
+    // (Gating on `sub.connected` here broke voice selection whenever the GHL
+    // token went stale, even though GHL is irrelevant to this call.)
     const targetSubaccount = user.ghlSubAccountIds.find(
-      (sub) => sub.accountId === subaccountId && sub.connected,
+      (sub) => sub.accountId === subaccountId,
     );
 
     if (!targetSubaccount)
@@ -712,7 +776,7 @@ const deleteAssistant = async (req, res) => {
   const user = await userModel.findById(userId);
 
   const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === subaccountId && sub.connected,
+    (sub) => sub.accountId === subaccountId,
   );
 
   if (!targetSubaccount)
@@ -774,7 +838,7 @@ const deleteNumberFromAssistant = async (req, res) => {
   const user = await userModel.findById(userId);
 
   const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === subaccountId && sub.connected,
+    (sub) => sub.accountId === subaccountId,
   );
 
   if (!targetSubaccount)
@@ -930,15 +994,21 @@ const createTool = async (toolName, userId) => {
 const getUserAnalytics = async (req, res) => {
   try {
     const userId = req.user;
+    const { subaccountId } = req.query;
     const user = await userModel.findById(userId);
 
     if (!user) return res.send({ message: "User not found" });
+
+    // Scope to a single sub-account when provided, otherwise all (agency-wide)
+    const targetSubs = subaccountId
+      ? user.ghlSubAccountIds.filter((sub) => sub.accountId === subaccountId)
+      : user.ghlSubAccountIds;
 
     // 1. Gather distinct Assistant IDs and Phone counts
     let assistantIds = [];
     let phoneNumbersCount = 0;
 
-    user.ghlSubAccountIds.forEach((sub) => {
+    targetSubs.forEach((sub) => {
       sub.vapiAssistants.forEach((ast) => {
         assistantIds.push(ast.assistantId);
         phoneNumbersCount += ast.numberDetails.length;
@@ -1124,6 +1194,71 @@ const addATool = async (req, res) => {
   }
 };
 
+// Import an EXISTING Vapi tool by its ID and attach it to the assistant
+const importToolById = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { assistantId, toolId } = req.body;
+
+    if (!assistantId || !toolId) {
+      return res.send({ status: false, message: "assistantId and toolId are required" });
+    }
+
+    // Verify the tool actually exists in Vapi before linking
+    try {
+      await axios.get(`https://api.vapi.ai/tool/${toolId.trim()}`, {
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+      });
+    } catch (e) {
+      return res.send({ status: false, message: "No Vapi tool found with that ID." });
+    }
+
+    const data = await linkToolToAssistant(assistantId, toolId.trim(), userId);
+    return res.send({ status: true, data, message: "Tool imported and linked." });
+  } catch (error) {
+    console.error("importToolById error:", error.response?.data || error.message);
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+// Create a custom webhook (function) tool and attach it to the assistant
+const createCustomTool = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { assistantId, name, description, serverUrl } = req.body;
+
+    if (!assistantId || !name || !serverUrl) {
+      return res.send({ status: false, message: "assistantId, name and serverUrl are required" });
+    }
+    if (!/^https?:\/\/.+/i.test(serverUrl)) {
+      return res.send({ status: false, message: "serverUrl must be a valid http(s) URL" });
+    }
+
+    // Vapi function tool: the model can call it, Vapi POSTs to serverUrl
+    const toolRes = await axios.post(
+      "https://api.vapi.ai/tool",
+      {
+        type: "function",
+        function: {
+          name: name.trim().replace(/\s+/g, "_").toLowerCase(),
+          description: description || `Custom tool: ${name}`,
+          parameters: { type: "object", properties: {} },
+        },
+        server: { url: serverUrl.trim() },
+      },
+      { headers: { Authorization: `Bearer ${VAPI_API_KEY}` } },
+    );
+
+    const toolId = toolRes.data.id;
+    const data = await linkToolToAssistant(assistantId, toolId, userId);
+    return res.send({ status: true, data, toolId, message: "Custom tool created and linked." });
+  } catch (error) {
+    console.error("createCustomTool error:", error.response?.data || error.message);
+    const vapiMsg = error.response?.data?.message;
+    return res.send({ status: false, message: Array.isArray(vapiMsg) ? vapiMsg.join(", ") : (vapiMsg || error.message) });
+  }
+};
+
 const executeToolFromVapi = async (req, res) => {
   const { message } = req.body;
   const { userId } = req.params;
@@ -1209,7 +1344,14 @@ const executeToolFromVapi = async (req, res) => {
 
     // 2 --- TOOL: BOOK APPOINTMENT ---
     if (name === "book_appointment") {
-      const { customerEmail, customerName, startTime } = args;
+      const { customerEmail, customerName } = args;
+      // The tool exposes the param as `requestedTime`; accept `startTime` too.
+      const startTime = args.requestedTime || args.startTime;
+      if (!startTime) {
+        return res.json({
+          results: [{ toolCallId: toolCall.id, result: "I couldn't read the requested time. Please restate the date and time." }],
+        });
+      }
 
       // Step A: Upsert Contact
       const contactRes = await axios.post(
@@ -1223,15 +1365,16 @@ const executeToolFromVapi = async (req, res) => {
         },
       );
 
-      // Step B: Create Event
-      await axios.post(
-        "https://services.leadconnectorhq.com/calendars/events",
+      // Step B: Create Appointment (v2 endpoint is /calendars/events/appointments)
+      const title = `Vapi Booking: ${customerName}`;
+      const eventRes = await axios.post(
+        "https://services.leadconnectorhq.com/calendars/events/appointments",
         {
           calendarId,
           locationId,
           contactId: contactRes.data.contact.id,
           startTime,
-          title: `Vapi Booking: ${customerName}`,
+          title,
         },
         {
           headers: {
@@ -1241,6 +1384,47 @@ const executeToolFromVapi = async (req, res) => {
         },
       );
 
+      // ── Phase A: store appointment, confirm by email, notify agency ──
+      const ghlEventId = eventRes.data?.id || eventRes.data?.event?.id || "";
+      const businessName = user?.company?.name || "us";
+      const when = fmtWhen(startTime);
+
+      try {
+        await appointmentModel.create({
+          userId,
+          subaccountId: locationId,
+          calendarId,
+          ghlEventId,
+          ghlContactId: contactRes.data.contact.id,
+          customerName,
+          customerEmail,
+          startTime: new Date(startTime),
+          title,
+        });
+      } catch (e) { console.error("⚠️ appointment store failed:", e.message); }
+
+      // Confirmation email to the customer (white-label sender if configured)
+      if (customerEmail) {
+        try {
+          const sendUserEmail = require("../helpers/sendUserEmail");
+          await sendUserEmail(
+            userId,
+            customerEmail,
+            `Appointment Confirmed — ${businessName}`,
+            confirmationEmail({ customerName, when, businessName, title: "" }),
+          );
+        } catch (e) { console.error("⚠️ confirmation email failed:", e.message); }
+      }
+
+      // Notify the agency
+      await createNotification({
+        userId,
+        type: "general",
+        title: "New Appointment Booked",
+        message: `${customerName || customerEmail || "A customer"} booked an appointment for ${when}.`,
+        metadata: { subaccountId: locationId, startTime, customerEmail },
+      });
+
       return res.json({
         results: [{ toolCallId: toolCall.id, result: "Confirmed!" }],
       });
@@ -1248,21 +1432,30 @@ const executeToolFromVapi = async (req, res) => {
 
     // 3 --- TOOL: UPDATE USER DETAILS ---
     if (name === "update_user_details") {
-      const { firstName, lastName, email } = args;
-      // phone,address,timezone,website
-
-      // Use the accessToken (already retrieved above)
+      const { firstName, lastName, email, customFields: collected } = args;
 
       const payload = {
         locationId: locationId, // Extracted from your ghlSubAccountIds array
         firstName,
         lastName,
         email,
-        // phone,
-        // address1: address, // GHL uses 'address1' for the primary address field
-        // timezone,
-        // website,
       };
+
+      // Map collected custom-field values → GHL custom field IDs using the
+      // assistant's saved mapping (Map Custom Fields panel).
+      const fieldMap = targetAssistant?.customFieldMap || [];
+      if (collected && typeof collected === "object" && fieldMap.length) {
+        const norm = (s) => String(s || "").trim().toLowerCase();
+        const ghlCustomFields = [];
+        for (const [key, value] of Object.entries(collected)) {
+          if (value === undefined || value === null || value === "") continue;
+          const match = fieldMap.find(
+            (f) => norm(f.name) === norm(key) || norm(f.fieldKey) === norm(key) || f.id === key,
+          );
+          if (match?.id) ghlCustomFields.push({ id: match.id, value: String(value) });
+        }
+        if (ghlCustomFields.length) payload.customFields = ghlCustomFields;
+      }
 
       const response = await axios.post(
         "https://services.leadconnectorhq.com/contacts/upsert",
@@ -1285,6 +1478,49 @@ const executeToolFromVapi = async (req, res) => {
             }.`,
           },
         ],
+      });
+    }
+
+    // --- TOOL: ADD TAG / REMOVE TAG ---
+    if (name === "add_tag" || name === "remove_tag") {
+      const { customerEmail, tags } = args;
+      const tagList = Array.isArray(tags)
+        ? tags
+        : String(tags || "").split(",").map((t) => t.trim()).filter(Boolean);
+
+      if (!customerEmail || tagList.length === 0) {
+        return res.status(200).json({
+          results: [{ toolCallId: toolCall.id, result: "A contact email and at least one tag are required." }],
+        });
+      }
+
+      // Resolve the contact id by upserting on email (idempotent)
+      const contactRes = await axios.post(
+        "https://services.leadconnectorhq.com/contacts/upsert",
+        { email: customerEmail, locationId },
+        { headers: { Authorization: `Bearer ${accessToken}`, Version: "2021-07-28" } },
+      );
+      const contactId = contactRes.data?.contact?.id;
+      if (!contactId) {
+        return res.status(200).json({
+          results: [{ toolCallId: toolCall.id, result: "Could not find or create that contact." }],
+        });
+      }
+
+      const url = `https://services.leadconnectorhq.com/contacts/${contactId}/tags`;
+      const headers = { Authorization: `Bearer ${accessToken}`, Version: "2021-07-28", "Content-Type": "application/json" };
+
+      if (name === "add_tag") {
+        await axios.post(url, { tags: tagList }, { headers });
+      } else {
+        await axios.delete(url, { headers, data: { tags: tagList } });
+      }
+
+      return res.status(200).json({
+        results: [{
+          toolCallId: toolCall.id,
+          result: `${name === "add_tag" ? "Added" : "Removed"} tag(s): ${tagList.join(", ")}.`,
+        }],
       });
     }
 
@@ -1698,13 +1934,32 @@ const getSubGhlTokens = async (userId, accountId) => {
   const SUB_CLIENT_ID = process.env.GHL_SUB_CLIENT_ID;
   const SUB_CLIENT_SECRET = process.env.GHL_SUB_CLIENT_SECRET;
 
+  // Match by accountId only (ignore connected flag so we can still detect a
+  // sub-account that exists but has lost its token)
   const targetSubaccount = ghlSubAccountIds.find(
-    (sub) => sub.accountId === accountId && sub.connected,
+    (sub) => sub.accountId === accountId,
   );
+
+  if (!targetSubaccount) {
+    console.warn(`⚠️ getSubGhlTokens → sub-account ${accountId} not found for user ${userId}`);
+    const err = new Error("GHL_RECONNECT_REQUIRED");
+    err.code = "GHL_RECONNECT_REQUIRED";
+    throw err;
+  }
 
   const refreshToken = targetSubaccount.ghlSubRefreshToken;
 
-  console.log({ refreshToken });
+  // No token stored → never fully connected / token wiped. Don't call GHL with
+  // an empty token (which returns a confusing 422). Signal reconnect instead.
+  if (!refreshToken || typeof refreshToken !== "string") {
+    console.warn(`⚠️ getSubGhlTokens → no refresh token for sub-account ${accountId}. Reconnect required.`);
+    targetSubaccount.connected = false;
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+    const err = new Error("GHL_RECONNECT_REQUIRED");
+    err.code = "GHL_RECONNECT_REQUIRED";
+    throw err;
+  }
 
   try {
     const url = "https://services.leadconnectorhq.com/oauth/token";
@@ -1733,6 +1988,11 @@ const getSubGhlTokens = async (userId, accountId) => {
     targetSubaccount.ghlSubRefreshTokenExpiry = new Date(
       Date.now() + response.data.expires_in * 1000,
     );
+    // Self-heal: a successful token refresh means the account is connected
+    if (targetSubaccount.connected !== true) {
+      targetSubaccount.connected = true;
+      console.log(`✅ getSubGhlTokens → self-healed connected=true for ${accountId}`);
+    }
     user.markModified("ghlSubAccountIds");
     await user.save();
 
@@ -1742,7 +2002,28 @@ const getSubGhlTokens = async (userId, accountId) => {
       "Error refreshing GHL Access Token:",
       error.response?.data || error.message,
     );
-    throw Error(error.message);
+
+    // If the refresh token is dead/revoked, mark the sub-account as disconnected
+    // so the UI can prompt the user to reconnect, instead of failing forever.
+    const ghlError = error.response?.data?.error;
+    if (ghlError === "invalid_grant") {
+      try {
+        targetSubaccount.connected = false;
+        user.markModified("ghlSubAccountIds");
+        await user.save();
+        console.warn(
+          `⚠️ Sub-account ${accountId} marked disconnected — refresh token invalid. Reconnect required.`,
+        );
+      } catch (saveErr) {
+        console.error("Failed to mark sub-account disconnected:", saveErr.message);
+      }
+
+      const err = new Error("GHL_RECONNECT_REQUIRED");
+      err.code = "GHL_RECONNECT_REQUIRED";
+      throw err;
+    }
+
+    throw new Error(error.message);
   }
 };
 
@@ -1784,14 +2065,149 @@ const addCalendarId = async (req, res) => {
   }
 };
 
+// Toggle favorite / archived flags on an assistant
+const setAssistantMeta = async (req, res) => {
+  const userId = req.user;
+  const { subaccountId, assistantId, favorite, archived } = req.body;
+  if (!subaccountId || !assistantId) {
+    return res.send({ status: false, message: "subaccountId and assistantId are required" });
+  }
+  try {
+    const set = {};
+    if (favorite !== undefined) set["ghlSubAccountIds.$[sub].vapiAssistants.$[ast].favorite"] = !!favorite;
+    if (archived !== undefined) set["ghlSubAccountIds.$[sub].vapiAssistants.$[ast].archived"] = !!archived;
+
+    const result = await userModel.updateOne(
+      { _id: userId },
+      { $set: set },
+      { arrayFilters: [{ "sub.accountId": subaccountId }, { "ast.assistantId": assistantId }] },
+    );
+    if (result.matchedCount === 0) {
+      return res.send({ status: false, message: "Assistant not found." });
+    }
+    return res.send({ status: true, data: { assistantId, favorite, archived } });
+  } catch (error) {
+    console.error("setAssistantMeta error:", error.message);
+    return res.send({ status: false, message: error.message });
+  }
+};
+
+// Unlink a calendar from an assistant (clears the stored calendar id)
+const removeCalendarId = async (req, res) => {
+  const userId = req.user;
+  const { accountId, assistantId } = req.body;
+
+  try {
+    const result = await userModel.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          "ghlSubAccountIds.$[sub].vapiAssistants.$[ast].calendar": "",
+        },
+      },
+      {
+        arrayFilters: [
+          { "sub.accountId": accountId },
+          { "ast.assistantId": assistantId },
+        ],
+      },
+    );
+
+    if (result.matchedCount === 0) {
+      return res.send({
+        status: false,
+        message: "User or Assistant structure not found.",
+      });
+    }
+
+    return res.send({ status: true, message: "Calendar unlinked successfully." });
+  } catch (error) {
+    console.error("Database Update Error:", error);
+    return res.send({ status: false, error: error.message });
+  }
+};
+
+// ─── Map Custom Fields: list a location's GHL custom fields + saved mapping ────
+const getGhlCustomFields = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId, assistantId } = req.query;
+    if (!subaccountId) return res.send({ status: false, message: "subaccountId is required" });
+
+    const user = await userModel.findById(userId);
+    const sub = user?.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+    if (!sub) return res.send({ status: false, message: "Sub-account not found" });
+
+    let tkns;
+    try {
+      tkns = await getSubGhlTokens(userId, subaccountId);
+    } catch (err) {
+      if (err.code === "GHL_RECONNECT_REQUIRED") {
+        return res.status(200).json({ status: false, reconnectRequired: true, message: "Reconnect GoHighLevel to load custom fields." });
+      }
+      throw err;
+    }
+
+    const response = await axios.get(
+      `https://services.leadconnectorhq.com/locations/${subaccountId}/customFields`,
+      { headers: { Authorization: `Bearer ${tkns.data.access_token}`, Version: "2021-07-28", Accept: "application/json" } },
+    );
+
+    const fields = (response.data?.customFields || []).map((f) => ({
+      id: f.id,
+      name: f.name,
+      fieldKey: f.fieldKey,
+      dataType: f.dataType,
+    }));
+
+    const assistant = assistantId
+      ? sub.vapiAssistants.find((a) => a.assistantId === assistantId)
+      : null;
+    const map = assistant?.customFieldMap || [];
+
+    return res.send({ status: true, fields, map });
+  } catch (error) {
+    console.error("getGhlCustomFields error:", error.response?.data || error.message);
+    return res.send({ status: false, message: error.response?.data?.message || error.message });
+  }
+};
+
+// ─── Save which custom fields this assistant should collect ────────────────────
+const saveCustomFieldMap = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId, assistantId, map } = req.body;
+    if (!subaccountId || !assistantId) {
+      return res.send({ status: false, message: "subaccountId and assistantId are required" });
+    }
+
+    const result = await userModel.updateOne(
+      { _id: userId },
+      { $set: { "ghlSubAccountIds.$[sub].vapiAssistants.$[ast].customFieldMap": Array.isArray(map) ? map : [] } },
+      { arrayFilters: [{ "sub.accountId": subaccountId }, { "ast.assistantId": assistantId }] },
+    );
+
+    if (result.matchedCount === 0) {
+      return res.send({ status: false, message: "Assistant not found." });
+    }
+    return res.send({ status: true, message: "Custom field mapping saved." });
+  } catch (error) {
+    console.error("saveCustomFieldMap error:", error.message);
+    return res.send({ status: false, message: error.message });
+  }
+};
+
 const getAvailableCalendars = async (req, res) => {
   const userId = req.user;
   const { subaccountId: accountId } = req.query;
 
   const user = await userModel.findById(userId);
 
+  // Resolve by accountId only — do NOT gate on the (possibly stale) `connected`
+  // flag. getSubGhlTokens self-heals valid tokens and signals reconnect for dead
+  // ones, so a live connection still loads even if the flag lagged behind.
   const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === accountId && sub.connected,
+    (sub) => sub.accountId === accountId,
   );
 
   if (!targetSubaccount)
@@ -1801,9 +2217,19 @@ const getAvailableCalendars = async (req, res) => {
     });
 
   try {
-    const tkns = await getSubGhlTokens(userId, accountId);
-
-    console.log({ tkns });
+    let tkns;
+    try {
+      tkns = await getSubGhlTokens(userId, accountId);
+    } catch (err) {
+      if (err.code === "GHL_RECONNECT_REQUIRED") {
+        return res.status(200).json({
+          status: false,
+          reconnectRequired: true,
+          message: "This sub-account's GoHighLevel connection has expired. Please reconnect.",
+        });
+      }
+      throw err;
+    }
 
     const response = await axios.get(
       `https://services.leadconnectorhq.com/calendars/`,
@@ -1831,60 +2257,65 @@ const getAvailableCalendars = async (req, res) => {
 };
 
 const getConnectedCalendar = async (req, res) => {
-  const userId = req.user;
-  const { accountId, assistantId } = req.query;
-  const user = await userModel.findById(userId);
+  try {
+    const userId = req.user;
+    const { accountId, assistantId } = req.query;
+    const user = await userModel.findById(userId);
 
-  const targetSubaccount = user.ghlSubAccountIds.find(
-    (sub) => sub.accountId === accountId && sub.connected,
-  );
+    const targetSubaccount = user.ghlSubAccountIds.find(
+      (sub) => sub.accountId === accountId,
+    );
 
-  if (!targetSubaccount)
-    return res.send({
-      status: false,
-      message: "This subaccount does not exist!",
-    });
-
-  const targetAssistant = targetSubaccount.vapiAssistants.find(
-    (target) => target.assistantId === assistantId,
-  );
-
-  if (!targetAssistant)
-    return res.send({
-      status: false,
-      message: "This assistant does not exist!",
-    });
-
-  const tkns = await getSubGhlTokens(userId, accountId);
-
-  let config = {
-    method: "get",
-    maxBodyLength: Infinity,
-    // url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
-    url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${tkns.data.access_token}`,
-      Version: "2021-04-15",
-    },
-  };
-
-  axios
-    .request(config)
-    .then((response) => {
-      // console.log(JSON.stringify(response.data));
-      return res.send({
-        status: true,
-        data: response.data || {},
-      });
-    })
-    .catch((error) => {
-      // console.log(error);
+    if (!targetSubaccount)
       return res.send({
         status: false,
-        message: error.message || "This assistant does not exist!",
+        message: "This subaccount does not exist!",
       });
+
+    const targetAssistant = targetSubaccount.vapiAssistants.find(
+      (target) => target.assistantId === assistantId,
+    );
+
+    if (!targetAssistant)
+      return res.send({
+        status: false,
+        message: "This assistant does not exist!",
+      });
+
+    let tkns;
+    try {
+      tkns = await getSubGhlTokens(userId, accountId);
+    } catch (err) {
+      if (err.code === "GHL_RECONNECT_REQUIRED") {
+        return res.status(200).json({
+          status: false,
+          reconnectRequired: true,
+          message: "This sub-account's GoHighLevel connection has expired. Please reconnect.",
+        });
+      }
+      throw err;
+    }
+
+    const config = {
+      method: "get",
+      maxBodyLength: Infinity,
+      url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${tkns.data.access_token}`,
+        Version: "2021-04-15",
+      },
+    };
+
+    const response = await axios.request(config);
+    return res.send({ status: true, data: response.data || {} });
+  } catch (error) {
+    console.error("Error fetching connected calendar:", error.message);
+    return res.send({
+      status: false,
+      message: error.message || "Failed to fetch connected calendar",
     });
+  }
 };
 
 const deleteAssistantTool = async (req, res) => {
@@ -1996,7 +2427,7 @@ const addDynamicFMessageToDB = async (req, res) => {
 
     const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
       sub.vapiAssistants.some(
-        (ast) => ast.assistantId === assistantId && sub.connected,
+        (ast) => ast.assistantId === assistantId,
       ),
     );
 
@@ -2178,11 +2609,21 @@ const linkKnowledgeBaseToAssistant = async (req, res) => {
 
 const getAllKnowledgeBases = async (req, res) => {
   const userId = req.user;
+  const { subaccountId } = req.query;
 
   try {
     const user = await userModel.findById(userId);
 
-    const toolPromises = user.allKnowledgeBaseToolIds.map(
+    // Scope to the sub-account's KBs when provided, else agency-level list
+    let toolIds;
+    if (subaccountId) {
+      const sub = user.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+      toolIds = sub?.subAccountKnowledgeBaseToolIds || [];
+    } else {
+      toolIds = user.allKnowledgeBaseToolIds || [];
+    }
+
+    const toolPromises = toolIds.map(
       (id) =>
         axios
           .get(`https://api.vapi.ai/tool/${id}`, {
@@ -2198,7 +2639,19 @@ const getAllKnowledgeBases = async (req, res) => {
       (tool) => tool && tool.type === "query",
     );
 
-    return res.send({ status: true, data: knowledgeBaseTools || [] });
+    // Phase A/B: join Vapi tools with our persisted metadata for preview + history
+    const metaDocs = await kbFileModel
+      .find({ toolId: { $in: knowledgeBaseTools.map((t) => t.id) } })
+      .lean();
+    const metaByTool = {};
+    metaDocs.forEach((m) => { metaByTool[m.toolId] = m; });
+
+    const enriched = knowledgeBaseTools.map((tool) => ({
+      ...tool,
+      meta: metaByTool[tool.id] || null,
+    }));
+
+    return res.send({ status: true, data: enriched });
   } catch (error) {
     console.error(
       "Error fetching knowledge bases:",
@@ -2209,6 +2662,68 @@ const getAllKnowledgeBases = async (req, res) => {
       message: error.message,
       data: error.response?.data,
     });
+  }
+};
+
+// ─── Embedding playground: keyword/relevance search over a KB's stored text ────
+const kbSearch = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { toolId, query } = req.query;
+
+    if (!toolId || !query || !query.trim()) {
+      return res.send({ status: false, message: "toolId and query are required" });
+    }
+
+    const doc = await kbFileModel.findOne({ toolId, userId }).lean();
+    if (!doc) {
+      return res.send({ status: false, message: "Knowledge base not found, or it predates search support." });
+    }
+
+    const text = doc.sourceText || "";
+    if (!text.trim()) {
+      return res.send({
+        status: true,
+        results: [],
+        message: "No searchable text is stored for this knowledge base. Re-upload it to enable search.",
+      });
+    }
+
+    // Split into passages (paragraphs; fall back to sentences for dense text)
+    let chunks = text.split(/\n{2,}/).map((c) => c.trim()).filter((c) => c.length > 20);
+    if (chunks.length < 3) {
+      chunks = text.split(/(?<=[.!?])\s+/).map((c) => c.trim()).filter((c) => c.length > 20);
+    }
+
+    const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
+    const phrase = query.toLowerCase().trim();
+
+    const scored = chunks.map((chunk) => {
+      const lc = chunk.toLowerCase();
+      let score = 0;
+      terms.forEach((t) => {
+        const m = lc.split(t).length - 1;
+        score += m;
+      });
+      if (lc.includes(phrase)) score += 5; // boost exact phrase
+      return { chunk, score };
+    }).filter((c) => c.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map((c) => ({
+        score: c.score,
+        snippet: c.chunk.length > 600 ? c.chunk.slice(0, 600) + "…" : c.chunk,
+      }));
+
+    return res.send({
+      status: true,
+      results: scored,
+      kbName: doc.title || "Knowledge base",
+      message: scored.length === 0 ? "No matching passages found for that query." : undefined,
+    });
+  } catch (error) {
+    console.error("kbSearch error:", error.message);
+    return res.send({ status: false, message: error.message });
   }
 };
 
@@ -2343,11 +2858,27 @@ const deleteKnowledgeBase = async (req, res) => {
       {
         $pull: {
           allKnowledgeBaseToolIds: toolId,
+          "ghlSubAccountIds.$[].subAccountKnowledgeBaseToolIds": toolId,
           "ghlSubAccountIds.$[].vapiAssistants.$[].knowledgeBaseToolIds":
             toolId,
         },
       },
     );
+
+    // Remove our metadata + persisted Cloudinary original (Phase A)
+    try {
+      const docs = await kbFileModel.find({ toolId }).lean();
+      for (const d of docs) {
+        if (d.cloudinaryPublicId) {
+          try {
+            await require("cloudinary").v2.uploader.destroy(d.cloudinaryPublicId, { resource_type: "raw" });
+          } catch (e) { console.error("⚠️ Cloudinary destroy failed:", e.message); }
+        }
+      }
+      await kbFileModel.deleteMany({ toolId });
+    } catch (e) {
+      console.error("⚠️ kbFile cleanup failed:", e.message);
+    }
 
     console.log(`Knowledge base tool ${toolId} deleted successfully.`);
 
@@ -2381,7 +2912,7 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
     const user = await userModel.findById(userId);
     const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
       sub.vapiAssistants.some(
-        (ast) => ast.assistantId === assistantId && sub.connected,
+        (ast) => ast.assistantId === assistantId,
       ),
     );
 
@@ -2438,26 +2969,25 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
 
 const addKnowledgeBase = async (req, res) => {
   const userId = req.user;
-  const { knowledgeBaseUrl, type, title } = req.body;
+  const { knowledgeBaseUrl, type, title, subaccountId } = req.body;
 
   try {
     const user = await userModel.findById(userId);
-    
-    // ---- KB BILLING CHECK ----
-    const kbResell = user.resellConfig?.voiceKnowledgeBases;
-    let amountToDeduct = 0;
 
-    if (kbResell?.enabled) {
-      amountToDeduct = kbResell.resellPrice || 0;
+    // Feature gate: agency may have the knowledge base disabled
+    {
+      const { checkFeature } = require("../helpers/snapshotLimits");
+      const kbOff = checkFeature(user, "kb");
+      if (kbOff) return res.send({ status: false, message: kbOff });
     }
 
-    if (user.walletBalance < amountToDeduct) {
-      return res.send({
-        status: false,
-        message: `Insufficient wallet balance to add knowledge base. Cost: $${amountToDeduct.toFixed(
-          2,
-        )}`,
-      });
+    // Resolve the target sub-account (scopes the KB to this location)
+    const targetSubaccount = subaccountId
+      ? user.ghlSubAccountIds.find((sub) => sub.accountId === subaccountId)
+      : null;
+
+    if (subaccountId && !targetSubaccount) {
+      return res.status(404).json({ status: false, message: "Sub-account not found" });
     }
 
     // const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
@@ -2496,6 +3026,13 @@ const addKnowledgeBase = async (req, res) => {
     let fileBuffer;
     let fileName;
 
+    // Phase A metadata captured per upload type → persisted in kbFile after upload
+    const meta = {
+      originalName: "", mimeType: "", sizeBytes: 0,
+      cloudinaryUrl: "", cloudinaryPublicId: "",
+      sourceText: "", sourceUrl: "", extractedChars: 0,
+    };
+
     if (type === "url") {
       console.log("Scraping website with Firecrawl API...");
 
@@ -2523,6 +3060,9 @@ const addKnowledgeBase = async (req, res) => {
       // Firecrawl returns the data inside data.data.markdown
       fileBuffer = Buffer.from(firecrawlRes.data.data.markdown);
       fileName = `scraped_${Date.now()}.md`;
+      meta.sourceUrl = knowledgeBaseUrl;
+      meta.sourceText = firecrawlRes.data.data.markdown || "";
+      meta.extractedChars = meta.sourceText.length;
     } else if (type === "file") {
       if (!req.file) {
         return res.send({
@@ -2533,6 +3073,10 @@ const addKnowledgeBase = async (req, res) => {
 
       console.log("Processing local file...");
 
+      meta.originalName = req.file.originalname || "";
+      meta.mimeType = req.file.mimetype || "";
+      meta.sizeBytes = req.file.size || (req.file.buffer ? req.file.buffer.length : 0);
+
       const text = await extractText(req.file);
 
       // console.log("Extracted Text:", text);
@@ -2542,6 +3086,25 @@ const addKnowledgeBase = async (req, res) => {
           status: false,
           message: "Extracted text is empty or too small",
         });
+      }
+      meta.extractedChars = text.length;
+      // Keep the extracted text (capped) so the KB is searchable in the playground
+      meta.sourceText = text.slice(0, 200000);
+
+      // Persist the ORIGINAL file to Cloudinary (raw) so it can be previewed/downloaded.
+      // Best-effort: a Cloudinary failure must not block the KB from being created.
+      try {
+        const safeName = (req.file.originalname || `kb_${Date.now()}`).replace(/[^\w.\-]+/g, "_");
+        const cloudRes = await saveImageToDB(
+          req.file.buffer,
+          "knowledge-base",
+          "raw",
+          `${Date.now()}_${safeName}`,
+        );
+        meta.cloudinaryUrl = cloudRes.secure_url || cloudRes.url || "";
+        meta.cloudinaryPublicId = cloudRes.public_id || "";
+      } catch (e) {
+        console.error("⚠️ KB original Cloudinary upload failed:", e.message);
       }
 
       // const response = await axios.post(
@@ -2572,16 +3135,27 @@ const addKnowledgeBase = async (req, res) => {
       fileBuffer = Buffer.from(text);
       fileName = `file_${Date.now()}.txt`;
     } else if (type === "faq") {
-      // knowledgeBaseUrl expected as: [{q: "...", a: "..."}]
-      const faqMd = knowledgeBaseUrl
-        .map((f) => `Q: ${f.q}\nA: ${f.a}`)
+      // knowledgeBaseUrl expected as: [{q: "...", a: "..."}] — may arrive as a JSON string
+      let faqs = knowledgeBaseUrl;
+      if (typeof faqs === "string") {
+        try { faqs = JSON.parse(faqs); } catch (_) { faqs = []; }
+      }
+      if (!Array.isArray(faqs) || faqs.length === 0) {
+        return res.send({ status: false, message: "Please add at least one FAQ (question and answer)." });
+      }
+      const faqMd = faqs
+        .map((f) => `Q: ${f.q || f.question || ""}\nA: ${f.a || f.answer || ""}`)
         .join("\n\n");
       fileBuffer = Buffer.from(faqMd);
       fileName = `faq_${Date.now()}.md`;
+      meta.sourceText = faqMd;
+      meta.extractedChars = faqMd.length;
     } else if (type === "text") {
       // knowledgeBaseUrl expected as: "This is my custom text..."
       fileBuffer = Buffer.from(knowledgeBaseUrl);
       fileName = `knowledge_${Date.now()}.txt`;
+      meta.sourceText = typeof knowledgeBaseUrl === "string" ? knowledgeBaseUrl : "";
+      meta.extractedChars = meta.sourceText.length;
     }
 
     // --- STEP 2: UPLOAD TO VAPI ---
@@ -2647,23 +3221,55 @@ const addKnowledgeBase = async (req, res) => {
     // user.markModified("ghlSubAccountIds");
     // await user.save();
 
-    user.allKnowledgeBaseToolIds.push(toolId);
+    // Store against the sub-account when provided, else fall back to agency-level
+    if (targetSubaccount) {
+      if (!Array.isArray(targetSubaccount.subAccountKnowledgeBaseToolIds)) {
+        targetSubaccount.subAccountKnowledgeBaseToolIds = [];
+      }
+      targetSubaccount.subAccountKnowledgeBaseToolIds.push(toolId);
+    } else {
+      user.allKnowledgeBaseToolIds.push(toolId);
+    }
     user.markModified("ghlSubAccountIds");
     await user.save();
 
-    // ---- DEDUCT WALLET ----
-    if (amountToDeduct > 0) {
-      user.walletBalance -= amountToDeduct;
-      user.billingEvents.push({
-        type: "KB_CREATION_CHARGE",
-        amount: amountToDeduct,
-        callId: toolId,
+    // Persist KB metadata (Phase A). Version = prior uploads with same title+sub + 1.
+    try {
+      const priorCount = await kbFileModel.countDocuments({
+        userId,
+        subaccountId: subaccountId || "",
+        title: title || "",
       });
+      await kbFileModel.create({
+        userId,
+        subaccountId: subaccountId || "",
+        toolId,
+        vapiFileId: newFileId || "",
+        title: title || "",
+        type,
+        originalName: meta.originalName,
+        mimeType: meta.mimeType,
+        sizeBytes: meta.sizeBytes,
+        cloudinaryUrl: meta.cloudinaryUrl,
+        cloudinaryPublicId: meta.cloudinaryPublicId,
+        sourceText: meta.sourceText,
+        sourceUrl: meta.sourceUrl,
+        extractedChars: meta.extractedChars,
+        version: priorCount + 1,
+        status: "ready",
+      });
+    } catch (e) {
+      console.error("⚠️ kbFile metadata persist failed:", e.message);
     }
 
-    // console.log(
-    //   `Knowledge base added and linked successfully to Assistant ${assistantId}.`
-    // );
+    // Notify on new knowledge base
+    await createNotification({
+      userId,
+      type: "knowledge_base_added",
+      title: "Knowledge Base Added",
+      message: `Knowledge base "${title || "Untitled"}" has been added and is ready to link to your assistants.`,
+      metadata: { toolId, title, type },
+    });
 
     return res.send({ status: true, data: toolResponse.data });
   } catch (error) {
@@ -2735,12 +3341,17 @@ const getAssistantKnowledgeBases = async (req, res) => {
 };
 
 const getAssistantCallLogs = async (req, res) => {
-  // const { assistantIds } = req.body; // Expecting ["id1", "id2"]
   const userId = req.user;
+  const { subaccountId } = req.query;
 
   const user = await userModel.findById(userId);
 
-  const validAssistantIds = user.ghlSubAccountIds.flatMap((subAccount) =>
+  // Scope to one sub-account when provided, otherwise all
+  const targetSubs = subaccountId
+    ? user.ghlSubAccountIds.filter((sub) => sub.accountId === subaccountId)
+    : user.ghlSubAccountIds;
+
+  const validAssistantIds = targetSubs.flatMap((subAccount) =>
     subAccount.vapiAssistants.map((assistant) => assistant.assistantId),
   );
 
@@ -3014,12 +3625,19 @@ const makeOutboundCall = async (req, res) => {
 
     const targetSubaccount = user.ghlSubAccountIds.find((sub) =>
       sub.vapiAssistants.some(
-        (ast) => ast.assistantId === assistantId && sub.connected,
+        (ast) => ast.assistantId === assistantId,
       ),
     );
 
     if (!targetSubaccount)
       return res.send({ status: false, message: "Subaccount not found!" });
+
+    // Feature gate: agency may have voice calling disabled
+    {
+      const { checkFeature } = require("../helpers/snapshotLimits");
+      const voiceOff = checkFeature(user, "voice");
+      if (voiceOff) return res.send({ status: false, message: voiceOff });
+    }
 
     const targetAssistant = targetSubaccount.vapiAssistants.find(
       (target) => target.assistantId === assistantId,
@@ -3097,21 +3715,30 @@ const sendChatMessage = async (req, res) => {
 
   const user = await userModel.findById(userId);
 
-  content = "Wallet balance is too low. Please top up to continue.";
-
-  if (user.walletBalance <= 0) {
-    req.session.chatHistory[assistantId].push({
-      role: "assistant",
-      content,
-    });
-    return res.send({ status: false, reply: content });
-  }
-
+  // Initialize session chat history before any usage (guard if session missing)
+  if (!req.session) req.session = {};
   if (!req.session.chatHistory) {
     req.session.chatHistory = {};
   }
   if (!req.session.chatHistory[assistantId]) {
     req.session.chatHistory[assistantId] = [];
+  }
+
+  if (user.walletBalance <= 0) {
+    const content = "Wallet balance is too low. Please top up to continue.";
+    req.session.chatHistory[assistantId].push({ role: "assistant", content });
+    return res.send({ status: false, reply: [{ role: "assistant", content }] });
+  }
+
+  // Feature gate + monthly "Messages" cap for this sub-account
+  const { resolveSubaccountId, checkUsageLimit, checkFeature } = require("../helpers/snapshotLimits");
+  const chatSubaccountId = resolveSubaccountId(user, assistantId);
+  const chatBlockReason =
+    checkFeature(user, "chat") ||
+    checkUsageLimit(user, chatSubaccountId, "messages");
+  if (chatBlockReason) {
+    req.session.chatHistory[assistantId].push({ role: "assistant", content: chatBlockReason });
+    return res.send({ status: false, reply: [{ role: "assistant", content: chatBlockReason }] });
   }
 
   try {
@@ -3124,43 +3751,43 @@ const sendChatMessage = async (req, res) => {
     console.log("Sending messages to Vapi:", messages);
 
     const response = await axios.post(
-      "https://api.vapi.ai/chat", // Corrected Endpoint
+      "https://api.vapi.ai/chat",
       {
-        assistantId: assistantId, // Passed in the body
-        input: messages, // Vapi expects 'input' or 'messages'
+        assistantId,
+        input: messages,
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
           "Content-Type": "application/json",
         },
+        timeout: 60_000, // don't hang the request forever if Vapi stalls
       },
     );
 
-    let amountToDeduct = response.data.cost || 0;
-    
-    const chatResell = user.resellConfig?.aiChatMessages;
-    if (chatResell?.enabled) {
-      amountToDeduct += chatResell.resellPrice || 0;
-    }
-    const type = "chat_message";
-
-    user.walletBalance -= amountToDeduct;
-    await user.save();
-
-    user.billingEvents.push({
-      callId: response.data.id,
-      type,
-      amount: amountToDeduct,
-    });
-
     console.log("Received response from Vapi:", response.data);
 
-    req.session.chatHistory[assistantId].push({
-      role: "user",
-      content: userText,
+    if (!Array.isArray(response.data.output) || response.data.output.length === 0) {
+      return res.send({
+        status: false,
+        message: "The assistant returned no response. Check the assistant's model/prompt configuration.",
+      });
+    }
+
+    const amountToDeduct = response.data.cost || 0;
+    user.walletBalance -= amountToDeduct;
+    user.billingEvents.push({
+      callId: response.data.id,
+      type: "chat_message",
+      amount: amountToDeduct,
+      subaccountId: chatSubaccountId || undefined, // enables snapshot message caps
     });
-    req.session.chatHistory[assistantId].push(response.data.output[0]);
+    await user.save();
+
+    req.session.chatHistory[assistantId].push({ role: "user", content: userText });
+    if (response.data.output?.[0]) {
+      req.session.chatHistory[assistantId].push(response.data.output[0]);
+    }
 
     return res.send({ status: true, reply: response.data.output });
   } catch (error) {
@@ -3168,9 +3795,21 @@ const sendChatMessage = async (req, res) => {
       "Error sending chat message:",
       error.response ? error.response.data : error.message,
     );
+    const vapiMsg = error.response?.data?.message;
+    const rawMsg = Array.isArray(vapiMsg) ? vapiMsg.join(", ") : (vapiMsg || error.message || "");
+
+    // Hide internal Vapi billing/account errors from end-users
+    const isBillingError =
+      rawMsg.toLowerCase().includes("payment") ||
+      rawMsg.toLowerCase().includes("card") ||
+      rawMsg.toLowerCase().includes("pay-as-you-go") ||
+      rawMsg.toLowerCase().includes("billing");
+
     return res.send({
       status: false,
-      message: error.message,
+      message: isBillingError
+        ? "Chat is temporarily unavailable. Please contact the developer or support team for assistance."
+        : rawMsg || "Failed to send message.",
       data: error.response?.data,
     });
   }
@@ -3178,22 +3817,71 @@ const sendChatMessage = async (req, res) => {
 
 const getContacts = async (req, res) => {
   const userId = req.user;
+  const { subaccountId } = req.query;
   try {
     const user = await userModel.findById(userId);
-    const contacts = user.ghlSubAccountIds
-      .map((acc) => acc.savedContacts)
-      .flat(); // assuming first subaccount for simplicity
 
-    return res.send({ status: true, data: contacts });
-  } catch (error) {
-    console.error(
-      "Error fetching Vapi contacts:",
-      error.response?.data || error.message,
-    );
-    return res.send({
-      status: false,
-      message: error.response?.data || error.message,
+    // 1) App-saved contacts
+    let appContacts;
+    if (subaccountId) {
+      const sub = user.ghlSubAccountIds.find((acc) => acc.accountId === subaccountId);
+      appContacts = sub ? sub.savedContacts : [];
+    } else {
+      appContacts = user.ghlSubAccountIds.map((acc) => acc.savedContacts).flat();
+    }
+    appContacts = (appContacts || []).map((c) => {
+      const o = c.toObject ? c.toObject() : c;
+      return { ...o, source: "app" };
     });
+
+    // 2) Live GHL contacts (only when scoped to a sub-account)
+    let ghlContacts = [];
+    let reconnectRequired = false;
+    if (subaccountId) {
+      try {
+        const tkns = await getSubGhlTokens(userId, subaccountId);
+        const resp = await axios.get("https://services.leadconnectorhq.com/contacts/", {
+          params: { locationId: subaccountId, limit: 100 },
+          headers: { Authorization: `Bearer ${tkns.data.access_token}`, Version: "2021-07-28", Accept: "application/json" },
+        });
+        ghlContacts = (resp.data?.contacts || []).map((c) => ({
+          id: c.id,
+          ghlContactId: c.id,
+          firstName: c.firstName || "",
+          lastName: c.lastName || "",
+          email: c.email || "",
+          phone: c.phone || "",
+          company: c.companyName || "",
+          title: "",
+          createdAt: c.dateAdded || c.createdAt,
+          source: "ghl",
+        }));
+      } catch (err) {
+        if (err.code === "GHL_RECONNECT_REQUIRED") reconnectRequired = true;
+        else console.error("⚠️ GHL contacts fetch skipped:", err.response?.data?.message || err.message);
+      }
+    }
+
+    // 3) Merge + dedupe by email (fallback phone). App contacts win on conflict.
+    const key = (c) => (c.email || "").trim().toLowerCase() || (c.phone || "").replace(/\D/g, "");
+    const seen = new Set();
+    const merged = [];
+    for (const c of appContacts) {
+      const k = key(c);
+      if (k) seen.add(k);
+      merged.push(c);
+    }
+    for (const c of ghlContacts) {
+      const k = key(c);
+      if (k && seen.has(k)) continue; // already have it from app
+      if (k) seen.add(k);
+      merged.push(c);
+    }
+
+    return res.send({ status: true, data: merged, reconnectRequired });
+  } catch (error) {
+    console.error("Error fetching contacts:", error.response?.data || error.message);
+    return res.send({ status: false, message: error.response?.data || error.message });
   }
 };
 
@@ -3201,26 +3889,83 @@ const createContact = async (req, res) => {
   try {
     const userId = req.user;
     const { subaccountId } = req.query;
-    const contactData = req.body;
+    const rawData = req.body;
 
     const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
 
-    user.ghlSubAccountIds
-      .find((subaccount) => subaccount.accountId === subaccountId)
-      .savedContacts.push(contactData);
+    const subaccount = user.ghlSubAccountIds.find(
+      (s) => s.accountId === subaccountId,
+    );
+    if (!subaccount) {
+      return res.status(404).json({ status: false, message: "Subaccount not found" });
+    }
 
+    // 1. Validate + normalise
+    const { valid, errors, cleaned } = validateContact(rawData);
+    if (!valid) {
+      console.warn("⚠️ createContact → validation failed:", errors);
+      return res.status(400).json({
+        status: false,
+        message: Object.values(errors)[0],
+        errors,
+      });
+    }
+
+    // 2. Duplicate detection
+    const duplicate = findDuplicateContact(subaccount.savedContacts, {
+      email: cleaned.email,
+      phone: cleaned.phone,
+    });
+
+    if (duplicate) {
+      // Merge — fill empty fields on the existing contact
+      const changes = mergeContactData(duplicate, cleaned);
+      if (Object.keys(changes).length > 0) {
+        duplicate.set(changes);
+        user.markModified("ghlSubAccountIds");
+        await user.save();
+      }
+      console.log(`🔀 createContact → merged into existing contact ${duplicate._id}`);
+      return res.send({
+        status: true,
+        merged: true,
+        message: "Matched an existing contact and updated it.",
+        data: duplicate,
+      });
+    }
+
+    // 3. No duplicate → create new
+    subaccount.savedContacts.push(cleaned);
+    user.markModified("ghlSubAccountIds");
     await user.save();
 
-    return res.send({ status: true, message: "Contact created successfully." });
+    const newContact = subaccount.savedContacts[subaccount.savedContacts.length - 1];
+
+    // Notify on new contact
+    const contactName =
+      [cleaned.firstName, cleaned.lastName].filter(Boolean).join(" ") ||
+      cleaned.email || cleaned.phone || "Unknown";
+    await createNotification({
+      userId,
+      type: "new_contact",
+      title: "New Contact Added",
+      message: `${contactName} has been added to your contacts.`,
+      metadata: { subaccountId, contactName, email: cleaned.email, phone: cleaned.phone },
+    });
+
+    return res.send({
+      status: true,
+      merged: false,
+      message: "Contact created successfully.",
+      data: newContact,
+    });
   } catch (error) {
-    console.error(
-      "Error creating Vapi contact:",
-      error.response?.data || error.message,
-    );
-    return {
+    console.error("Error creating contact:", error.response?.data || error.message);
+    return res.status(500).json({
       status: false,
       message: error.response?.data || error.message,
-    };
+    });
   }
 };
 
@@ -3290,8 +4035,19 @@ const updateContact = async (req, res) => {
         .send({ status: false, message: "No data provided." });
     }
 
+    // Validate the changed fields (partial = only check what's provided)
+    const { valid, errors, cleaned } = validateContact(updatedData, { partial: true });
+    if (!valid) {
+      console.warn("⚠️ updateContact → validation failed:", errors);
+      return res.status(400).json({
+        status: false,
+        message: Object.values(errors)[0],
+        errors,
+      });
+    }
+
     // 3. Update the data using .set()
-    contact.set(updatedData);
+    contact.set(cleaned);
 
     // 4. Save the parent document
     await user.save();
@@ -3351,7 +4107,7 @@ const getTeamNotes = async (req, res) => {
     const user = await userModel.findById(userId);
 
     const targetSubaccount = user.ghlSubAccountIds.find(
-      (sub) => sub.accountId === subaccountId && sub.connected,
+      (sub) => sub.accountId === subaccountId,
     );
 
     if (!targetSubaccount)
@@ -3400,7 +4156,7 @@ const updateTeamNotes = async (req, res) => {
     const user = await userModel.findById(userId);
 
     const targetSubaccount = user.ghlSubAccountIds.find(
-      (sub) => sub.accountId === subaccountId && sub.connected,
+      (sub) => sub.accountId === subaccountId,
     );
 
     if (!targetSubaccount)
@@ -3441,6 +4197,208 @@ const updateTeamNotes = async (req, res) => {
   }
 };
 
+// ─── Bulk import contacts (CSV) ──────────────────────────────────────────────
+const importContacts = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId } = req.query;
+    const { contacts } = req.body; // array of contact objects
+
+    console.log(`🔄 importContacts → ${contacts?.length || 0} rows for subaccount ${subaccountId}`);
+
+    if (!Array.isArray(contacts) || contacts.length === 0) {
+      return res.status(400).json({ status: false, message: "No contacts provided" });
+    }
+    if (contacts.length > 1000) {
+      return res.status(400).json({ status: false, message: "Maximum 1000 contacts per import" });
+    }
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    const subaccount = user.ghlSubAccountIds.find((s) => s.accountId === subaccountId);
+    if (!subaccount) {
+      return res.status(404).json({ status: false, message: "Subaccount not found" });
+    }
+
+    const result = { added: 0, merged: 0, skipped: 0, errors: [] };
+
+    contacts.forEach((raw, index) => {
+      // Validate + normalise
+      const { valid, errors, cleaned } = validateContact(raw);
+      if (!valid) {
+        result.skipped += 1;
+        result.errors.push({ row: index + 1, reason: Object.values(errors)[0] });
+        return;
+      }
+
+      // Dedup against already-stored AND already-processed-in-this-batch
+      const duplicate = findDuplicateContact(subaccount.savedContacts, {
+        email: cleaned.email,
+        phone: cleaned.phone,
+      });
+
+      if (duplicate) {
+        const changes = mergeContactData(duplicate, cleaned);
+        if (Object.keys(changes).length > 0) {
+          duplicate.set(changes);
+          result.merged += 1;
+        } else {
+          result.skipped += 1;
+        }
+      } else {
+        subaccount.savedContacts.push(cleaned);
+        result.added += 1;
+      }
+    });
+
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+
+    // Notify
+    await createNotification({
+      userId,
+      type: "new_contact",
+      title: "Contacts Imported",
+      message: `${result.added} added, ${result.merged} merged, ${result.skipped} skipped.`,
+      metadata: { subaccountId, ...result },
+    });
+
+    console.log("✅ importContacts → result:", result);
+    return res.send({ status: true, message: "Import complete", result });
+  } catch (error) {
+    console.error("❌ importContacts error:", error.message);
+    return res.status(500).json({ status: false, message: error.message });
+  }
+};
+
+// ─── Live GHL location details for a sub-account (client info) ────────────────
+const getSubAccountGhlDetails = async (req, res) => {
+  try {
+    const userId = req.user;
+    const { subaccountId } = req.query;
+    if (!subaccountId) {
+      return res.status(400).json({ status: false, message: "subaccountId is required" });
+    }
+
+    let tkns;
+    try {
+      tkns = await getSubGhlTokens(userId, subaccountId);
+    } catch (err) {
+      if (err.code === "GHL_RECONNECT_REQUIRED") {
+        return res.status(200).json({
+          status: false,
+          reconnectRequired: true,
+          message: "GoHighLevel connection expired. Reconnect to load client info.",
+        });
+      }
+      throw err;
+    }
+
+    const response = await axios.get(
+      `https://services.leadconnectorhq.com/locations/${subaccountId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${tkns.data.access_token}`,
+          Version: "2021-07-28",
+          Accept: "application/json",
+        },
+      },
+    );
+
+    const loc = response.data?.location || response.data || {};
+    const addressParts = [loc.address, loc.city, loc.state, loc.postalCode, loc.country].filter(Boolean);
+
+    const business = {
+      name:    loc.name || "",
+      email:   loc.email || loc.business?.email || "",
+      phone:   loc.phone || loc.business?.phone || "",
+      website: loc.website || loc.business?.website || "",
+      address: addressParts.join(", "),
+      timezone: loc.timezone || "",
+    };
+
+    return res.status(200).json({ status: true, data: business });
+  } catch (error) {
+    console.error("❌ getSubAccountGhlDetails error:", error.response?.data || error.message);
+    return res.status(500).json({ status: false, message: error.message });
+  }
+};
+
+// ─── Sub-account spend breakdown ─────────────────────────────────────────────
+const getSubAccountSpend = async (req, res) => {
+  try {
+    const userId = req.user;
+    console.log("🔄 getSubAccountSpend → userId:", userId);
+
+    const user = await userModel.findById(userId);
+    if (!user) return res.status(404).json({ status: false, message: "User not found" });
+
+    // 1. Build map: assistantId → accountId
+    const assistantToAccount = {};
+    const accountAssistantCount = {};
+
+    user.ghlSubAccountIds.forEach((sub) => {
+      const accountId = sub.accountId;
+      accountAssistantCount[accountId] = (sub.vapiAssistants || []).length;
+      (sub.vapiAssistants || []).forEach((ast) => {
+        if (ast.assistantId) {
+          assistantToAccount[ast.assistantId] = accountId;
+        }
+      });
+    });
+
+    const uniqueAssistantIds = Object.keys(assistantToAccount);
+
+    if (uniqueAssistantIds.length === 0) {
+      console.log("ℹ️ getSubAccountSpend → no assistants found");
+      return res.status(200).json({ status: true, data: [] });
+    }
+
+    // 2. Fetch all calls from Vapi in parallel per assistant
+    console.log(`📞 getSubAccountSpend → fetching calls for ${uniqueAssistantIds.length} assistants`);
+
+    const callRequests = uniqueAssistantIds.map((id) =>
+      axios.get("https://api.vapi.ai/call", {
+        params:  { assistantId: id },
+        headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}` },
+      }).then((r) => r.data.map((call) => ({ ...call, _assistantId: id })))
+        .catch(() => []) // if one assistant fails, skip it
+    );
+
+    const callArrays = await Promise.all(callRequests);
+    const allCalls   = callArrays.flat();
+
+    // 3. Aggregate per sub-account
+    const spendMap = {};
+
+    // Initialise all accounts with zeros (so accounts with 0 calls still appear)
+    user.ghlSubAccountIds.forEach((sub) => {
+      spendMap[sub.accountId] = {
+        accountId:      sub.accountId,
+        totalCalls:     0,
+        totalSpend:     0,
+        assistantCount: accountAssistantCount[sub.accountId] || 0,
+      };
+    });
+
+    allCalls.forEach((call) => {
+      const accountId = assistantToAccount[call._assistantId];
+      if (!accountId || !spendMap[accountId]) return;
+      spendMap[accountId].totalCalls  += 1;
+      spendMap[accountId].totalSpend  += call.cost || 0;
+    });
+
+    const data = Object.values(spendMap);
+    console.log(`✅ getSubAccountSpend → ${data.length} sub-accounts, ${allCalls.length} total calls`);
+
+    return res.status(200).json({ status: true, data });
+  } catch (err) {
+    console.error("❌ getSubAccountSpend error:", err.message);
+    return res.status(500).json({ status: false, message: err.message });
+  }
+};
+
 // Execute the main function
 module.exports = {
   createAssistantAndSave,
@@ -3455,6 +4413,15 @@ module.exports = {
   addATool,
   deleteAssistantTool,
   addCalendarId,
+  removeCalendarId,
+  setAssistantMeta,
+  importToolById,
+  createCustomTool,
+  createTool,
+  linkToolToAssistant,
+  kbSearch,
+  getGhlCustomFields,
+  saveCustomFieldMap,
   getAssistantTools,
   addDynamicFMessageToDB,
   addKnowledgeBase,
@@ -3482,6 +4449,10 @@ module.exports = {
   getUserAnalytics,
   getTeamNotes,
   updateTeamNotes,
+  getSubAccountSpend,
+  getSubAccountGhlDetails,
+  importContacts,
+  getSubGhlTokensExport: getSubGhlTokens,
 };
 
 // what's left
