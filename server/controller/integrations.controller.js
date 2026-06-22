@@ -698,43 +698,45 @@ const testOpenAIKey = async (req, res) => {
   }
 };
 
-const checkIntegrationStatus = async (req, res) => {
-  const userId = req.user;
+// Cache only the expensive OpenAI key check, keyed by the API key itself.
+// Changing/removing the key changes the cache key, so connect/disconnect is
+// reflected immediately without any manual invalidation. GHL/Stripe status is
+// derived from already-loaded DB fields, so it's always fresh.
+const OPENAI_CHECK_CACHE = new Map();
+const OPENAI_CHECK_TTL_MS = 60_000;
 
-  const key = await userModel.findById(userId);
-  const apiKey = key.openAIApiKey;
+const checkOpenAiKey = async (apiKey) => {
+  if (!apiKey) return { status: false, message: "No API key configured." };
 
-  let intResponse = {};
+  const hit = OPENAI_CHECK_CACHE.get(apiKey);
+  if (hit && Date.now() - hit.at < OPENAI_CHECK_TTL_MS) return hit.result;
 
-  // openai check
+  let result;
   try {
     const openai = new OpenAI({ apiKey });
     const response = await openai.models.list();
-
-    if (response && Array.isArray(response.data) && response.data.length > 0) {
-      console.log("API Key is valid and authorized.");
-      console.log(`(Found ${response.data.length} models.)`);
-
-      intResponse = {
-        ...intResponse,
-        openai: { status: true, message: "API Key is valid." },
-      };
-    }
+    result =
+      response && Array.isArray(response.data) && response.data.length > 0
+        ? { status: true, message: "API Key is valid." }
+        : { status: false, message: "No models returned for this key." };
   } catch (error) {
-    if (error.status === 401) {
-      console.error("API Key is invalid or expired (401 Unauthorized).");
-    } else if (error.status === 429) {
-      console.warn(
-        "API Key is valid but currently rate-limited or has insufficient usage credit (429).",
-      );
-    } else {
-      console.error(`An unexpected error occurred: ${error.message}`);
-    }
-    intResponse = {
-      ...intResponse,
-      openai: { status: false, message: error.message },
-    };
+    result = { status: false, message: error.message };
   }
+
+  OPENAI_CHECK_CACHE.set(apiKey, { at: Date.now(), result });
+  return result;
+};
+
+const checkIntegrationStatus = async (req, res) => {
+  const userId = req.user;
+
+  // Read-only: only the credential/token fields are needed.
+  const key = await userModel
+    .findById(userId)
+    .select("openAIApiKey ghlRefreshToken ghlRefreshTokenExpiry stripeAccessToken")
+    .lean();
+
+  let intResponse = { openai: await checkOpenAiKey(key.openAIApiKey) };
 
   // GHL is connected only when a refresh token exists and hasn't expired
   const ghlConnected =
@@ -756,9 +758,6 @@ const checkIntegrationStatus = async (req, res) => {
   };
 
   return res.send(intResponse);
-  // } catch (error) {
-  //   return res.send({ status: false, error: error.message, intResponse });
-  // }
 };
 
 const ghlSsoLoginHandler = async (req, res) => {

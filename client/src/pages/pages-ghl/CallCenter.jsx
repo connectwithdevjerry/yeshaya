@@ -106,7 +106,7 @@ const CallDashboard = () => {
           {/* Refresh button */}
           <div className="ml-auto flex items-center pb-1">
             <button
-              onClick={() => dispatch(getAssistantAnalytics(subaccountId))}
+              onClick={() => dispatch(getAssistantAnalytics({ subaccountId, force: true }))}
               disabled={fetchingAnalytics}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-40"
             >
@@ -135,7 +135,7 @@ const CallDashboard = () => {
               <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-between">
                 <p className="text-red-600 text-sm">Failed to load analytics: {analyticsError}</p>
                 <button
-                  onClick={() => dispatch(getAssistantAnalytics(subaccountId))}
+                  onClick={() => dispatch(getAssistantAnalytics({ subaccountId, force: true }))}
                   className="text-xs text-red-500 hover:text-red-700 font-medium underline"
                 >
                   Retry

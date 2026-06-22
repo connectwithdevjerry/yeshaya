@@ -1017,10 +1017,16 @@ export const fetchSubAccountSpend = createAsyncThunk(
 // ✅ 23. Get Assistant Analytics
 export const getAssistantAnalytics = createAsyncThunk(
   "assistants/getAnalytics",
-  async (subaccountId, { rejectWithValue }) => {
+  async (arg, { rejectWithValue }) => {
     try {
-      const query = subaccountId ? `?subaccountId=${subaccountId}` : "";
-      const response = await apiClient.get(`/assistants/get-analytics${query}`);
+      // arg may be a subaccountId string, or { subaccountId, force } to bypass cache
+      const subaccountId = typeof arg === "object" && arg !== null ? arg.subaccountId : arg;
+      const force = typeof arg === "object" && arg !== null ? arg.force : false;
+      const params = new URLSearchParams();
+      if (subaccountId) params.set("subaccountId", subaccountId);
+      if (force) params.set("refresh", "1");
+      const qs = params.toString();
+      const response = await apiClient.get(`/assistants/get-analytics${qs ? `?${qs}` : ""}`);
 
       if (!response.data.status) {
         return rejectWithValue(

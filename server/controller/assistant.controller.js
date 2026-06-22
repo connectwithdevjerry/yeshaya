@@ -641,7 +641,10 @@ const getAssistants = async (req, res) => {
     // get the subaccount he belongs to
     // return the lists of all vapi accounts present
 
-    const user = await userModel.findById(userId);
+    // Read-only path: only need sub-account/assistant metadata, not the
+    // bloated billingEvents/savedContacts arrays. lean() + select() keeps the
+    // document load small. (No .save() happens in this handler.)
+    const user = await userModel.findById(userId).select("ghlSubAccountIds").lean();
 
     const targetSubaccount = user.ghlSubAccountIds.find(
       (sub) => sub.accountId === subaccountId,
@@ -991,11 +994,27 @@ const createTool = async (toolName, userId) => {
   }
 };
 
+// Short-lived cache for the (expensive) Call Center analytics fan-out.
+// Keyed by userId+subaccountId; bypassed when the client sends ?refresh=1.
+const ANALYTICS_CACHE = new Map();
+const ANALYTICS_TTL_MS = 60_000;
+
 const getUserAnalytics = async (req, res) => {
   try {
     const userId = req.user;
     const { subaccountId } = req.query;
-    const user = await userModel.findById(userId);
+    const force = req.query.refresh === "1" || req.query.refresh === "true";
+    const cacheKey = `${userId}:${subaccountId || "all"}`;
+
+    if (!force) {
+      const cached = ANALYTICS_CACHE.get(cacheKey);
+      if (cached && Date.now() - cached.at < ANALYTICS_TTL_MS) {
+        return res.send(cached.payload);
+      }
+    }
+
+    // Read-only: only sub-account/assistant metadata is needed here.
+    const user = await userModel.findById(userId).select("ghlSubAccountIds").lean();
 
     if (!user) return res.send({ message: "User not found" });
 
@@ -1080,7 +1099,7 @@ const getUserAnalytics = async (req, res) => {
     const costPerAppointment =
       stats.appointments > 0 ? stats.totalSpend / stats.appointments : 0;
 
-    return res.send({
+    const payload = {
       status: true,
       data: {
         ...stats,
@@ -1091,7 +1110,10 @@ const getUserAnalytics = async (req, res) => {
         totalSpendFormatted: `$${stats.totalSpend.toFixed(2)}`,
         totalCallTimeFormatted: `${Math.floor(stats.totalCallTimeSeconds / 60)}m ${Math.round(stats.totalCallTimeSeconds % 60)}s`,
       },
-    });
+    };
+
+    ANALYTICS_CACHE.set(cacheKey, { at: Date.now(), payload });
+    return res.send(payload);
   } catch (error) {
     console.error("Analytics Error:", error.response?.data || error.message);
     return res.send({ status: false, message: "Failed to fetch analytics" });
