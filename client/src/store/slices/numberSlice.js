@@ -65,7 +65,7 @@ export const buyNumber = createAsyncThunk(
       console.log("✅ Buy Number Response:", response.data);
 
       if (response.data.status) {
-        return response.data.data;
+        return response.data.purchasedNumber;
       } else {
         return rejectWithValue(response.data.message || "Failed to buy number");
       }

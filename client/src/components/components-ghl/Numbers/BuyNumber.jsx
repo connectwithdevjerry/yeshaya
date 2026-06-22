@@ -19,7 +19,7 @@ const capIcons = (caps) => [
 
 const ITEMS_PER_PAGE = 10;
 
-const BuyNumberModal = ({ isOpen, onClose }) => {
+const BuyNumberModal = ({ isOpen, onClose, onBought }) => {
   const [areaCode,          setAreaCode]          = useState("");
   const [selectedNumber,    setSelectedNumber]    = useState(null);
   const [selectedAssistant, setSelectedAssistant] = useState("");
@@ -60,6 +60,7 @@ const BuyNumberModal = ({ isOpen, onClose }) => {
       if (buyNumber.fulfilled.match(result)) {
         toast.success(`${selectedNumber.friendlyName} purchased!`);
         dispatch(fetchAvailableNumbers());
+        onBought?.();
         onClose();
       } else {
         toast.error(result.payload || "Failed to buy number");

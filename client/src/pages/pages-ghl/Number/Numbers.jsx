@@ -493,7 +493,7 @@ const Numbers = () => {
 
       {/* Modals */}
       <ImportNumberModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImported={() => setRefreshKey((k) => k + 1)} />
-      <BuyNumberModal    isOpen={isBuyModalOpen}    onClose={() => setIsBuyModalOpen(false)} />
+      <BuyNumberModal    isOpen={isBuyModalOpen}    onClose={() => setIsBuyModalOpen(false)} onBought={() => setRefreshKey((k) => k + 1)} />
       {openMenuAccountId && selectedAccount && (
         <NumbersActionsMenu
           isOpen={true}

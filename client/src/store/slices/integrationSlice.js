@@ -145,7 +145,7 @@ export const fetchImportedSubAccounts = createAsyncThunk(
 
 export const importSubAccounts = createAsyncThunk(
   "importSubAccounts/import",
-  async (accountIds, { rejectWithValue }) => {
+  async (accountIds, { rejectWithValue, dispatch }) => {
     try {
       const response = await apiClient.post(
         "/integrations/import-sub-accounts",
@@ -164,8 +164,12 @@ export const importSubAccounts = createAsyncThunk(
         };
       }
 
-      console.log("✅ Import successful, returning data");
-      return response.data;
+      // Re-fetch the enriched imported list so the UI updates everywhere,
+      // regardless of which screen triggered the import. The server import
+      // response doesn't carry the {locations} shape the table needs.
+      console.log("✅ Import successful, refreshing imported sub-accounts");
+      const refreshed = await dispatch(fetchImportedSubAccounts()).unwrap();
+      return { ...response.data, locations: refreshed.locations, agencyId: refreshed.agencyId };
     } catch (error) {
       console.error("Error response:", error.response?.data);
       return rejectWithValue(error.response?.data || error.message);
@@ -640,8 +644,10 @@ const integrationSlice = createSlice({
           return;
         }
 
-        // Otherwise update state with new data
-        state.subAccounts = action.payload?.locations || state.subAccounts;
+        // Update with the freshly re-fetched enriched list (carried by the thunk)
+        if (Array.isArray(action.payload?.locations)) {
+          state.subAccounts = action.payload.locations;
+        }
         state.agencyId = action.payload?.agencyId || state.agencyId;
       })
       .addCase(importSubAccounts.rejected, (state, action) => {
