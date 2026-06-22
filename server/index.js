@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
 const mongoose = require("mongoose");
 const authRoutes = require("./route/user.route");
 const integrationsRoutes = require("./route/integrations.route");
@@ -13,6 +14,7 @@ const poolRoutes = require("./route/pool.route");
 const appointmentRoutes = require("./route/appointment.route");
 const templateRoutes = require("./route/template.route");
 const apiKeyRoutes = require("./route/apikey.route");
+const { widgetRouter, embedRouter } = require("./route/widget.route");
 const publicApiRoutes = require("./route/publicApi.route");
 const activeTagRoutes = require("./route/activeTag.route");
 const cookieParser = require("cookie-parser");
@@ -24,6 +26,9 @@ require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 60001;
+
+// Gzip all responses (JSON + static). Biggest single site-wide speedup.
+app.use(compression());
 
 app.post(
   "/integrations/stripe/webhook",
@@ -66,6 +71,8 @@ app.use("/templates", templateRoutes);
 app.use("/integrations/api-keys", apiKeyRoutes);
 app.use("/api/v1", publicApiRoutes);
 app.use("/active-tags", activeTagRoutes);
+app.use("/widgets", widgetRouter);
+app.use("/embed", embedRouter);
 
 app.get("/", (req, res) => {
   res.send("homepage");

@@ -10,6 +10,7 @@ import teamReducer from './slices/teamSlice';
 import poolReducer from './slices/poolSlice';
 import appointmentReducer from './slices/appointmentSlice';
 import templateReducer from './slices/templateSlice';
+import widgetReducer from './slices/widgetSlice';
 
 
 export const store = configureStore({
@@ -24,6 +25,7 @@ export const store = configureStore({
     pools: poolReducer,
     appointments: appointmentReducer,
     templates: templateReducer,
+    widgets: widgetReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -72,11 +72,11 @@ export const navigationGHLItems = [
       { name: 'Pools', link: '/pools' }
     ]
   },
-  // {
-  //   name: "Widgets",
-  //   icon: "widgets",
-  //   link: "/widgets",
-  // },
+  {
+    name: "Widgets",
+    icon: "widgets",
+    link: "/widgets",
+  },
   {
     name: "Settings",
     icon: "settings",
