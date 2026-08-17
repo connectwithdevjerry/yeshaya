@@ -12,17 +12,46 @@ const getSubGhlTokens = async (userId, accountId) => {
   const SUB_CLIENT_SECRET = process.env.GHL_SUB_CLIENT_SECRET;
 
   const targetSubaccount = ghlSubAccountIds.find(
-    (sub) => sub.accountId === accountId && sub.connected
+    (sub) => sub.accountId === accountId
   );
+
+  if (!targetSubaccount) {
+    const err = new Error("GHL_RECONNECT_REQUIRED");
+    err.code = "GHL_RECONNECT_REQUIRED";
+    throw err;
+  }
 
   const refreshToken = targetSubaccount.ghlSubRefreshToken;
 
-  console.log({ refreshToken });
+  if (!refreshToken || typeof refreshToken !== "string") {
+    targetSubaccount.connected = false;
+    user.markModified("ghlSubAccountIds");
+    await user.save();
+    const err = new Error("GHL_RECONNECT_REQUIRED");
+    err.code = "GHL_RECONNECT_REQUIRED";
+    throw err;
+  }
+
+  // Return cached access token if still valid (60-second buffer)
+  if (
+    targetSubaccount.ghlSubAccessToken &&
+    targetSubaccount.ghlSubAccessTokenExpiry &&
+    targetSubaccount.ghlSubAccessTokenExpiry.getTime() > Date.now() + 60000
+  ) {
+    return {
+      status: true,
+      data: {
+        access_token: targetSubaccount.ghlSubAccessToken,
+        refresh_token: refreshToken,
+        expires_in: Math.floor(
+          (targetSubaccount.ghlSubAccessTokenExpiry.getTime() - Date.now()) / 1000
+        ),
+      },
+    };
+  }
 
   try {
     const url = "https://services.leadconnectorhq.com/oauth/token";
-
-    // process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
     const response = await axios.post(
       url,
@@ -34,11 +63,8 @@ const getSubGhlTokens = async (userId, accountId) => {
         user_type: "Location",
       },
       {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        // httpsAgent, // attach secure agent
-        timeout: 10000, // optional safety timeout
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 10000,
       }
     );
 
@@ -46,6 +72,13 @@ const getSubGhlTokens = async (userId, accountId) => {
     targetSubaccount.ghlSubRefreshTokenExpiry = new Date(
       Date.now() + response.data.expires_in * 1000
     );
+    targetSubaccount.ghlSubAccessToken = response.data.access_token;
+    targetSubaccount.ghlSubAccessTokenExpiry = new Date(
+      Date.now() + response.data.expires_in * 1000
+    );
+    if (targetSubaccount.connected !== true) {
+      targetSubaccount.connected = true;
+    }
     user.markModified("ghlSubAccountIds");
     await user.save();
 

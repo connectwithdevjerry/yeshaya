@@ -6,6 +6,7 @@ import { Send, MessageSquare, Trash2, Info, Bot, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { sendChatMessage } from "../../../../store/slices/assistantsSlice";
 import { getAssistantIdFromUrl } from "../../../../utils/urlUtils";
+import toast from "react-hot-toast";
 
 export const ChatLabView = () => {
   const dispatch     = useDispatch();
@@ -33,6 +34,11 @@ export const ChatLabView = () => {
 
     try {
       const response = await dispatch(sendChatMessage({ assistantId, userText })).unwrap();
+      
+      if (response.status === false) {
+        throw new Error(response.message || "Failed to send message.");
+      }
+      
       const botReply = response.reply?.[0]?.content || "No response received.";
       setMessages((p) => {
         const updated = [...p];
@@ -41,6 +47,7 @@ export const ChatLabView = () => {
       });
     } catch (err) {
       const reason = typeof err === "string" ? err : (err?.message || "Something went wrong. Please try again.");
+      toast.error(reason);
       setMessages((p) => {
         const updated = [...p];
         updated[updated.length - 1] = { role: "assistant", isLoading: false, name: assistantName, content: reason };

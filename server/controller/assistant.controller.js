@@ -320,10 +320,19 @@ const VAPI_ASSISTANT_CONFIG = ({
   v_provider = "azure",
   t_provider = "deepgram",
   t_model = "nova-2-phonecall",
+  startSpeakingPlan = {
+    waitSeconds: 0.4,
+    smartEndpointingPlan: { provider: "vapi" }
+  },
+  stopSpeakingPlan = {
+    numWords: 2,
+    voiceSeconds: 0.5,
+    backoffSeconds: 1
+  }
 }) => ({
   name,
   model: {
-    model: "gpt-3.5-turbo",
+    model: "gpt-4o-mini",
     provider: "openai",
     systemPrompt: prompt,
     temperature: 0.7,
@@ -344,8 +353,28 @@ const VAPI_ASSISTANT_CONFIG = ({
     provider: t_provider,
     model: t_model,
   },
+  startSpeakingPlan,
+  stopSpeakingPlan,
   endCallFunctionEnabled: true,
 });
+
+const patchAssistantModel = async (assistantId, massistant, patchFields) => {
+  const currentModel = massistant.model || {};
+  return await axios.patch(
+    `https://api.vapi.ai/assistant/${assistantId}`,
+    {
+      model: {
+        provider: currentModel.provider || "openai",
+        model: currentModel.model || "gpt-3.5-turbo",
+        ...currentModel,
+        ...patchFields,
+      },
+    },
+    {
+      headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+    }
+  );
+};
 
 /**
  * Creates a Vapi Assistant and saves the successful configuration to MongoDB via Mongoose.
@@ -402,7 +431,7 @@ Return ONLY the newly generated prompt.
     `;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model: "gpt-4o-mini",
       temperature: 0.1,
       messages: [{ role: "user", content: metaPrompt }],
     });
@@ -1134,20 +1163,9 @@ const linkToolToAssistant = async (assistantId, toolId, userId) => {
       updatedTools.push(toolId);
     }
 
-    const response = await axios.patch(
-      `https://api.vapi.ai/assistant/${assistantId}`,
-      {
-        model: {
-          provider: massistant.model.provider || "openai",
-          model: massistant.model.model || "gpt-4o",
-          ...massistant.model,
-          toolIds: updatedTools,
-        },
-      },
-      {
-        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-      },
-    );
+    const response = await patchAssistantModel(assistantId, massistant, {
+      toolIds: updatedTools,
+    });
 
     // 2. Update your local MongoDB database
     const user = await userModel.findById(userId);
@@ -1411,45 +1429,52 @@ const executeToolFromVapi = async (req, res) => {
       const businessName = user?.company?.name || "us";
       const when = fmtWhen(startTime);
 
-      try {
-        await appointmentModel.create({
-          userId,
-          subaccountId: locationId,
-          calendarId,
-          ghlEventId,
-          ghlContactId: contactRes.data.contact.id,
-          customerName,
-          customerEmail,
-          startTime: new Date(startTime),
-          title,
-        });
-      } catch (e) { console.error("⚠️ appointment store failed:", e.message); }
-
-      // Confirmation email to the customer (white-label sender if configured)
-      if (customerEmail) {
-        try {
-          const sendUserEmail = require("../helpers/sendUserEmail");
-          await sendUserEmail(
-            userId,
-            customerEmail,
-            `Appointment Confirmed — ${businessName}`,
-            confirmationEmail({ customerName, when, businessName, title: "" }),
-          );
-        } catch (e) { console.error("⚠️ confirmation email failed:", e.message); }
-      }
-
-      // Notify the agency
-      await createNotification({
-        userId,
-        type: "general",
-        title: "New Appointment Booked",
-        message: `${customerName || customerEmail || "A customer"} booked an appointment for ${when}.`,
-        metadata: { subaccountId: locationId, startTime, customerEmail },
-      });
-
-      return res.json({
+      // Return immediately to Vapi so the AI doesn't pause mid-call
+      res.json({
         results: [{ toolCallId: toolCall.id, result: "Confirmed!" }],
       });
+
+      // Fire and forget side-effects
+      (async () => {
+        try {
+          await appointmentModel.create({
+            userId,
+            subaccountId: locationId,
+            calendarId,
+            ghlEventId,
+            ghlContactId: contactRes.data.contact.id,
+            customerName,
+            customerEmail,
+            startTime: new Date(startTime),
+            title,
+          });
+        } catch (e) { console.error("⚠️ appointment store failed:", e.message); }
+
+        // Confirmation email to the customer (white-label sender if configured)
+        if (customerEmail) {
+          try {
+            const sendUserEmail = require("../helpers/sendUserEmail");
+            await sendUserEmail(
+              userId,
+              customerEmail,
+              `Appointment Confirmed — ${businessName}`,
+              confirmationEmail({ customerName, when, businessName, title: "" }),
+            );
+          } catch (e) { console.error("⚠️ confirmation email failed:", e.message); }
+        }
+
+        // Notify the agency
+        try {
+          await createNotification({
+            userId,
+            type: "general",
+            title: "New Appointment Booked",
+            message: `${customerName || customerEmail || "A customer"} booked an appointment for ${when}.`,
+            metadata: { subaccountId: locationId, startTime, customerEmail },
+          });
+        } catch (e) { console.error("⚠️ notification failed:", e.message); }
+      })().catch(e => console.error("Unhandled error in book_appointment background job:", e));
+      return;
     }
 
     // 3 --- TOOL: UPDATE USER DETAILS ---
@@ -1983,6 +2008,22 @@ const getSubGhlTokens = async (userId, accountId) => {
     throw err;
   }
 
+  // Check if we already have a valid access token (buffer of 60 seconds)
+  if (
+    targetSubaccount.ghlSubAccessToken &&
+    targetSubaccount.ghlSubAccessTokenExpiry &&
+    targetSubaccount.ghlSubAccessTokenExpiry.getTime() > Date.now() + 60000
+  ) {
+    return {
+      status: true,
+      data: {
+        access_token: targetSubaccount.ghlSubAccessToken,
+        refresh_token: refreshToken,
+        expires_in: Math.floor((targetSubaccount.ghlSubAccessTokenExpiry.getTime() - Date.now()) / 1000),
+      },
+    };
+  }
+
   try {
     const url = "https://services.leadconnectorhq.com/oauth/token";
 
@@ -2008,6 +2049,10 @@ const getSubGhlTokens = async (userId, accountId) => {
 
     targetSubaccount.ghlSubRefreshToken = response.data.refresh_token;
     targetSubaccount.ghlSubRefreshTokenExpiry = new Date(
+      Date.now() + response.data.expires_in * 1000,
+    );
+    targetSubaccount.ghlSubAccessToken = response.data.access_token;
+    targetSubaccount.ghlSubAccessTokenExpiry = new Date(
       Date.now() + response.data.expires_in * 1000,
     );
     // Self-heal: a successful token refresh means the account is connected
@@ -2571,20 +2616,9 @@ const linkKnowledgeBaseToAssistant = async (req, res) => {
 
     // console.log({ massistant });
 
-    const response = await axios.patch(
-      `https://api.vapi.ai/assistant/${assistantId}`,
-      {
-        model: {
-          provider: massistant.model.provider || "openai",
-          model: massistant.model.model || "gpt-4o",
-          ...massistant.model,
-          toolIds: [...(updatedTools || [])],
-        },
-      },
-      {
-        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-      },
-    );
+    const response = await patchAssistantModel(assistantId, massistant, {
+      toolIds: [...(updatedTools || [])],
+    });
 
     let foundAssistant;
 
@@ -2821,20 +2855,9 @@ const removeToolFromAllAssistants = async (TARGET_TOOL_ID) => {
 
         // 3. Update the assistant
         // NOTE: You must include provider/model to avoid "missing field" errors
-        await axios.patch(
-          `https://api.vapi.ai/assistant/${assistant.id}`,
-          {
-            model: {
-              provider: assistant.model.provider,
-              model: assistant.model.model,
-              ...assistant.model,
-              toolIds: updatedToolIds,
-            },
-          },
-          {
-            headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-          },
-        );
+        await patchAssistantModel(assistant.id, assistant, {
+          toolIds: updatedToolIds,
+        });
 
         console.log(`Successfully updated ${assistant.name}`);
       }
@@ -2954,20 +2977,9 @@ const removeKnowledgeBaseFromAssistant = async (req, res) => {
       (id) => id !== toolId,
     );
 
-    const response = await axios.patch(
-      `https://api.vapi.ai/assistant/${assistantId}`,
-      {
-        model: {
-          provider: massistant.model.provider || "openai",
-          model: massistant.model.model || "gpt-4o",
-          ...massistant.model,
-          toolIds: [...remainingTools],
-        },
-      },
-      {
-        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-      },
-    );
+    const response = await patchAssistantModel(assistantId, massistant, {
+      toolIds: [...remainingTools],
+    });
 
     targetAssistant.knowledgeBaseToolIds = [...remainingTools];
     user.markModified("ghlSubAccountIds");
@@ -3216,7 +3228,7 @@ const addKnowledgeBase = async (req, res) => {
         },
         knowledgeBases: [
           {
-            model: "gemini-2.5-pro",
+            model: "gemini-1.5-flash",
             provider: "google", // only accepted value here
             name: fileName,
             description: title,

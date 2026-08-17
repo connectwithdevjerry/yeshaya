@@ -45,6 +45,8 @@ const userSchema = mongoose.Schema({
       accountId:              String,
       ghlSubRefreshToken:     String,
       ghlSubRefreshTokenExpiry: Date,
+      ghlSubAccessToken:      String,
+      ghlSubAccessTokenExpiry: Date,
       connected:              { type: Boolean, default: false },
       isFavorite:             { type: Boolean, default: false },
       isArchived:             { type: Boolean, default: false },

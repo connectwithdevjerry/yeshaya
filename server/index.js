@@ -38,7 +38,7 @@ app.post(
 
 const corsOptions = {
   origin: true, // Accepts all origins
-  credentials: false,
+  credentials: true,
   optionsSuccessStatus: 200, // Fixed typo: optionSuccessStatus -> optionsSuccessStatus
 };
 
