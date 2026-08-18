@@ -22,14 +22,14 @@ const processQueue = (error, token = null) => {
 // ✅ Check if token is expired by decoding JWT
 const isTokenExpired = (token, bufferSeconds = 60) => {
   if (!token) return true;
-  
+
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    const payload = JSON.parse(atob(token.split(".")[1]));
     const expiryTime = payload.exp * 1000;
     const currentTime = Date.now();
-    
+
     // ✅ Increased buffer to 60 seconds for better reliability
-    return currentTime >= (expiryTime - (bufferSeconds * 1000));
+    return currentTime >= expiryTime - bufferSeconds * 1000;
   } catch (error) {
     console.error("Error checking token expiry:", error);
     return true;
@@ -52,9 +52,11 @@ const refreshTokens = async () => {
   }
 
   try {
-    const response = await axios.post(`${API_BASE_URL}/auth/exchange-token`, {
-      refreshToken
-    });
+    const response = await axios.post(
+      `${API_BASE_URL}/auth/exchange-token`,
+      { refreshToken },
+      { withCredentials: true },
+    );
 
     // Accept the response as long as a new access token came back.
     // (Don't depend on a `status` flag — a valid accessToken is the contract.)
@@ -90,9 +92,9 @@ const clearAuthAndRedirect = () => {
   localStorage.removeItem("refreshToken");
   sessionStorage.removeItem("accessToken");
   sessionStorage.removeItem("refreshToken");
-  
+
   // Only redirect if not already on login page
-  if (!window.location.pathname.includes('/login')) {
+  if (!window.location.pathname.includes("/login")) {
     window.location.href = "/login";
   }
 };
@@ -101,15 +103,22 @@ const clearAuthAndRedirect = () => {
 apiClient.interceptors.request.use(
   async (config) => {
     // Skip token attachment only for public auth endpoints
-    const publicAuthPaths = ['/auth/signin', '/auth/signup', '/auth/forgot_password', '/auth/reset_password', '/auth/activate', '/auth/exchange-token'];
-    if (publicAuthPaths.some(path => config.url?.includes(path))) {
+    const publicAuthPaths = [
+      "/auth/signin",
+      "/auth/signup",
+      "/auth/forgot_password",
+      "/auth/reset_password",
+      "/auth/activate",
+      "/auth/exchange-token",
+    ];
+    if (publicAuthPaths.some((path) => config.url?.includes(path))) {
       return config;
     }
 
     const token =
       localStorage.getItem("accessToken") ||
       sessionStorage.getItem("accessToken");
-    
+
     if (!token) {
       return config;
     }
@@ -117,7 +126,7 @@ apiClient.interceptors.request.use(
     // ✅ Check if token will expire soon (within 60 seconds)
     if (isTokenExpired(token, 60)) {
       console.log("⚠️ Access token expiring soon, refreshing...");
-      
+
       try {
         // Wait if already refreshing
         if (isRefreshing) {
@@ -131,20 +140,20 @@ apiClient.interceptors.request.use(
         isRefreshing = true;
 
         const newAccessToken = await refreshTokens();
-        
+
         // Update config with new token
         config.headers.Authorization = `Bearer ${newAccessToken}`;
-        
+
         // Process queued requests
         processQueue(null, newAccessToken);
-        
+
         isRefreshing = false;
         return config;
       } catch (error) {
         console.error("❌ Token refresh in request interceptor failed:", error);
         isRefreshing = false;
         processQueue(error, null);
-        
+
         clearAuthAndRedirect();
         return Promise.reject(error);
       }
@@ -152,10 +161,10 @@ apiClient.interceptors.request.use(
       // Token is valid, attach it
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
+
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
 );
 
 // ✅ Response interceptor - only handles 401 errors
@@ -165,20 +174,28 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
 
     // Check if error is 401 and we haven't already tried to refresh
-    const publicAuthPaths = ['/auth/signin', '/auth/signup', '/auth/forgot_password', '/auth/reset_password', '/auth/activate', '/auth/exchange-token'];
-    const isPublicAuth = publicAuthPaths.some(path => originalRequest.url?.includes(path));
+    const publicAuthPaths = [
+      "/auth/signin",
+      "/auth/signup",
+      "/auth/forgot_password",
+      "/auth/reset_password",
+      "/auth/activate",
+      "/auth/exchange-token",
+    ];
+    const isPublicAuth = publicAuthPaths.some((path) =>
+      originalRequest.url?.includes(path),
+    );
 
     // The server returns 401 (missing header) OR 403 (expired/invalid token) —
     // both should trigger a refresh attempt.
-    const isAuthError = error.response?.status === 401 || error.response?.status === 403;
+    const isAuthError =
+      error.response?.status === 401 || error.response?.status === 403;
 
-    if (
-      isAuthError &&
-      !originalRequest._retry &&
-      !isPublicAuth
-    ) {
-      console.log(`⚠️ ${error.response?.status} error detected, attempting token refresh`);
-      
+    if (isAuthError && !originalRequest._retry && !isPublicAuth) {
+      console.log(
+        `⚠️ ${error.response?.status} error detected, attempting token refresh`,
+      );
+
       // Prevent infinite loops
       originalRequest._retry = true;
 
@@ -201,7 +218,7 @@ apiClient.interceptors.response.use(
 
         // Retry original request with new token
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        
+
         isRefreshing = false;
         return apiClient(originalRequest);
       } catch (err) {
@@ -213,14 +230,14 @@ apiClient.interceptors.response.use(
         });
         processQueue(err, null);
         isRefreshing = false;
-        
+
         clearAuthAndRedirect();
         return Promise.reject(err);
       }
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default apiClient;

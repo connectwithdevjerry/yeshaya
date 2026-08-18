@@ -37,11 +37,10 @@ app.post(
 );
 
 const corsOptions = {
-  origin: true, // Accepts all origins
-  credentials: true,
+  origin: true, // Reflects the actual request origin (required when credentials: true — can't use "*")
+  credentials: true, // Must be true: /auth/signin sets a SameSite=None; Secure cookie
   optionsSuccessStatus: 200, // Fixed typo: optionSuccessStatus -> optionsSuccessStatus
 };
-
 app.use(
   session({
     secret: "0c83b09a933ee6f028d62", // Change this to a random string
@@ -109,19 +108,28 @@ mongoose
 
         if (!user) return;
 
-        if (user.autoCardPay.status && user.walletBalance < user.autoCardPay.least) {
-          await axios.post(`${process.env.SERVER_URL}/integrations/autopay/webhook`, {
-            userId,
-            walletBalance: user.walletBalance,
-            least: user.autoCardPay.least,
-          });
+        if (
+          user.autoCardPay.status &&
+          user.walletBalance < user.autoCardPay.least
+        ) {
+          await axios.post(
+            `${process.env.SERVER_URL}/integrations/autopay/webhook`,
+            {
+              userId,
+              walletBalance: user.walletBalance,
+              least: user.autoCardPay.least,
+            },
+          );
 
           await createNotification({
             userId,
             type: "low_balance",
             title: "Low Wallet Balance",
             message: `Your wallet balance ($${user.walletBalance.toFixed(2)}) has dropped below your threshold ($${user.autoCardPay.least}). Auto top-up has been triggered.`,
-            metadata: { walletBalance: user.walletBalance, threshold: user.autoCardPay.least },
+            metadata: {
+              walletBalance: user.walletBalance,
+              threshold: user.autoCardPay.least,
+            },
           });
         }
       } catch (err) {
