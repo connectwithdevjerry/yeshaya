@@ -27,6 +27,38 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 60001;
 
+// Explicit CORS headers and preflight handler at the very top
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization, Cookie, x-api-key, Access-Control-Allow-Credentials"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
+
+const corsOptions = {
+  origin: true, // Reflects the actual request origin
+  credentials: true, // Required for cookies and credentials
+  optionsSuccessStatus: 200,
+};
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
 // Gzip all responses (JSON + static). Biggest single site-wide speedup.
 app.use(compression());
 
@@ -36,11 +68,6 @@ app.post(
   stripeWebhook,
 );
 
-const corsOptions = {
-  origin: true, // Reflects the actual request origin (required when credentials: true — can't use "*")
-  credentials: true, // Must be true: /auth/signin sets a SameSite=None; Secure cookie
-  optionsSuccessStatus: 200, // Fixed typo: optionSuccessStatus -> optionsSuccessStatus
-};
 app.use(
   session({
     secret: "0c83b09a933ee6f028d62", // Change this to a random string
@@ -49,8 +76,6 @@ app.use(
     cookie: { secure: false }, // Set to true if using HTTPS
   }),
 );
-
-app.use(cors(corsOptions));
 
 // app.use(cors());
 app.use(cookieParser());
