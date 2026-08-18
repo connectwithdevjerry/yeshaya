@@ -39,6 +39,24 @@ const userSchema = mongoose.Schema({
     least: { type: Number, default: 25 },
     refillAmount: { type: Number, default: 50 },
   },
+  resellConfig: {
+    aiVoiceMinutes: {
+      enabled: { type: Boolean, default: false },
+      resellPrice: { type: Number, default: 0 },
+    },
+    aiChatMessages: {
+      enabled: { type: Boolean, default: false },
+      resellPrice: { type: Number, default: 0 },
+    },
+    voiceKnowledgeBases: {
+      enabled: { type: Boolean, default: false },
+      resellPrice: { type: Number, default: 0 },
+    },
+    phoneNumbers: {
+      enabled: { type: Boolean, default: false },
+      resellPrice: { type: Number, default: 0 },
+    },
+  },
   allKnowledgeBaseToolIds: [String],
   ghlSubAccountIds: [
     {

@@ -24,12 +24,20 @@ const DESTINATIONS = [
 ];
 
 export function Header({ title }) {
+<<<<<<< HEAD
+  const [isOpen, setIsOpen] = useState(false);
+  const [activePopup, setActivePopup] = useState();
+  
+  // TODO: Connect this to global notifications state
+  const hasNotifications = false;
+=======
   const [isOpen, setIsOpen]           = useState(false);
   const [activePopup, setActivePopup] = useState(null);
   const [query, setQuery]             = useState("");
   const [searchOpen, setSearchOpen]   = useState(false);
   const [activeIdx, setActiveIdx]     = useState(0);
   const searchRef = useRef(null);
+>>>>>>> projects-ui
 
   const dispatch       = useDispatch();
   const navigate       = useNavigate();

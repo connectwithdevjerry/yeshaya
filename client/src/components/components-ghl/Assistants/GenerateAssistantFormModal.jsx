@@ -7,16 +7,24 @@ import { createAssistant } from "../../../store/slices/assistantsSlice";
 import { useCurrentAccount } from "../../../hooks/useCurrentAccount";
 import { useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
+<<<<<<< HEAD
+=======
 
 const inputCls =
   "w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 placeholder:text-gray-300";
+>>>>>>> projects-ui
 
 const GenerateAssistantFormModal = ({ isOpen, onClose }) => {
   const [name, setName]               = useState("");
   const [description, setDescription] = useState("");
+<<<<<<< HEAD
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const dispatch = useDispatch();
+=======
   const [loading, setLoading]         = useState(false);
 
   const dispatch       = useDispatch();
+>>>>>>> projects-ui
   const [searchParams] = useSearchParams();
   const account        = useCurrentAccount();
 
@@ -35,18 +43,29 @@ const GenerateAssistantFormModal = ({ isOpen, onClose }) => {
 
     setLoading(true);
     try {
+      setIsSubmitting(true);
       await dispatch(
         createAssistant({ name, description, subaccountId })
       ).unwrap();
+<<<<<<< HEAD
+      toast.success("Assistant created successfully");
+=======
       toast.success("Assistant created!");
+>>>>>>> projects-ui
       setName("");
       setDescription("");
       onClose();
     } catch (err) {
       console.error("❌ Error creating assistant:", err);
+<<<<<<< HEAD
+      toast.error(err.message || err || "Failed to create assistant");
+    } finally {
+      setIsSubmitting(false);
+=======
       toast.error(err.message || "Failed to create assistant");
     } finally {
       setLoading(false);
+>>>>>>> projects-ui
     }
   };
 
@@ -155,10 +174,37 @@ const GenerateAssistantFormModal = ({ isOpen, onClose }) => {
                 )}
               </motion.button>
             </div>
+<<<<<<< HEAD
+          )}
+        </div>
+
+        <div className="flex justify-end pt-4 border-t border-gray-200">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100 mr-3"
+          >
+            Close
+          </button>
+          <button
+            onClick={handleGenerate}
+            disabled={!name.trim() || !subaccountId || isSubmitting}
+            className={`px-4 py-2 text-sm font-medium text-white rounded-md shadow-sm transition ${
+              name.trim() && subaccountId && !isSubmitting
+                ? "bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700"
+                : "bg-gray-400 cursor-not-allowed"
+            }`}
+          >
+            {isSubmitting ? "Generating..." : "Generate Assistant"}
+          </button>
+        </div>
+      </div>
+    </div>
+=======
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
+>>>>>>> projects-ui
   );
 };
 

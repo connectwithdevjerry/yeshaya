@@ -8,6 +8,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAssistantCallLogs } from "../../../store/slices/assistantsSlice";
+<<<<<<< HEAD:client/src/components/components-ghl/CallCenter/CallList.jsx
+import { RefreshCw } from "lucide-react";
+=======
 import { getSubaccountIdFromUrl } from "../../../utils/urlUtils";
 import { useSearchParams } from "react-router-dom";
 
@@ -44,8 +47,9 @@ const TypeBadge = ({ type }) => {
     </span>
   );
 };
+>>>>>>> projects-ui:client/src/components/components-ghl/CallCenter/DownloadContact.jsx
 
-const DownloadContact = () => {
+const CallList = () => {
   const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
   const subaccountId = getSubaccountIdFromUrl(searchParams);
@@ -58,6 +62,29 @@ const DownloadContact = () => {
   const [hasFetched,   setHasFetched]   = useState(false);
   const [selectedCall, setSelectedCall] = useState(null);
 
+<<<<<<< HEAD:client/src/components/components-ghl/CallCenter/CallList.jsx
+  // Get data from Redux store
+  const { callLogs, fetchingLogs, logsError } = useSelector((state) => {
+    console.log("🔍 Full Redux State:", state.assistants);
+    return {
+      callLogs: state.assistants?.callLogs || [],
+      fetchingLogs: state.assistants?.fetchingLogs || false,
+      logsError: state.assistants?.logsError || null,
+    };
+  });
+
+  useEffect(() => {
+    // Prevent bombardment of API: Only fetch if empty, relying on Redux cache
+    if (callLogs.length === 0 && !fetchingLogs) {
+      console.log("🔍 CallList mounted - Cache empty, fetching call logs...");
+      dispatch(getAssistantCallLogs());
+    }
+  }, [dispatch, callLogs.length, fetchingLogs]);
+
+  const handleRefreshData = () => {
+    dispatch(getAssistantCallLogs());
+  };
+=======
   const { callLogs, fetchingLogs, logsError } = useSelector((state) => ({
     callLogs:    state.assistants?.callLogs    || [],
     fetchingLogs: state.assistants?.fetchingLogs || false,
@@ -67,6 +94,7 @@ const DownloadContact = () => {
   useEffect(() => {
     dispatch(getAssistantCallLogs(subaccountId));
   }, [dispatch, subaccountId]);
+>>>>>>> projects-ui:client/src/components/components-ghl/CallCenter/DownloadContact.jsx
 
   /* ── Format logs ── */
   const formattedData = React.useMemo(() => {
@@ -146,6 +174,35 @@ const DownloadContact = () => {
   };
 
   return (
+<<<<<<< HEAD:client/src/components/components-ghl/CallCenter/CallList.jsx
+    <div className="bg-[#f9fafb] h-[calc(100vh-60px)] flex flex-col overflow-hidden no-scrollbar">
+      {/* Fixed Header Section */}
+      <div className="flex-shrink-0 py-2 px-4 bg-[#f9fafb]">
+        {/* Title and Download Button */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-2">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold">Call Logs</h1>
+            {fetchingLogs && <Loader2 className="animate-spin" size={20} />}
+          </div>
+          <button
+            onClick={downloadTranscriptsAsCSV}
+            disabled={isDownloading || filteredData.length === 0}
+            className="bg-[#0f172a] text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-slate-800 transition-all text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+
+            {isDownloading ? (
+              <>
+                <Loader2 className="animate-spin" size={16} />
+                <span>Downloading...</span>
+              </>
+            ) : (
+              <>
+                <Download size={16} />
+                <span>Download CSV</span>
+              </>
+            )}
+          </button>
+=======
     <div className="p-6 space-y-4">
 
       {/* ── Header ── */}
@@ -158,6 +215,7 @@ const DownloadContact = () => {
             <h2 className="text-sm font-semibold text-gray-800">Call Logs</h2>
             <p className="text-xs text-gray-400 mt-0.5">{formattedData.length} total records</p>
           </div>
+>>>>>>> projects-ui:client/src/components/components-ghl/CallCenter/DownloadContact.jsx
         </div>
 
         <button
@@ -476,4 +534,4 @@ const DownloadContact = () => {
   );
 };
 
-export default DownloadContact;
+export default CallList;

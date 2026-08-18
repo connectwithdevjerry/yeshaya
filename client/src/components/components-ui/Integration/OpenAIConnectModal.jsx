@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, X, Loader2, CheckCircle2 } from "lucide-react";
 import { connectOpenAI } from "../../../store/slices/integrationSlice";
+import toast from "react-hot-toast";
 
 const OpenAIModal = ({ onClose, isOpen }) => {
   const [apiKey,  setApiKey]  = useState("");
@@ -15,8 +16,22 @@ const OpenAIModal = ({ onClose, isOpen }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+<<<<<<< HEAD
+    dispatch(connectOpenAI(apiKey))
+      .unwrap()
+      .then((response) => {
+        toast.success(response?.message || "OpenAI successfully connected!");
+        onClose();
+        setApiKey("");
+      })
+      .catch((error) => {
+        console.error("OpenAI Connection Failed:", error);
+        toast.error(error?.message || (typeof error === "string" ? error : "Failed to connect OpenAI."));
+      });
+=======
     if (!apiKey.trim()) return;
     dispatch(connectOpenAI(apiKey));
+>>>>>>> projects-ui
   };
 
   return (

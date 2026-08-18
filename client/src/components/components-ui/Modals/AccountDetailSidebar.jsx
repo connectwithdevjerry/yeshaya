@@ -56,6 +56,18 @@ export const AccountDetailSidebar = ({ isOpen, onClose, account }) => {
   const [archiving, setArchiving] = useState(false);
 
   useEffect(() => {
+<<<<<<< HEAD
+    if (account) {
+      setFormData({
+        name: account.name || '',
+        firstName: account.firstName || initialClientInfo.fullName.split(' ')[0] || '',
+        lastName: account.lastName || initialClientInfo.fullName.split(' ')[1] || '',
+        email: account.email || initialClientInfo.email,
+        phoneNumber: account.phone || initialClientInfo.phoneNumber,
+      });
+      
+      setAccessMembers(initialAccessMembers); 
+=======
     if (!isOpen || !account?.id) return;
     dispatch(fetchSubAccountDetails(account.id));
 
@@ -78,6 +90,7 @@ export const AccountDetailSidebar = ({ isOpen, onClose, account }) => {
       setCustomName(account.customName || account.name || "");
       setNotes(account.notes || "");
       setDirty(false);
+>>>>>>> projects-ui
     }
   }, [subAccountDetails, account]);
 
@@ -134,6 +147,77 @@ export const AccountDetailSidebar = ({ isOpen, onClose, account }) => {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={onClose} />
 
+<<<<<<< HEAD
+      <div 
+        className={`fixed top-0 right-0 h-full w-full sm:w-[500px] lg:w-[600px] bg-white shadow-2xl overflow-y-auto transition-transform duration-300 ease-in-out z-50 
+        ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <header className="flex justify-between items-center p-6 border-b">
+          <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+            {account.name} 
+            <span className="text-sm text-gray-500 font-normal ml-3 flex items-center">
+                ID: {account.id || account.locationId}
+                <button className="ml-2 text-gray-400 hover:text-gray-600" title="Copy ID">
+                    <Copy className="w-4 h-4" />
+                </button>
+            </span>
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={24} />
+          </button>
+        </header>
+
+        <div className="p-6 pb-20"> 
+          <section className="mb-8 border border-gray-200 p-4 rounded-lg">
+            <h3 className="text-sm font-bold text-gray-700 mb-2 uppercase">Quick Actions</h3>
+            <QuickActionButton icon={ExternalLink} text="Preview" linkText="Open In A New Tab" />
+            <QuickActionButton icon={Lock} text="Lock" linkText="Lock Sub-account" hasLockIcon={true} />
+            <QuickActionButton icon={Users} text="Users" linkText="Invite Members" />
+          </section>
+
+          {/* Account Info */}
+          <section className="mb-8">
+            <h3 className="text-sm font-bold text-gray-700 mb-4 uppercase">Account Info</h3>
+            <div className="space-y-4">
+                <label className="block">
+                    <span className="text-sm font-medium text-gray-700">Name</span>
+                    <input 
+                        type="text" 
+                        name="name" 
+                        value={formData.name} 
+                        onChange={handleChange}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500" 
+                    />
+                </label>
+            </div>
+          </section>
+
+          {/* Client Info */}
+          <section className="mb-8">
+            <h3 className="text-sm font-bold text-gray-700 mb-4 uppercase">Client Info</h3>
+            <div className="space-y-4">
+                <div className="flex gap-4"> 
+                    <label className="block flex-1">
+                        <span className="text-sm font-medium text-gray-700">First Name</span>
+                        <input 
+                            type="text" 
+                            name="firstName" 
+                            value={formData.firstName}
+                            onChange={handleChange}
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500" 
+                        />
+                    </label>
+                    <label className="block flex-1">
+                        <span className="text-sm font-medium text-gray-700">Last Name</span>
+                        <input 
+                            type="text" 
+                            name="lastName" 
+                            value={formData.lastName}
+                            onChange={handleChange}
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500" 
+                        />
+                    </label>
+=======
           <motion.div
             initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
@@ -144,6 +228,7 @@ export const AccountDetailSidebar = ({ isOpen, onClose, account }) => {
               <div className="flex items-center gap-3 min-w-0">
                 <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${avatarGrad(displayName)} flex items-center justify-center text-white font-bold flex-shrink-0`}>
                   {displayName.charAt(0).toUpperCase()}
+>>>>>>> projects-ui
                 </div>
                 <div className="min-w-0">
                   <h2 className="text-base font-bold text-gray-900 truncate">{displayName}</h2>

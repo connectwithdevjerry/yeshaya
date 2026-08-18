@@ -36,12 +36,28 @@ export const RenameAssistantModal = ({ isOpen, onClose }) => {
     setIsSaving(true);
     setError(null);
     try {
+<<<<<<< HEAD
+      // ✅ Dispatch update action
+      await dispatch(
+        updateAssistant({
+          subaccountId,
+          assistantId: selectedAssistant.id,
+          updateData: {
+            name: assistantName.trim(),
+          },
+        })
+      ).unwrap();
+
+      console.log("✅ Assistant renamed successfully");
+      toast.success("Assistant renamed successfully");
+=======
       await dispatch(updateAssistant({
         subaccountId,
         assistantId: selectedAssistant.id,
         updateData: { name: assistantName.trim() },
       })).unwrap();
       toast.success("Assistant renamed!");
+>>>>>>> projects-ui
       onClose();
     } catch (err) {
       setError(err.message || "Failed to rename assistant");

@@ -115,10 +115,24 @@ export const AIModelModal = ({ isOpen, onClose }) => {
           model: { ...selectedAssistant.model, provider: modelInfo.provider, model: modelInfo.api },
         },
       })).unwrap();
+<<<<<<< HEAD
+
+      console.log('✅ Model updated successfully');
+      
+      // Close modal after successful update
+      setTimeout(() => {
+        onClose();
+      }, 500);
+
+    } catch (error) {
+      console.error('❌ Error updating model:', error);
+      toast.error(`Failed to update model: ${error?.message || error}`);
+=======
       toast.success(`Switched to ${displayName}`);
       setTimeout(onClose, 400);
     } catch (err) {
       toast.error(`Failed to update: ${err}`);
+>>>>>>> projects-ui
     } finally {
       setIsSaving(false);
       setSelectedModel(null);

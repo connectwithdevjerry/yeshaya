@@ -1,3 +1,11 @@
+<<<<<<< HEAD
+// src/components/assistant/GeneratePromptModal.jsx
+import React, { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { X, Sparkle, Loader2 } from 'lucide-react';
+import { generatePrompt, clearGeneratedPrompt } from '../../../../store/slices/assistantsSlice';
+import toast from "react-hot-toast";
+=======
 // src/components/components-ghl/AssistantsBuilder/components/GeneratePromptModal.jsx
 import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -5,6 +13,7 @@ import { X, Wand2, Loader2, AlertCircle, LayoutTemplate } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { generatePrompt, clearGeneratedPrompt } from "../../../../store/slices/assistantsSlice";
 import TemplatesPanel from "./TemplatesPanel";
+>>>>>>> projects-ui
 
 export const GeneratePromptModal = ({ isOpen, onClose, onPromptGenerated, currentPrompt }) => {
   const dispatch     = useDispatch();
@@ -38,6 +47,15 @@ export const GeneratePromptModal = ({ isOpen, onClose, onPromptGenerated, curren
     } catch {/* error shown via promptError */}
   };
 
+<<<<<<< HEAD
+        try {
+            await dispatch(generatePrompt({ description: description.trim() })).unwrap();
+        } catch (error) {
+            console.error('Failed to generate prompt:', error);
+            toast.error(error?.message || error || 'Failed to generate prompt');
+        }
+    };
+=======
   const handleClose = () => {
     if (!generatingPrompt) {
       setDescription("");
@@ -51,6 +69,7 @@ export const GeneratePromptModal = ({ isOpen, onClose, onPromptGenerated, curren
     onPromptGenerated?.(prompt);
     onClose();
   };
+>>>>>>> projects-ui
 
   return (
     <AnimatePresence>

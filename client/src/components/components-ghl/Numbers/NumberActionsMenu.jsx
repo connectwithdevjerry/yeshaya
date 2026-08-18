@@ -9,6 +9,10 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { vapiConnect, deleteNumberFromVapi } from "../../../store/slices/numberSlice";
 import toast from "react-hot-toast";
+<<<<<<< HEAD
+import ConfirmDeleteModal from "../ConfirmDeleteModal";
+=======
+>>>>>>> projects-ui
 
 const MenuItem = ({ icon: Icon, label, onClick, disabled, loading, variant = "default" }) => (
   <motion.button
@@ -43,6 +47,7 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position, onA
 
   const [isConnecting,    setIsConnecting]    = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
 
   const { vapiStatuses }   = useSelector((s) => s.numbers || {});
   const vapiInfo           = vapiStatuses?.[account?.id];
@@ -50,7 +55,14 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position, onA
   const isChecking         = Boolean(vapiInfo?.checking);
 
   useEffect(() => {
+<<<<<<< HEAD
+    const handleClickOutside = (event) => {
+      // Don't close meny if the confirmation modal is open
+      if (showDisconnectModal) return;
+
+=======
     const handleClickOutside = (e) => {
+>>>>>>> projects-ui
       if (
         menuRef.current && !menuRef.current.contains(e.target) &&
         anchorRef?.current && !anchorRef.current.contains(e.target)
@@ -58,10 +70,161 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position, onA
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [onClose, anchorRef]);
+  }, [onClose, anchorRef, showDisconnectModal]);
 
   if (!isOpen || !account || !position) return null;
 
+<<<<<<< HEAD
+  const handleAction = async (action) => {
+    console.log(`🟢 handleAction triggered for: ${action}`);
+    console.log("📦 Account data:", account);
+
+    if (action === "ConnectVapi") {
+      try {
+        setIsConnecting(true);
+        
+        // Validate required fields
+        if (!account.companyId || !account.assistantId || !account.phoneNumber || !account.id) {
+          console.error("❌ Missing required fields:", {
+            companyId: account.companyId,
+            assistantId: account.assistantId,
+            phoneNumber: account.phoneNumber,
+            id: account.id
+          });
+          toast.error("Missing required information to connect");
+          setIsConnecting(false);
+          return;
+        }
+
+        console.log("🚀 Attempting to connect to Vapi with:", {
+          subaccountId: account.companyId,
+          assistantId: account.assistantId,
+          number: account.phoneNumber,
+          phoneSid: account.id,
+        });
+        
+        const result = await dispatch(
+          vapiConnect({
+            subaccountId: account.companyId,
+            assistantId: account.assistantId,
+            number: account.phoneNumber,
+            phoneSid: account.id, // This is the Twilio SID
+          })
+        ).unwrap();
+
+        console.log("✅ Successfully connected :", result);
+        
+        toast.success("Number Connected Successfully");
+        onClose();
+      } catch (error) {
+        console.error("❌ Failed to connect to Vapi:", error);
+        console.error("❌ Error details:", JSON.stringify(error, null, 2));
+        
+        // Extract meaningful error message
+        const errorMessage = typeof error === 'string' 
+          ? error 
+          : error?.message || error?.error || "Unknown error occurred";
+        
+        toast.error(`Failed to connect: ${errorMessage}`);
+      } finally {
+        setIsConnecting(false);
+      }
+      return;
+    }
+
+    if (action === "DisconnectVapi") {
+      setShowDisconnectModal(true);
+      return;
+    }
+
+    if (action === "Open") {
+      try {
+        let targetRoute = "/assistants";
+
+        if (location.pathname === "/app") {
+          targetRoute = searchParams.get("route") || "/assistants";
+        } else if (
+          [
+            "/inbox",
+            "/call",
+            "/contacts",
+            "/knowledge",
+            "/assistants",
+            "/activetags",
+            "/numbers",
+            "/pools",
+            "/widgets",
+            "/helps",
+            "/ghl_settings",
+            '/blog'
+          ].includes(location.pathname)
+        ) {
+          targetRoute = location.pathname;
+        }
+
+        const params = new URLSearchParams({
+          agencyid: account.companyId || "UNKNOWN_COMPANY",
+          subaccount: account.id || "NO_ID",
+          allow: "yes",
+          myname: account.name || "NoName",
+          myemail: account.email || "noemail@example.com",
+          route: targetRoute,
+        });
+
+        const url = `/app?${params.toString()}`;
+
+        console.log("➡️ Navigating to:", url);
+
+        onClose();
+
+        setTimeout(() => {
+          navigate(url);
+        }, 0);
+
+        return;
+      } catch (err) {
+        console.error("❌ Navigation error:", err);
+      }
+    }
+
+    onClose();
+  };
+
+  const confirmDisconnectVapi = async () => {
+    setShowDisconnectModal(false);
+    try {
+      setIsDisconnecting(true);
+
+      if (!vapiInfo || !vapiInfo.vapiPhoneNumId) {
+        toast.error("No connection found for this number");
+        setIsDisconnecting(false);
+        return;
+      }
+
+      console.log("🚀 Attempting to disconnect from Vapi with:", {
+        phoneNum: account.phoneNumber,
+        phoneSid: account.id,
+      });
+
+      await dispatch(
+        deleteNumberFromVapi({
+          phoneNum: account.phoneNumber,
+          phoneSid: account.id,
+        })
+      ).unwrap();
+
+      console.log("✅ Successfully disconnected");
+      toast.success("Successfully disconnected");
+      onClose();
+    } catch (error) {
+      console.error("❌ Failed to disconnect from Vapi:", error);
+      
+      const errorMessage = typeof error === 'string' 
+        ? error 
+        : error?.message || error?.error || "Unknown error occurred";
+      
+      toast.error(`Failed to disconnect: ${errorMessage}`);
+=======
   const act = (sectionName) => { onAction?.(sectionName, account); onClose(); };
   const copy = (text, label) => {
     navigator.clipboard.writeText(text)
@@ -103,12 +266,30 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position, onA
     } catch (err) {
       const msg = typeof err === "string" ? err : err?.message || "Unknown error";
       toast.error(`Failed to disconnect: ${msg}`);
+>>>>>>> projects-ui
     } finally {
       setIsDisconnecting(false);
     }
   };
 
   return (
+<<<<<<< HEAD
+    <>
+    <div
+      ref={menuRef}
+      className="fixed w-60 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden py-1"
+      style={{ top: position.top, left: position.left }}
+    >
+      <ul className="divide-y divide-gray-100">
+        <MenuItem icon={Star} text="Rename" onClick={onClose} />
+
+        {/* Show Checking... if status is being determined */}
+        {isChecking && (
+          <li>
+            <div className="flex items-center w-full px-4 py-2 text-sm text-gray-700">
+              <Loader2 size={18} className="text-gray-500 mr-3 animate-spin" />
+              Checking Vapi status...
+=======
     <AnimatePresence>
       {isOpen && (
         <>
@@ -133,6 +314,7 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position, onA
                 <p className="text-xs font-bold text-gray-800 truncate">{account.name || "Unnamed"}</p>
                 <p className="text-[10px] font-mono text-gray-400 truncate">{account.phoneNumber}</p>
               </div>
+>>>>>>> projects-ui
             </div>
             <div className="flex items-center gap-1.5 mt-2">
               {isConnectedToVapi ? (
@@ -157,6 +339,35 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position, onA
             <MenuItem icon={Scale}  label="Manage Limits"    onClick={() => act("limits")} />
             <MenuItem icon={Bot}    label="Change Assistant" onClick={() => act("assistant")} />
 
+<<<<<<< HEAD
+        <MenuItem icon={Pencil} text="Edit account" onClick={onClose} />
+        <MenuItem icon={Scale} text="Manage limits" onClick={onClose} />
+        <MenuItem icon={Eye} text="Edit permissions" onClick={onClose} />
+      </ul>
+      <div className="pt-2 px-4 text-xs text-gray-500 border-t border-gray-100">
+        <p className="font-semibold truncate">
+          {account.name || "Unnamed Account"}
+        </p>
+        <p>Last edited: 11/05/25</p>
+        {/* Footer connection message based on isConnected boolean */}
+        {isConnectedToVapi && (
+          <p className="text-green-600 font-medium mt-1">
+            ✓ Connect Number
+          </p>
+        )}
+        {!isConnectedToVapi && !isChecking && (
+          <p className="text-gray-500 mt-1">Not connected</p>
+        )}
+      </div>
+    </div>
+    <ConfirmDeleteModal
+      isOpen={showDisconnectModal}
+      onClose={() => setShowDisconnectModal(false)}
+      onConfirm={confirmDisconnectVapi}
+      title={`Disconnect ${account.phoneNumber}`}
+    />
+    </>
+=======
             <div className="my-1 border-t border-gray-100" />
 
             <MenuItem icon={Info} label="View Details" onClick={() => act("details")} />
@@ -195,6 +406,7 @@ const NumbersActionsMenu = ({ isOpen, onClose, account, anchorRef, position, onA
         </>
       )}
     </AnimatePresence>
+>>>>>>> projects-ui
   );
 };
 

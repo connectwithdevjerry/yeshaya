@@ -33,4 +33,24 @@ export const authAPI = {
   exchangeToken: (refreshToken) => {
     return apiClient.post("/auth/exchange-token", { refreshToken });
   },
+
+  getCompanyDetails: () => {
+    return apiClient.get("/auth/company-details");
+  },
+
+  registerCompany: (formData) => {
+    return apiClient.post("/auth/register-company", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  updateCompanyDetails: (formData) => {
+    return apiClient.post("/auth/company-details/update", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  getUserDetails: () => {
+    return apiClient.get("/auth/get-user-details");
+  },
 };

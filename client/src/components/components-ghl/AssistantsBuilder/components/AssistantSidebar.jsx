@@ -114,8 +114,13 @@ export const ToolkitSidebar = ({ isOpen, onToggle, activeTab, promptContent, set
 
   return (
     <div
+<<<<<<< HEAD
+      className={`max-h-full border-l border-gray-200 bg-white flex-shrink-0 flex flex-col relative transition-all duration-300 ease-in-out shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] ${
+        isOpen ? sidebarWidth : "w-0 overflow-hidden"
+=======
       className={`max-h-full border-l border-gray-100 bg-white flex-shrink-0 flex flex-col relative transition-all duration-300 ease-in-out ${
         isOpen ? "w-[300px]" : "w-0 overflow-hidden"
+>>>>>>> projects-ui
       }`}
     >
       <AnimatePresence>
@@ -144,6 +149,9 @@ export const ToolkitSidebar = ({ isOpen, onToggle, activeTab, promptContent, set
               </button>
             </div>
 
+<<<<<<< HEAD
+
+=======
             {/* Item list */}
             <div className="flex-1 overflow-y-auto">
               {toolkitItems.map((item) => (
@@ -159,6 +167,7 @@ export const ToolkitSidebar = ({ isOpen, onToggle, activeTab, promptContent, set
                 />
               ))}
             </div>
+>>>>>>> projects-ui
 
             {/* Bottom item */}
             {bottomMenuItem && (
