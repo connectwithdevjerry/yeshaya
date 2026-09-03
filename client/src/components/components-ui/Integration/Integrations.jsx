@@ -295,47 +295,7 @@ const IntegrationsContent = () => {
           isLoading={disconnecting}
         />
       )}
-<<<<<<< HEAD
-
-      <IntegrationItem
-        name="GoHighLevel"
-        image_url="https://canny-assets.io/icons/5b918f2630865c174eaa9483fdedac22.png"
-        description="Connect GoHighLevel to import your sub-accounts, manage connections & more"
-        isConnected={compareDates(goHighLevel?.expiryDate)}
-        loading={goHighLevel?.loading}
-        onClick={() =>
-          !compareDates(goHighLevel?.expiryDate) &&
-          dispatch(connectGoHighLevel())
-        }
-      />
-
-      <IntegrationItem
-        name="OpenAI"
-        image_url="https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg"
-        description="Connect OpenAI to use our assistant / agent framework using your own keys"
-        isConnected={!!openAI?.connected}
-        loading={openAI?.loading}
-        onClick={() => !openAI?.connected && setIsOpenAIConnectOpen(true)}
-      />
-
-      <IntegrationItem
-        name="Stripe"
-        image_url="https://freelogopng.com/images/all_img/1685814539stripe-icon-png.png"
-        description="Connect Stripe to re-bill or resell AI voice minutes using your own Stripe"
-        isConnected={stripe?.presence}
-        loading={stripe?.loading}
-        onClick={() => !stripe?.presence && dispatch(connectStripe())}
-      />
-
-      {/* ✅ Modal for entering OpenAI API key */}
-      <OpenAIModel
-        isOpen={isOpenAIConnectOpen}
-        onClose={() => setIsOpenAIConnectOpen(false)}
-      />
-    </Card>
-=======
     </div>
->>>>>>> projects-ui
   );
 };
 

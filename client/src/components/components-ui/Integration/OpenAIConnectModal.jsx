@@ -16,22 +16,19 @@ const OpenAIModal = ({ onClose, isOpen }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-<<<<<<< HEAD
+    if (!apiKey.trim()) return;
     dispatch(connectOpenAI(apiKey))
       .unwrap()
       .then((response) => {
         toast.success(response?.message || "OpenAI successfully connected!");
-        onClose();
         setApiKey("");
+        onClose();
       })
-      .catch((error) => {
-        console.error("OpenAI Connection Failed:", error);
-        toast.error(error?.message || (typeof error === "string" ? error : "Failed to connect OpenAI."));
+      .catch((err) => {
+        toast.error(
+          err?.message || (typeof err === "string" ? err : "Failed to connect OpenAI."),
+        );
       });
-=======
-    if (!apiKey.trim()) return;
-    dispatch(connectOpenAI(apiKey));
->>>>>>> projects-ui
   };
 
   return (
