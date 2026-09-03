@@ -128,6 +128,36 @@ export const saveTeamNotes = createAsyncThunk(
   },
 );
 
+// Chat Lab history — the assistant's durable memory of this tester's thread.
+// Chat history is stored server-side (shared with the voice, SMS, and widget
+// channels), so the panel can restore it after a reload instead of starting
+// blank while the assistant still remembers the conversation.
+export const fetchChatHistory = createAsyncThunk(
+  "assistants/fetchChatHistory",
+  async ({ assistantId }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.get(`/memory/chat-history?assistantId=${assistantId}`);
+      if (!res.data.status) return rejectWithValue(res.data.message || "Failed to load history");
+      return res.data.data || [];
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to load chat history");
+    }
+  },
+);
+
+export const clearChatHistory = createAsyncThunk(
+  "assistants/clearChatHistory",
+  async ({ assistantId }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.delete(`/memory/chat-history?assistantId=${assistantId}`);
+      if (!res.data.status) return rejectWithValue(res.data.message || "Failed to clear history");
+      return true;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to clear chat history");
+    }
+  },
+);
+
 // Toggle favorite / archived on an assistant
 export const setAssistantMeta = createAsyncThunk(
   "assistants/setMeta",

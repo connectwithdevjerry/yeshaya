@@ -19,6 +19,42 @@
   // Derive API base from this script's own URL (".../embed/widget.js")
   var apiBase = script.src.replace(/\/embed\/widget\.js.*$/, "");
   var STORAGE_KEY = "yw_history_" + widgetId;
+  var VISITOR_KEY = "yw_visitor_" + widgetId;
+
+  // Stable per-browser id so the server can keep a durable memory of this
+  // visitor even if localStorage history is cleared. Not a tracking identifier:
+  // it is scoped to this widget and never leaves this origin's storage.
+  var visitorId = "";
+  try {
+    visitorId = localStorage.getItem(VISITOR_KEY) || "";
+    if (!visitorId) {
+      visitorId =
+        window.crypto && window.crypto.randomUUID
+          ? window.crypto.randomUUID()
+          : String(Date.now()) + "-" + Math.random().toString(36).slice(2);
+      localStorage.setItem(VISITOR_KEY, visitorId);
+    }
+  } catch (e) {
+    visitorId = "";
+  }
+
+  // Optional identification. Set data-contact-email / data-contact-phone /
+  // data-contact-name on the script tag when the host page already knows who
+  // the visitor is, or call window.YashayahWidget.identify({...}) after login.
+  // Identifying a visitor merges this chat with that person's call and SMS
+  // history, so the assistant carries context across channels and devices.
+  var contact = {
+    name: script.getAttribute("data-contact-name") || "",
+    email: script.getAttribute("data-contact-email") || "",
+    phone: script.getAttribute("data-contact-phone") || "",
+  };
+  window.YashayahWidget = window.YashayahWidget || {};
+  window.YashayahWidget.identify = function (details) {
+    if (!details) return;
+    if (details.name) contact.name = details.name;
+    if (details.email) contact.email = details.email;
+    if (details.phone) contact.phone = details.phone;
+  };
 
   var cfg = null;
   var open = false;
@@ -155,7 +191,11 @@
       fetch(apiBase + "/embed/" + widgetId + "/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: messages }),
+        body: JSON.stringify({
+          messages: messages,
+          visitorId: visitorId,
+          contact: contact,
+        }),
       })
         .then(function (r) { return r.json(); })
         .then(function (d) {

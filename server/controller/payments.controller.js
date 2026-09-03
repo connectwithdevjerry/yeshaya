@@ -4,6 +4,7 @@ const numberSettingModel = require("../model/numberSetting.model");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { createNotification } = require("./notification.controller");
 const { resolveSubaccountId, checkUsageLimit, featureEnabled } = require("../helpers/snapshotLimits");
+const { captureVapiCall } = require("../helpers/customerMemory");
 require("dotenv").config();
 
 const CHARGE_TYPES = ["end-of-call-report", "call.ended", "call.analysis.completed"];
@@ -467,6 +468,26 @@ const callBillingWebhook = async (req, res) => {
       return res.sendStatus(200);
     }
 
+    // Call duration (seconds) — used for usage caps, notifications, and memory.
+    const durationSec = call.endedAt && call.startedAt
+      ? Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000)
+      : (Number(call.durationSeconds) ? Math.round(call.durationSeconds) : null);
+
+    // ---- PER-CUSTOMER MEMORY ----
+    // Runs before the billing idempotency guard: whichever event bills the call
+    // first is not necessarily the one carrying the transcript. captureVapiCall
+    // dedupes on the Vapi call id and ignores events with no content, so every
+    // event can safely be offered to it.
+    await captureVapiCall({
+      user,
+      call,
+      artifact,
+      analysis: req.body.message?.analysis,
+      messages: req.body.message?.artifact?.messages,
+      subaccountId,
+      durationSec,
+    });
+
     // ---- IDEMPOTENCY: charge a given call only ONCE, regardless of which ----
     // ---- event(s) Vapi sends (call.ended, end-of-call-report, analysis). ----
     const alreadyBilled = (user.billingEvents || []).some(
@@ -487,11 +508,6 @@ const callBillingWebhook = async (req, res) => {
       amountToDeduct = call.analysis?.cost ?? 0;
     }
     amountToDeduct = Number(amountToDeduct) || 0;
-
-    // Resolve the call duration (seconds) for usage tracking + notifications
-    const durationSec = call.endedAt && call.startedAt
-      ? Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000)
-      : (Number(call.durationSeconds) ? Math.round(call.durationSeconds) : null);
 
     // ---- DEDUCT WALLET (single charge per call) ----
     user.walletBalance -= amountToDeduct;

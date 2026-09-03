@@ -18,6 +18,24 @@ const appointmentModel = require("../model/appointment.model");
 const { fmtWhen, confirmationEmail } = require("../helpers/appointmentEmails");
 const kbFileModel = require("../model/kbFile.model");
 const { saveImageToDB } = require("../cloudinaryImageHandler");
+const {
+  resolveSubaccountId,
+  checkFeature,
+  checkUsageLimit,
+} = require("../helpers/snapshotLimits");
+const {
+  loadMemory,
+  ensureMemory,
+  recordTurns,
+  recordInteraction,
+  upsertFacts,
+  appendNote,
+  memorySystemTurns,
+  recentTurnsFor,
+  buildAssistantOverrides,
+  postVapiCall,
+  postVapiChat,
+} = require("../helpers/customerMemory");
 
 const toolsProperties = {
   scrape_website: {
@@ -1347,6 +1365,11 @@ const executeToolFromVapi = async (req, res) => {
     const locationId = targetSubAccount.accountId;
     const calendarId = targetAssistant.calendar; // Uses the first calendar
 
+    // The customer this tool call belongs to. Vapi includes the live call on
+    // the webhook, which is how anything the assistant collects mid-call gets
+    // attached to the right person's durable memory.
+    const callerNumber = message.call?.customer?.number || "";
+
     // 4. IMPORTANT: GHL API v2 requires an Access Token (not just a refresh token)
     // You must have a helper to refresh this token, as they expire every 20 hours.
     const tkns = await getSubGhlTokens(userId, locationId);
@@ -1515,6 +1538,26 @@ const executeToolFromVapi = async (req, res) => {
           },
         },
       );
+
+      // ---- PER-CUSTOMER MEMORY ----
+      // Remember what was just collected so the next call, text, or chat does
+      // not ask for it again.
+      const memory = await ensureMemory({
+        ownerUserId: user._id,
+        subaccountId: locationId,
+        phone: callerNumber,
+        email,
+        name: [firstName, lastName].filter(Boolean).join(" "),
+      });
+      if (memory) {
+        const ghlContactId = response.data?.contact?.id;
+        if (ghlContactId) memory.ghlContactId = ghlContactId;
+        await memory.save();
+        await upsertFacts(memory, collected || {}, {
+          source: "tool",
+          assistantId,
+        });
+      }
 
       return res.status(200).json({
         results: [
@@ -1933,6 +1976,19 @@ const executeToolFromVapi = async (req, res) => {
 
           user.markModified("ghlSubAccountIds");
           await user.save();
+
+          // ---- PER-CUSTOMER MEMORY ----
+          // Team notes are standing instructions for every conversation; when
+          // the note was made during a live call, also file it against that
+          // caller so it surfaces the next time they specifically get in touch.
+          if (callerNumber) {
+            const memory = await ensureMemory({
+              ownerUserId: user._id,
+              subaccountId: locationId,
+              phone: callerNumber,
+            });
+            await appendNote(memory, note, { assistantId });
+          }
 
           return res.status(200).json({
             results: [
@@ -3699,25 +3755,35 @@ const makeOutboundCall = async (req, res) => {
 
     const message = fillTemplate(outboundDynamicMessage, dynamicValues);
 
-    const response = await axios.post(
-      "https://api.vapi.ai/call",
-      {
-        assistantId: assistantId,
-        phoneNumberId: VAPI_PHONE_NUMBER_ID,
-        customer: {
-          number: customerNumber, // Format: +1234567890
-        },
-        assistantOverrides: {
-          firstMessage: message,
-          firstMessageMode: message
-            ? "assistant-speaks-first"
-            : "assistant-speaks-first-with-model-generated-message",
-        },
+    // ---- PER-CUSTOMER MEMORY ----
+    // If we have talked to this number before — by phone, text, or chat — carry
+    // that context into the call.
+    const memory = await loadMemory({
+      ownerUserId: user._id,
+      subaccountId: targetSubaccount.accountId,
+      phone: customerNumber,
+    });
+
+    const assistantOverrides = await buildAssistantOverrides({
+      assistantId,
+      memory,
+      assistantNotes: targetAssistant.teamNotes,
+      base: {
+        firstMessage: message,
+        firstMessageMode: message
+          ? "assistant-speaks-first"
+          : "assistant-speaks-first-with-model-generated-message",
       },
-      {
-        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+    });
+
+    const response = await postVapiCall({
+      assistantId: assistantId,
+      phoneNumberId: VAPI_PHONE_NUMBER_ID,
+      customer: {
+        number: customerNumber, // Format: +1234567890
       },
-    );
+      assistantOverrides,
+    });
 
     console.log(
       `Outbound call initiated from ${fromNumber} to ${customerNumber} via Assistant ${assistantId}.`,
@@ -3743,61 +3809,75 @@ const checkWalletBalance = async (req, res) => {
   return res.send({ status: true, data: user.walletBalance });
 };
 
+// Dashboard "Chat Lab" text chat.
+//
+// History lives in the durable per-customer memory store, not in the Express
+// session, so it survives restarts and serverless instance churn and is shared
+// with the voice, SMS, and widget channels. Pass `customer: { name, phone,
+// email }` to chat as (and build memory for) a real contact; with no customer
+// the conversation is remembered against the dashboard user, which is what you
+// want when testing an assistant.
 const sendChatMessage = async (req, res) => {
   const { userText, assistantId } = req.body;
+  // The dashboard posts form-urlencoded, where a nested object arrives as a
+  // JSON string; API clients post real JSON. Accept either.
+  let customer = req.body.customer;
+  if (typeof customer === "string") {
+    try {
+      customer = JSON.parse(customer);
+    } catch {
+      customer = null;
+    }
+  }
   const userId = req.user;
+  // Scope test conversations to the individual team member, so two people
+  // testing the same assistant do not share one thread.
+  const actingUserId = req.actingUserId || req.user;
 
   const user = await userModel.findById(userId);
 
-  // Initialize session chat history before any usage (guard if session missing)
-  if (!req.session) req.session = {};
-  if (!req.session.chatHistory) {
-    req.session.chatHistory = {};
-  }
-  if (!req.session.chatHistory[assistantId]) {
-    req.session.chatHistory[assistantId] = [];
-  }
+  const chatSubaccountId = resolveSubaccountId(user, assistantId);
+  const chatAssistant = (user.ghlSubAccountIds || [])
+    .flatMap((sub) => sub.vapiAssistants || [])
+    .find((ast) => ast.assistantId === assistantId);
 
   if (user.walletBalance <= 0) {
     const content = "Wallet balance is too low. Please top up to continue.";
-    req.session.chatHistory[assistantId].push({ role: "assistant", content });
     return res.send({ status: false, reply: [{ role: "assistant", content }] });
   }
 
   // Feature gate + monthly "Messages" cap for this sub-account
-  const { resolveSubaccountId, checkUsageLimit, checkFeature } = require("../helpers/snapshotLimits");
-  const chatSubaccountId = resolveSubaccountId(user, assistantId);
   const chatBlockReason =
     checkFeature(user, "chat") ||
     checkUsageLimit(user, chatSubaccountId, "messages");
   if (chatBlockReason) {
-    req.session.chatHistory[assistantId].push({ role: "assistant", content: chatBlockReason });
     return res.send({ status: false, reply: [{ role: "assistant", content: chatBlockReason }] });
   }
 
+  // Chatting as a named contact unifies this thread with that person's calls and
+  // texts. With no contact this is a test conversation, remembered against the
+  // team member and scoped to the assistant under test.
+  const isTestConversation = !customer?.phone && !customer?.email;
+  const memory = await ensureMemory({
+    ownerUserId: user._id,
+    subaccountId: chatSubaccountId,
+    phone: customer?.phone,
+    email: customer?.email,
+    name: customer?.name,
+    userId: isTestConversation ? actingUserId : undefined,
+  });
+  const scope = isTestConversation ? { assistantId } : {};
+
   try {
-    const currentHistory = req.session.chatHistory[assistantId];
-    const messages = [
-      ...currentHistory.slice(-10),
+    const input = [
+      ...memorySystemTurns(memory, { assistantNotes: chatAssistant?.teamNotes, ...scope }),
+      ...recentTurnsFor(memory, scope),
       { role: "user", content: userText },
     ];
 
-    console.log("Sending messages to Vapi:", messages);
+    console.log("Sending messages to Vapi:", input);
 
-    const response = await axios.post(
-      "https://api.vapi.ai/chat",
-      {
-        assistantId,
-        input: messages,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 60_000, // don't hang the request forever if Vapi stalls
-      },
-    );
+    const response = await postVapiChat({ assistantId, input });
 
     console.log("Received response from Vapi:", response.data);
 
@@ -3818,10 +3898,26 @@ const sendChatMessage = async (req, res) => {
     });
     await user.save();
 
-    req.session.chatHistory[assistantId].push({ role: "user", content: userText });
-    if (response.data.output?.[0]) {
-      req.session.chatHistory[assistantId].push(response.data.output[0]);
-    }
+    // ---- PER-CUSTOMER MEMORY (write) ----
+    const answer = response.data.output
+      .map((m) => m?.content)
+      .filter((c) => typeof c === "string" && c.trim())
+      .join("\n\n");
+
+    await recordTurns(
+      memory,
+      [
+        { role: "user", content: userText },
+        ...(answer ? [{ role: "assistant", content: answer }] : []),
+      ],
+      { channel: "chat", assistantId, openAIApiKey: user.openAIApiKey },
+    );
+    await recordInteraction(memory, {
+      channel: "chat",
+      assistantId,
+      refId: response.data.id,
+      sessionWindowMinutes: 30, // one chat session = one interaction
+    });
 
     return res.send({ status: true, reply: response.data.output });
   } catch (error) {

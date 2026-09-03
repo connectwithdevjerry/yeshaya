@@ -23,6 +23,19 @@ const {
   getSubGhlTokens,
 } = require("../helperFunctions");
 const VoiceResponse = require("twilio").twiml.VoiceResponse;
+const MessagingResponse = require("twilio").twiml.MessagingResponse;
+const { checkFeature, checkUsageLimit } = require("../helpers/snapshotLimits");
+const {
+  loadMemory,
+  ensureMemory,
+  recordTurns,
+  recordInteraction,
+  memorySystemTurns,
+  recentTurnsFor,
+  buildAssistantOverrides,
+  postVapiCall,
+  postVapiChat,
+} = require("../helpers/customerMemory");
 
 const SUB_PATH = "/integrations";
 const CLIENT_ID = process.env.GHL_APP_CLIENT_ID;
@@ -1174,7 +1187,7 @@ const twilioCallReceiver = async (req, res) => {
 
     console.log({ VAPI_PHONE_NUMBER_ID });
 
-    const inboundDynamicMessage = targetAssistant.inboundDynamicMessage || "";
+    const inboundDynamicMessage = targetAssistant[0]?.inboundDynamicMessage || "";
     let greetingsValues = {};
     let myCustomer = {};
 
@@ -1226,30 +1239,37 @@ const twilioCallReceiver = async (req, res) => {
 
     const message = fillTemplate(inboundDynamicMessage, greetingsValues);
 
+    // ---- PER-CUSTOMER MEMORY ----
+    // Everything this caller has said before, on any channel, appended to the
+    // assistant's own system prompt for the duration of this call.
+    const memory = await loadMemory({
+      ownerUserId: user._id,
+      subaccountId: subaccount,
+      phone: callerNumber,
+    });
+
+    const assistantOverrides = await buildAssistantOverrides({
+      assistantId: assistant,
+      memory,
+      assistantNotes: targetAssistant[0]?.teamNotes,
+      base: {
+        ...(message && { firstMessage: message }),
+        firstMessageMode: "assistant-speaks-first",
+      },
+    });
+
     // Call the Vapi API to start the AI conversation
-    const vapiResponse = await axios.post(
-      "https://api.vapi.ai/call",
-      {
-        // This ID is the unique Vapi ID for the Twilio number you imported
-        phoneNumberId: VAPI_PHONE_NUMBER_ID,
-        // Set to true to return TwiML instead of immediately dialing
-        phoneCallProviderBypassEnabled: true,
-        customer: {
-          number: callerNumber,
-        },
-        assistantId: assistant,
-        assistantOverrides: {
-          ...(message && { firstMessage: message }),
-          firstMessageMode: "assistant-speaks-first",
-        },
+    const vapiResponse = await postVapiCall({
+      // This ID is the unique Vapi ID for the Twilio number you imported
+      phoneNumberId: VAPI_PHONE_NUMBER_ID,
+      // Set to true to return TwiML instead of immediately dialing
+      phoneCallProviderBypassEnabled: true,
+      customer: {
+        number: callerNumber,
       },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      },
-    );
+      assistantId: assistant,
+      assistantOverrides,
+    });
 
     // Vapi returns the TwiML needed to transfer control back to Vapi's SIP server
     const returnedTwiml = vapiResponse.data.phoneCallProviderDetails.twiml;
@@ -1269,51 +1289,115 @@ const twilioCallReceiver = async (req, res) => {
   }
 };
 
+// Inbound SMS handler.
+//
+// Twilio POSTs here for every text sent to a number linked to an assistant. We
+// answer with the assistant's reply as TwiML, and the whole exchange is written
+// to (and read from) the same per-customer memory the voice and chat channels
+// use — so a customer can start on the phone and continue over text.
 const twilioSmsReceiver = async (req, res) => {
+  const reply = (text) => {
+    const twiml = new MessagingResponse();
+    if (text) twiml.message(text);
+    return res.type("text/xml").send(twiml.toString());
+  };
+
   try {
     const { userId, subaccount, assistant } = req.params;
 
-    // Twilio sends caller's number in req.body.From
+    // Twilio sends the sender's number in req.body.From and the text in Body.
     const callerNumber = req.body.From;
+    const userText = String(req.body.Body || "").trim();
 
-    console.log(`Incoming call detected from: ${callerNumber}`);
+    console.log(`Incoming SMS from ${callerNumber} to assistant ${assistant}`);
 
-    // Call the Vapi API to start the AI conversation
-    const vapiResponse = await axios.post(
-      "https://api.vapi.ai/call",
-      {
-        // This ID is the unique Vapi ID for the Twilio number you imported
-        phoneNumberId: VAPI_PHONE_NUMBER_ID,
-        // Set to true to return TwiML instead of immediately dialing
-        phoneCallProviderBypassEnabled: true,
-        customer: {
-          number: callerNumber,
-        },
-        assistantId: YOUR_ASSISTANT_ID,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${VAPI_PRIVATE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      },
+    if (!userText) return reply(null); // nothing to answer (e.g. an MMS-only message)
+
+    const user = await userModel.findById(userId);
+    if (!user) {
+      console.error(`SMS webhook: unknown user ${userId}`);
+      return reply(null);
+    }
+
+    // The assistant must really belong to this user's sub-account — the webhook
+    // URL is public, so the path params cannot be trusted on their own.
+    const targetSubaccount = (user.ghlSubAccountIds || []).find(
+      (account) => account.accountId === subaccount,
     );
+    const targetAssistant = (targetSubaccount?.vapiAssistants || []).find(
+      (vapiAssistant) => vapiAssistant.assistantId === assistant,
+    );
+    if (!targetAssistant) {
+      console.error(`SMS webhook: assistant ${assistant} not found under ${subaccount}`);
+      return reply(null);
+    }
 
-    // Vapi returns the TwiML needed to transfer control back to Vapi's SIP server
-    const returnedTwiml = vapiResponse.data.phoneCallProviderDetails.twiml;
+    // Same gates the other chat channels enforce: wallet, feature flag, cap.
+    if (user.walletBalance <= 0) return reply(null);
+    if (checkFeature(user, "chat")) return reply(null);
+    if (checkUsageLimit(user, subaccount, "messages")) return reply(null);
 
-    // Respond to Twilio with the Vapi-generated TwiML
-    console.log("Responding to Twilio with Vapi TwiML.");
-    return res.type("text/xml").send(returnedTwiml);
+    // ---- PER-CUSTOMER MEMORY (read) ----
+    const memory = await ensureMemory({
+      ownerUserId: user._id,
+      subaccountId: subaccount,
+      phone: callerNumber,
+    });
+
+    const input = [
+      ...memorySystemTurns(memory, { assistantNotes: targetAssistant.teamNotes }),
+      ...recentTurnsFor(memory),
+      { role: "user", content: userText },
+    ];
+
+    const response = await postVapiChat({ assistantId: assistant, input });
+
+    const output = response.data?.output;
+    if (!Array.isArray(output) || output.length === 0) {
+      console.error("SMS webhook: assistant returned no output");
+      return reply(null);
+    }
+
+    const answer = output
+      .map((m) => m?.content)
+      .filter((c) => typeof c === "string" && c.trim())
+      .join("\n\n");
+
+    // Bill the owning agency's wallet, same shape as the other chat channels.
+    const amountToDeduct = response.data.cost || 0;
+    user.walletBalance -= amountToDeduct;
+    user.billingEvents.push({
+      callId: response.data.id,
+      type: "chat_message",
+      amount: amountToDeduct,
+      subaccountId: subaccount || undefined,
+    });
+    await user.save();
+
+    // ---- PER-CUSTOMER MEMORY (write) ----
+    await recordTurns(
+      memory,
+      [
+        { role: "user", content: userText },
+        ...(answer ? [{ role: "assistant", content: answer }] : []),
+      ],
+      { channel: "sms", assistantId: assistant, openAIApiKey: user.openAIApiKey },
+    );
+    await recordInteraction(memory, {
+      channel: "sms",
+      assistantId: assistant,
+      refId: response.data.id,
+      sessionWindowMinutes: 30, // one texting session = one interaction
+    });
+
+    return reply(answer || null);
   } catch (error) {
     console.error(
-      "Error handling Twilio incoming call:",
+      "Error handling Twilio incoming SMS:",
       error.response?.data || error.message,
     );
-    // Send a default TwiML response to Twilio to avoid connection errors
-    const twimlError =
-      "<Response><Say>An error occurred connecting your call. Please try again later.</Say></Response>";
-    return res.status(500).type("text/xml").send(twimlError);
+    // Stay silent rather than texting an internal error back to the customer.
+    return reply(null);
   }
 };
 

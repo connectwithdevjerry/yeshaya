@@ -5,6 +5,7 @@ const mongoose = require("mongoose");
 const authRoutes = require("./route/user.route");
 const integrationsRoutes = require("./route/integrations.route");
 const session = require("express-session");
+const MongoStore = require("connect-mongo");
 const assistantsRoutes = require("./route/assistant.route");
 const notificationRoutes = require("./route/notification.route");
 const invoiceRoutes = require("./route/invoice.route");
@@ -17,6 +18,7 @@ const apiKeyRoutes = require("./route/apikey.route");
 const { widgetRouter, embedRouter } = require("./route/widget.route");
 const publicApiRoutes = require("./route/publicApi.route");
 const activeTagRoutes = require("./route/activeTag.route");
+const customerMemoryRoutes = require("./route/customerMemory.route");
 const cookieParser = require("cookie-parser");
 const { verifyAccessToken } = require("./jwt_helpers");
 const { stripeWebhook } = require("./controller/payments.controller");
@@ -68,12 +70,25 @@ app.post(
   stripeWebhook,
 );
 
+// Sessions are persisted in MongoDB. The default express-session store keeps
+// everything in process memory, which is lost on every restart and is not
+// shared between instances — fine for a single long-lived dev server, wrong for
+// the deployed app.
 app.use(
   session({
-    secret: "0c83b09a933ee6f028d62", // Change this to a random string
+    secret: process.env.SESSION_SECRET || "0c83b09a933ee6f028d62",
     resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false }, // Set to true if using HTTPS
+    saveUninitialized: false,
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGODB_URL,
+      collectionName: "sessions",
+      ttl: 14 * 24 * 60 * 60, // 14 days
+    }),
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      maxAge: 14 * 24 * 60 * 60 * 1000,
+    },
   }),
 );
 
@@ -95,6 +110,7 @@ app.use("/templates", templateRoutes);
 app.use("/integrations/api-keys", apiKeyRoutes);
 app.use("/api/v1", publicApiRoutes);
 app.use("/active-tags", activeTagRoutes);
+app.use("/memory", customerMemoryRoutes);
 app.use("/widgets", widgetRouter);
 app.use("/embed", embedRouter);
 
