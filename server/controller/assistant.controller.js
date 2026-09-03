@@ -35,6 +35,7 @@ const {
   buildAssistantOverrides,
   postVapiCall,
   postVapiChat,
+  contactsFromMemory,
 } = require("../helpers/customerMemory");
 
 const toolsProperties = {
@@ -3947,8 +3948,17 @@ const sendChatMessage = async (req, res) => {
 
 const getContacts = async (req, res) => {
   const userId = req.user;
-  const { subaccountId } = req.query;
+  const { subaccountId, source } = req.query;
   try {
+    // source=assistant → only the people the assistants actually spoke to,
+    // derived from customer memory. The default ("all") keeps the previous
+    // behaviour: app-saved contacts merged with the sub-account's whole
+    // GoHighLevel address book, most of which no assistant has ever touched.
+    if (source === "assistant") {
+      const data = await contactsFromMemory({ ownerUserId: userId, subaccountId });
+      return res.send({ status: true, data, source: "assistant" });
+    }
+
     const user = await userModel.findById(userId);
 
     // 1) App-saved contacts

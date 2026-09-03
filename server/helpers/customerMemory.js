@@ -704,6 +704,59 @@ const captureVapiCall = async ({
   }
 };
 
+// Turn stored memories into contact rows for the dashboard.
+//
+// A memory exists for every person an assistant actually spoke to, so this is
+// the answer to "which contacts did our assistants gather?" — as opposed to the
+// whole CRM address book, most of which the assistants never touched.
+//
+// Two identity kinds are deliberately excluded:
+//   - "user:"    the dashboard's own Chat Lab test threads. Staff testing an
+//                assistant are not customers.
+//   - "visitor:" an anonymous website visitor who never gave a name, email or
+//                phone. There is nothing to contact them by.
+const memoryToContact = (m) => {
+  const identity = String(m.identityKey || "");
+  if (identity.startsWith("user:")) return null;
+
+  const name = String(m.name || "").trim();
+  const [firstName, ...rest] = name.split(/\s+/).filter(Boolean);
+
+  if (identity.startsWith("visitor:") && !m.phone && !m.email && !name) return null;
+
+  return {
+    id: String(m._id),
+    firstName: firstName || "",
+    lastName: rest.join(" "),
+    email: m.email || "",
+    phone: m.phone || "",
+    company: "",
+    title: "",
+    ghlContactId: m.ghlContactId || "",
+    // What the assistants know about them, which is the point of this view.
+    channels: m.channels || [],
+    interactionCount: m.interactionCount || 0,
+    lastInteractionAt: m.lastInteractionAt || null,
+    factCount: (m.facts || []).length,
+    createdAt: m.createdAt,
+    source: "assistant",
+  };
+};
+
+// Contacts an agency's assistants gathered, newest conversation first.
+const contactsFromMemory = async ({ ownerUserId, subaccountId }) => {
+  if (!ownerUserId) return [];
+  const q = { ownerUserId };
+  if (subaccountId) q.subaccountId = subaccountId;
+
+  const rows = await customerMemoryModel
+    .find(q)
+    .sort({ lastInteractionAt: -1, updatedAt: -1 })
+    .lean();
+
+  return rows.map(memoryToContact).filter(Boolean);
+};
+
 module.exports = {
   // config
   memoryEnabled,
@@ -733,4 +786,6 @@ module.exports = {
   postVapiChat,
   turnsFromArtifact,
   captureVapiCall,
+  memoryToContact,
+  contactsFromMemory,
 };

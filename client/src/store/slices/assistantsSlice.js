@@ -914,10 +914,12 @@ export const fetchTransactionHistory = createAsyncThunk(
 // ✅ 19. Contacts Management Thunks
 export const fetchContacts = createAsyncThunk(
   "assistants/fetchContacts",
-  async ({ subaccountId }, { rejectWithValue }) => {
+  async ({ subaccountId, source = "assistant" }, { rejectWithValue }) => {
     try {
+      // source=assistant → only people the assistants actually spoke to.
+      // source=all       → app-saved contacts plus the whole GHL address book.
       const response = await apiClient.get(
-        `/assistants/get-contacts?subaccountId=${subaccountId}`,
+        `/assistants/get-contacts?subaccountId=${subaccountId}&source=${source}`,
       );
       return response.data.status
         ? response.data.data

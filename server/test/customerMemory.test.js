@@ -225,6 +225,53 @@ const OWNER = "owner_a";
   t("unscoped replay (real customers) sees every assistant", () =>
     assert.strictEqual(M.recentTurnsFor(tester).length, 2));
 
+  console.log("\n-- contacts derived from what assistants gathered --");
+  const asContact = (m) => M.memoryToContact(m);
+  t("a caller becomes a contact", () => {
+    const c = asContact({
+      _id: "1", identityKey: "phone:+15551234567", name: "Dana Reed",
+      phone: "+15551234567", email: "", channels: ["call", "sms"],
+      interactionCount: 3, facts: [{ key: "vehicle", value: "Civic" }],
+    });
+    assert.strictEqual(c.firstName, "Dana");
+    assert.strictEqual(c.lastName, "Reed");
+    assert.strictEqual(c.phone, "+15551234567");
+    assert.strictEqual(c.source, "assistant");
+  });
+  t("what the assistants learned rides along", () => {
+    const c = asContact({
+      _id: "1", identityKey: "phone:+1555", channels: ["call"],
+      interactionCount: 4, facts: [{ key: "a", value: "b" }, { key: "c", value: "d" }],
+    });
+    assert.strictEqual(c.interactionCount, 4);
+    assert.strictEqual(c.factCount, 2);
+    assert.deepStrictEqual(c.channels, ["call"]);
+  });
+  t("a multi-word surname stays intact", () =>
+    assert.strictEqual(asContact({ _id: "1", identityKey: "phone:+1", name: "Ana Maria De Silva" }).lastName, "Maria De Silva"));
+  t("staff Chat Lab test threads are NOT customers", () =>
+    assert.strictEqual(asContact({ _id: "1", identityKey: "user:dev1", name: "Tester" }), null));
+  t("an anonymous website visitor is excluded", () =>
+    assert.strictEqual(asContact({ _id: "1", identityKey: "visitor:wgt_a:v1" }), null));
+  t("but a visitor who identified themselves is included", () => {
+    const c = asContact({ _id: "1", identityKey: "visitor:wgt_a:v1", email: "d@e.com" });
+    assert.ok(c);
+    assert.strictEqual(c.email, "d@e.com");
+  });
+  t("an email-only contact works", () => {
+    const c = asContact({ _id: "1", identityKey: "email:d@e.com", email: "d@e.com" });
+    assert.strictEqual(c.email, "d@e.com");
+    assert.strictEqual(c.phone, "");
+  });
+  t("a GHL contact id is carried through when known", () =>
+    assert.strictEqual(asContact({ _id: "1", identityKey: "phone:+1", ghlContactId: "ghl_9" }).ghlContactId, "ghl_9"));
+  t("a nameless caller still yields a usable row", () => {
+    const c = asContact({ _id: "1", identityKey: "phone:+15551110000", phone: "+15551110000" });
+    assert.ok(c);
+    assert.strictEqual(c.firstName, "");
+    assert.strictEqual(c.phone, "+15551110000");
+  });
+
   console.log("\n-- failure containment --");
   t("null memory never throws", () => {
     assert.strictEqual(M.buildMemoryBlock(null), "");
