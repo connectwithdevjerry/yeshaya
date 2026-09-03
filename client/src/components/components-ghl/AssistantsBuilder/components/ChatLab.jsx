@@ -4,7 +4,11 @@ import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import { Send, MessageSquare, Trash2, Info, Bot, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { sendChatMessage } from "../../../../store/slices/assistantsSlice";
+import {
+  sendChatMessage,
+  fetchChatHistory,
+  clearChatHistory,
+} from "../../../../store/slices/assistantsSlice";
 import { getAssistantIdFromUrl } from "../../../../utils/urlUtils";
 import toast from "react-hot-toast";
 
@@ -15,6 +19,7 @@ export const ChatLabView = () => {
 
   const [messages,   setMessages]   = useState([]);
   const [inputValue, setInputValue] = useState("");
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const scrollRef    = useRef(null);
 
   const assistantName = useSelector(
@@ -24,6 +29,52 @@ export const ChatLabView = () => {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  // Chat history lives server-side with the assistant's customer memory, so the
+  // panel restores it on mount instead of starting blank while the assistant
+  // still remembers the conversation.
+  useEffect(() => {
+    if (!assistantId) return;
+    let cancelled = false;
+
+    setLoadingHistory(true);
+    dispatch(fetchChatHistory({ assistantId }))
+      .unwrap()
+      .then((turns) => {
+        if (cancelled) return;
+        setMessages(
+          turns.map((t) => ({
+            role: t.role,
+            content: t.content,
+            ...(t.role === "assistant" && { name: assistantName }),
+          })),
+        );
+      })
+      .catch(() => {
+        // A history that will not load is not worth interrupting the tester
+        // over — the panel just starts empty.
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingHistory(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [assistantId, dispatch, assistantName]);
+
+  // "Clear" drops the assistant's memory of this test thread too, otherwise it
+  // would keep replying with context the tester can no longer see.
+  const handleClear = async () => {
+    const previous = messages;
+    setMessages([]);
+    try {
+      await dispatch(clearChatHistory({ assistantId })).unwrap();
+    } catch (err) {
+      setMessages(previous);
+      toast.error(
+        typeof err === "string" ? err : (err?.message || "Failed to clear history."),
+      );
+    }
+  };
 
   const handleSend = async () => {
     if (!inputValue.trim() || !assistantId) return;
@@ -70,7 +121,7 @@ export const ChatLabView = () => {
         </div>
         {messages.length > 0 && (
           <button
-            onClick={() => setMessages([])}
+            onClick={handleClear}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-gray-200 text-xs font-medium text-gray-500 hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50 transition-all"
           >
             <Trash2 className="w-3 h-3" /> Clear
@@ -96,7 +147,11 @@ export const ChatLabView = () => {
               </div>
               <div className="text-center">
                 <p className="text-sm font-bold text-gray-800">Chat Lab</p>
-                <p className="text-xs text-gray-400 mt-1">Test your assistant's responses below</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {loadingHistory
+                    ? "Loading previous conversation…"
+                    : "Test your assistant's responses below"}
+                </p>
               </div>
             </motion.div>
           ) : (
