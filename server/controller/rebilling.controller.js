@@ -1,10 +1,10 @@
-const axios = require("axios");
 const userModel = require("../model/user.model");
 const invoiceModel = require("../model/invoice.model");
 const { getNextSequence } = require("../model/counter.model");
 const { generateInvoicePdf } = require("../helpers/invoicePdf");
 const { saveImageToDB } = require("../cloudinaryImageHandler");
 const emailHelper = require("../resendObject");
+const billing = require("../helpers/billing");
 
 const num = (v) => {
   const n = parseFloat(v);
@@ -29,9 +29,7 @@ const computeBreakdown = async (user, period = currentPeriod()) => {
     phone: { enabled: !!rb.phone?.enabled, price: num(rb.phone?.price) },
   };
 
-  const assistantToAccount = {};
   const subStats = {};
-
   user.ghlSubAccountIds.forEach((sub) => {
     const id = sub.accountId;
     const phoneCount = (sub.vapiAssistants || []).reduce(
@@ -46,38 +44,27 @@ const computeBreakdown = async (user, period = currentPeriod()) => {
       phone: { count: phoneCount, billable: 0 },
       totalBillable: 0,
     };
-    (sub.vapiAssistants || []).forEach((a) => {
-      if (a.assistantId) assistantToAccount[a.assistantId] = id;
-    });
   });
 
-  const uniqueAssistantIds = Object.keys(assistantToAccount);
-  if (uniqueAssistantIds.length > 0) {
-    const callArrays = await Promise.all(
-      uniqueAssistantIds.map((id) =>
-        axios.get("https://api.vapi.ai/call", {
-          params: {
-            assistantId: id,
-            // Scope usage to the billing period (Vapi ISO date filters)
-            createdAtGe: new Date(period.start).toISOString(),
-            createdAtLe: new Date(period.end).toISOString(),
-          },
-          headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}` },
-        }).then((r) => r.data.map((c) => ({ ...c, _assistantId: id }))).catch(() => []),
-      ),
-    );
-    callArrays.flat().forEach((call) => {
-      const accountId = assistantToAccount[call._assistantId];
-      const stat = subStats[accountId];
-      if (!stat) return;
-      if (call.type === "chat" || call.type === "webChat") {
-        stat.chat.messages += 1;
-      } else {
-        stat.voice.calls += 1;
-        stat.voice.minutes += (call.durationSeconds || 0) / 60;
-      }
-    });
-  }
+  // One pass over this period's billing events, bucketed by sub-account.
+  const events = await billing.listEvents(user, {
+    since: period.start,
+    until: period.end,
+  });
+
+  events.forEach((e) => {
+    const stat = subStats[e.subaccountId];
+    if (!stat) return; // event predates sub-account tagging, or sub-account is gone
+    if (billing.CALL_TYPES.includes(e.type)) {
+      stat.voice.calls += 1;
+      stat.voice.minutes += (e.durationSec || 0) / 60;
+    } else if (
+      billing.CHAT_TYPES.includes(e.type) ||
+      billing.SMS_TYPES.includes(e.type)
+    ) {
+      stat.chat.messages += 1;
+    }
+  });
 
   const breakdown = Object.values(subStats).map((s) => {
     s.voice.minutes = Math.round(s.voice.minutes * 100) / 100;
