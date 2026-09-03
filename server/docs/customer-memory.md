@@ -26,6 +26,25 @@ provenance is kept and a per-assistant view can be filtered out of the same
 collection. The Chat Lab is the deliberate exception — test threads are scoped to
 one assistant so two assistants under test never see each other's conversations.
 
+### What links a returning customer to their history
+
+The **identity key**, resolved in this order:
+
+| Channel | Key | Source |
+|---|---|---|
+| Voice call | `phone:+15551234567` | Twilio `From`, normalised to E.164 |
+| SMS | `phone:+15551234567` | same — so a call and a text are one person |
+| Widget (identified) | `phone:…` / `email:…` | `YashayahWidget.identify()` or `data-contact-*` |
+| Widget (anonymous) | `visitor:<widgetId>:<uuid>` | browser-local id |
+| Chat Lab | `user:<teamMemberId>` | never treated as a customer |
+
+Lookup is `(ownerUserId, scope, identityKey)`. **Scope** is the sub-account, or
+`widget:<publicId>` for a widget not tied to one. When neither can be
+determined, memory is **skipped** rather than written to a blank scope — a blank
+scope is one shared bucket per agency, so two sub-accounts that both failed to
+resolve would share a record for the same caller and each would be read the
+other's history.
+
 Identity precedence is **phone → email → visitor id**. Anonymous widget visitors
 get a browser-scoped id; once the host page identifies them (see below), they
 merge into the same record as their calls and texts.

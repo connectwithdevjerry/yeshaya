@@ -117,6 +117,7 @@ app.get("/", (req, res) => {
 });
 
 const { startAppointmentReminders } = require("./helpers/appointmentReminders");
+const { startCalendarHealthChecks } = require("./helpers/calendarHealth");
 
 // ── Connect to MongoDB then start server ──────────────────────────────────────
 mongoose
@@ -126,6 +127,9 @@ mongoose
 
     // Appointment reminder scheduler (24h + 1h before)
     startAppointmentReminders();
+
+    // Daily sweep for calendars that have silently stopped working
+    startCalendarHealthChecks();
 
     // Auto top-up is no longer driven by a MongoDB change stream. This process
     // runs on Vercel's serverless runtime, where nothing keeps a change stream

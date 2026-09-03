@@ -87,6 +87,15 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
   const account      = useCurrentAccount();
 
   const { selectedAssistant, loading } = useSelector((s) => s.assistants);
+  // Selected as primitives: an object literal from useSelector has a new
+  // identity every call and would re-render on any store change.
+  const calendarLinked  = useSelector((s) => s.assistants?.calendarLinked);
+  const calendarMissing = useSelector((s) => s.assistants?.calendarMissing);
+  const calendarRecon   = useSelector((s) => s.assistants?.calendarReconnectRequired);
+  const calendarStatus =
+    calendarLinked === null || calendarLinked === undefined
+      ? null // not checked yet — the audit simply omits the booking row
+      : { calendarLinked, calendarMissing, reconnectRequired: calendarRecon };
   const assistantId  = propAssistantId;
   const subaccountId = searchParams.get("subaccount") || account?.subaccount;
 
@@ -154,7 +163,7 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
     }
   };
 
-  const { checks, issueCount } = auditAssistant(selectedAssistant);
+  const { checks, issueCount } = auditAssistant(selectedAssistant, calendarStatus);
   const name         = selectedAssistant?.name || "New Blank Assistant";
   const model        = selectedAssistant?.model;
   const modelDisplay = formatModelDisplay(model);

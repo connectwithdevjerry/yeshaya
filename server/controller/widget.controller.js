@@ -250,6 +250,8 @@ const widgetChat = async (req, res) => {
     // browser-scoped visitor id.
     const memory = await ensureMemory({
       ownerUserId: widget.ownerUserId,
+      // An untied widget still gets its own scope (see scopeOf) rather than an
+      // agency-wide bucket shared with every other untied widget.
       subaccountId: widget.subaccountId,
       phone: contact?.phone,
       email: contact?.email,
