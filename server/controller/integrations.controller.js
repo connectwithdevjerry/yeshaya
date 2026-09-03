@@ -1312,6 +1312,8 @@ const twilioCallReceiver = async (req, res) => {
       assistantId: assistant,
       memory,
       assistantNotes: targetAssistant[0]?.teamNotes,
+      // Known from the ring, with or without memory behind it.
+      caller: { number: callerNumber, name: myCustomer?.firstName || "" },
       base: {
         ...(message && { firstMessage: message }),
         firstMessageMode: "assistant-speaks-first",

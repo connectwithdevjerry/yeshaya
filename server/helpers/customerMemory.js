@@ -535,10 +535,28 @@ const buildNotesBlock = (notes) => {
 };
 
 // Memory block + team notes, in the order they should reach the model.
-const buildContextBlock = (memory, { assistantNotes, ...opts } = {}) =>
-  [buildNotesBlock(assistantNotes), buildMemoryBlock(memory, opts)]
+const buildContextBlock = (memory, { assistantNotes, caller, ...opts } = {}) =>
+  [buildNotesBlock(assistantNotes), buildCallBlock(caller), buildMemoryBlock(memory, opts)]
     .filter(Boolean)
     .join("\n\n");
+
+// Facts about the call happening right now, as opposed to remembered ones.
+//
+// The caller's number is known from the moment the phone rings, so an assistant
+// asking an inbound caller to read it out is asking for something the system is
+// already holding. It used to, because everything injected here was derived
+// from memory, and a first-time caller has none — so on the call where details
+// are actually being collected, the assistant knew the least.
+const buildCallBlock = ({ number, name } = {}) => {
+  if (!number) return "";
+  return [
+    "## This call",
+    `The person on this call is contacting you from ${number}.`,
+    "You ALREADY have their phone number — never ask them to read it out, and never ask them to confirm it unless they bring it up themselves.",
+    "When a tool needs their phone number, use this one.",
+    name ? `Their name is ${name}.` : "",
+  ].filter(Boolean).join("\n");
+};
 
 // A system turn carrying the memory block, for the /chat API where we control
 // the message array directly. Returns [] when there is nothing to inject.
@@ -586,8 +604,14 @@ const fetchAssistant = async (assistantId) => {
   return data;
 };
 
-const buildAssistantOverrides = async ({ assistantId, memory, assistantNotes, base = {} }) => {
-  const block = buildContextBlock(memory, { assistantNotes });
+const buildAssistantOverrides = async ({
+  assistantId,
+  memory,
+  assistantNotes,
+  caller,
+  base = {},
+}) => {
+  const block = buildContextBlock(memory, { assistantNotes, caller });
   if (!block) return base;
 
   const overrides = {
@@ -595,7 +619,10 @@ const buildAssistantOverrides = async ({ assistantId, memory, assistantNotes, ba
     variableValues: {
       ...(base.variableValues || {}),
       memory: block,
-      customerName: memory?.name || "",
+      // Available to prompts as {{customerPhone}} / {{customerName}} even on a
+      // first call, when there is no memory to draw a name from yet.
+      customerPhone: caller?.number || memory?.phone || "",
+      customerName: memory?.name || caller?.name || "",
       isReturningCustomer: memory?.interactionCount > 0 ? "true" : "false",
     },
   };
@@ -855,6 +882,7 @@ module.exports = {
   // read
   buildMemoryBlock,
   buildNotesBlock,
+  buildCallBlock,
   buildContextBlock,
   memorySystemTurns,
   recentTurnsFor,
