@@ -4082,22 +4082,69 @@ const getContacts = async (req, res) => {
     if (subaccountId) {
       try {
         const tkns = await getSubGhlTokens(userId, subaccountId);
-        const resp = await axios.get("https://services.leadconnectorhq.com/contacts/", {
-          params: { locationId: subaccountId, limit: 100 },
-          headers: { Authorization: `Bearer ${tkns.data.access_token}`, Version: "2021-07-28", Accept: "application/json" },
-        });
-        ghlContacts = (resp.data?.contacts || []).map((c) => ({
-          id: c.id,
-          ghlContactId: c.id,
-          firstName: c.firstName || "",
-          lastName: c.lastName || "",
-          email: c.email || "",
-          phone: c.phone || "",
-          company: c.companyName || "",
-          title: "",
-          createdAt: c.dateAdded || c.createdAt,
-          source: "ghl",
-        }));
+        const headers = {
+          Authorization: `Bearer ${tkns.data.access_token}`,
+          Version: "2021-07-28",
+          Accept: "application/json",
+        };
+
+        // GoHighLevel returns one page at a time. This used to request a single
+        // page of 100 and present it as the whole address book, so a
+        // sub-account with more contacts silently showed only the first
+        // hundred — with no indication anything was missing.
+        const PAGE_SIZE = 100;
+        const MAX_PAGES = 20; // 2,000 contacts; a guard, not a target
+        let startAfterId;
+        let startAfter;
+
+        for (let page = 0; page < MAX_PAGES; page += 1) {
+          const resp = await axios.get(
+            "https://services.leadconnectorhq.com/contacts/",
+            {
+              params: {
+                locationId: subaccountId,
+                limit: PAGE_SIZE,
+                ...(startAfterId && { startAfterId }),
+                ...(startAfter && { startAfter }),
+              },
+              headers,
+              timeout: 15_000,
+            },
+          );
+
+          const batch = resp.data?.contacts || [];
+          ghlContacts.push(
+            ...batch.map((c) => ({
+              id: c.id,
+              ghlContactId: c.id,
+              firstName: c.firstName || "",
+              lastName: c.lastName || "",
+              email: c.email || "",
+              phone: c.phone || "",
+              company: c.companyName || "",
+              title: "",
+              createdAt: c.dateAdded || c.createdAt,
+              source: "ghl",
+            })),
+          );
+
+          if (batch.length < PAGE_SIZE) break; // last page
+
+          // GHL pages via the last record's id + timestamp. Without both it
+          // returns the same page forever, so stop rather than loop.
+          const last = batch[batch.length - 1];
+          const nextId = last?.id;
+          const nextAfter = resp.data?.meta?.startAfter ?? last?.dateAdded;
+          if (!nextId || (startAfterId === nextId && startAfter === nextAfter)) break;
+          startAfterId = nextId;
+          startAfter = nextAfter;
+
+          if (page === MAX_PAGES - 1) {
+            console.warn(
+              `GHL contacts for ${subaccountId} exceeded ${MAX_PAGES * PAGE_SIZE}; list truncated.`,
+            );
+          }
+        }
       } catch (err) {
         if (err.code === "GHL_RECONNECT_REQUIRED") reconnectRequired = true;
         else console.error("⚠️ GHL contacts fetch skipped:", err.response?.data?.message || err.message);
