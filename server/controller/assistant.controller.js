@@ -5,7 +5,7 @@ const VAPI_API_KEY = process.env.VAPI_API_KEY;
 const { VapiClient } = require("@vapi-ai/server-sdk");
 const FormData = require("form-data");
 const fs = require("fs");
-const { fillTemplate, extractText } = require("../helperFunctions");
+const { fillTemplate, extractText, toE164 } = require("../helperFunctions");
 const { MAKE_OUTBOUND_CALL } = require("../constants");
 const emailHelper = require("../resendObject");
 const { createNotification } = require("./notification.controller");
@@ -3810,7 +3810,17 @@ const generateOutBoundCallUrl = async (req, res) => {
 const makeOutboundCall = async (req, res) => {
   console.log("Initiating outbound call...");
   const { assistantId, poutboundId } = req.query;
-  const { customerNumber, fromNumber, dynamicValues } = req.body;
+  const { fromNumber, dynamicValues } = req.body;
+
+  // Dialled numbers arrive however a human typed them, or however an API
+  // caller formatted them. Vapi 400s on anything that is not exactly E.164.
+  const customerNumber = toE164(req.body.customerNumber);
+  if (!customerNumber) {
+    return res.send({
+      status: false,
+      message: `"${req.body.customerNumber ?? ""}" is not a valid phone number. Use international format, e.g. +15551234567.`,
+    });
+  }
 
   try {
     const userId = poutboundId;
