@@ -21,6 +21,7 @@ const {
   extractVariables,
   fillTemplate,
   getSubGhlTokens,
+  toE164,
 } = require("../helperFunctions");
 const VoiceResponse = require("twilio").twiml.VoiceResponse;
 const MessagingResponse = require("twilio").twiml.MessagingResponse;
@@ -1166,10 +1167,29 @@ const twilioCallReceiver = async (req, res) => {
 
     console.log("Received incoming call webhook from Twilio:", req.params);
 
-    const callerNumber = req.body.From;
+    // Vapi rejects the whole call with a 400 if this is not exactly E.164, and
+    // the caller simply hears it fail. Twilio does not always send E.164:
+    // withheld caller id arrives as "anonymous", SIP traffic as a sip: URI.
+    const rawFrom = req.body.From;
+    const callerNumber = toE164(rawFrom);
     const receiverNumber = req.body.To;
 
-    console.log(`Incoming call detected from: ${callerNumber}`);
+    console.log(`Incoming call detected from: ${callerNumber || `(unusable: ${JSON.stringify(rawFrom)})`}`);
+
+    if (!callerNumber) {
+      // Nothing usable to identify the caller by. Answering with a spoken
+      // message beats a failed call with no explanation. A shared placeholder
+      // is deliberately NOT used: every anonymous caller would then share one
+      // customer-memory record, and each would hear the last one's history.
+      console.warn(
+        `Inbound call with no usable caller id (From=${JSON.stringify(rawFrom)}) for ${subaccount}. Refusing.`,
+      );
+      const twiml = new VoiceResponse();
+      twiml.say(
+        "Sorry, we can't take calls from a withheld number. Please call again with your caller ID enabled.",
+      );
+      return res.type("text/xml").send(twiml.toString());
+    }
 
     // Answering a call is time-critical — Twilio gives this webhook a few
     // seconds before it drops the call — so load only what routing needs
@@ -1347,7 +1367,9 @@ const twilioSmsReceiver = async (req, res) => {
     const { userId, subaccount, assistant } = req.params;
 
     // Twilio sends the sender's number in req.body.From and the text in Body.
-    const callerNumber = req.body.From;
+    // Normalised so an SMS and a call from the same person resolve to one
+    // customer-memory record rather than two.
+    const callerNumber = toE164(req.body.From) || req.body.From;
     const userText = String(req.body.Body || "").trim();
 
     console.log(`Incoming SMS from ${callerNumber} to assistant ${assistant}`);

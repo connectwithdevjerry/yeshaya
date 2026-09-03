@@ -600,6 +600,10 @@ export const fetchConnectedCalendar = createAsyncThunk(
         return rejectWithValue({
           message: response.data.message || "Failed to fetch connected calendar",
           reconnectRequired: !!response.data.reconnectRequired,
+          // Distinguishes "never linked" from "linked, but the calendar is gone
+          // from GoHighLevel" — different problems, different fixes.
+          calendarLinked: response.data.calendarLinked !== false,
+          calendarMissing: !!response.data.calendarMissing,
         });
       }
 
@@ -1113,6 +1117,8 @@ const assistantsSlice = createSlice({
     assistantTools: [],
     fetchingAssistantTools: false,
     connectedCalendar: null,
+    calendarLinked: null,      // null = not checked yet
+    calendarMissing: false,
     fetchingConnectedCalendar: false,
     addingTool: false,
     toolError: null,
@@ -1485,6 +1491,8 @@ const assistantsSlice = createSlice({
         state.fetchingCalendars = false;
         state.calendarError = action.payload?.message || action.payload;
         state.calendarReconnectRequired = !!action.payload?.reconnectRequired;
+        state.calendarMissing = !!action.payload?.calendarMissing;
+        state.calendarLinked = action.payload?.calendarLinked !== false;
       })
 
       // 🔹 Fetch Connected Calendar
@@ -1492,10 +1500,14 @@ const assistantsSlice = createSlice({
         state.fetchingConnectedCalendar = true;
         state.calendarError = null;
         state.calendarReconnectRequired = false;
+        state.calendarMissing = false;
+        state.calendarLinked = null;
       })
       .addCase(fetchConnectedCalendar.fulfilled, (state, action) => {
         state.fetchingConnectedCalendar = false;
         state.connectedCalendar = action.payload; // This stores the { calendarId, assistantId, ... } object
+        state.calendarLinked = true;
+        state.calendarMissing = false;
         state.calendarReconnectRequired = false;
       })
       .addCase(fetchConnectedCalendar.rejected, (state, action) => {
