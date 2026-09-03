@@ -5,19 +5,24 @@ const { generateInvoicePdf } = require("../helpers/invoicePdf");
 const { saveImageToDB } = require("../cloudinaryImageHandler");
 const emailHelper = require("../resendObject");
 const sendUserEmail = require("../helpers/sendUserEmail");
+const billing = require("../helpers/billing");
 
 // Map raw billingEvents.type → human grouping
 const USAGE_GROUPS = {
   voice: {
     label: "AI Voice Calls",
-    types: ["end-of-call-report", "call.ended", "call.analysis.completed"],
+    types: billing.CALL_TYPES,
+  },
+  chat: {
+    label: "AI Chat Messages",
+    types: billing.CHAT_TYPES,
   },
   sms: {
     label: "SMS Messages",
-    types: ["SMS_CHARGE"],
+    types: billing.SMS_TYPES,
   },
 };
-const PAYMENT_TYPES = ["WALLET_TOPUP", "AUTO_WALLET_TOPUP"];
+const PAYMENT_TYPES = billing.TOPUP_TYPES;
 
 // ─── Generate an invoice for a date range ─────────────────────────────────────
 const generateInvoice = async (req, res) => {
@@ -39,11 +44,9 @@ const generateInvoice = async (req, res) => {
     const user = await userModel.findById(userId);
     if (!user) return res.status(404).json({ status: false, message: "User not found" });
 
-    // Filter billing events into the period
-    const events = (user.billingEvents || []).filter((e) => {
-      const t = new Date(e.processedAt);
-      return t >= start && t <= end;
-    });
+    // Billing events for the period, from the collection plus any legacy
+    // history still on the user document.
+    const events = await billing.listEvents(user, { since: start, until: end });
 
     // Build usage line items
     const lineItems = [];
@@ -52,7 +55,8 @@ const generateInvoice = async (req, res) => {
     Object.values(USAGE_GROUPS).forEach((group) => {
       const groupEvents = events.filter((e) => group.types.includes(e.type));
       if (groupEvents.length === 0) return;
-      const amount = groupEvents.reduce((s, e) => s + (e.amount || 0), 0);
+      // Usage is stored as a negative amount; invoices show it positive.
+      const amount = groupEvents.reduce((s, e) => s + Math.abs(e.amount || 0), 0);
       const quantity = groupEvents.length;
       usageTotal += amount;
       lineItems.push({
@@ -66,7 +70,7 @@ const generateInvoice = async (req, res) => {
 
     const paymentsTotal = events
       .filter((e) => PAYMENT_TYPES.includes(e.type))
-      .reduce((s, e) => s + (e.amount || 0), 0);
+      .reduce((s, e) => s + Math.abs(e.amount || 0), 0);
 
     // Invoice number: INV-<year>-<seq padded>
     const year = end.getFullYear();

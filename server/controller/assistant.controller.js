@@ -23,6 +23,8 @@ const {
   checkFeature,
   checkUsageLimit,
 } = require("../helpers/snapshotLimits");
+const billing = require("../helpers/billing");
+const { maybeAutoTopUp } = require("../helpers/autoTopUp");
 const {
   loadMemory,
   ensureMemory,
@@ -3866,6 +3868,11 @@ const makeOutboundCall = async (req, res) => {
       phone: customerNumber,
     });
 
+    // Bound the call to what the wallet can actually cover. The balance is only
+    // checked before a call starts, so without this one long call can drive it
+    // arbitrarily negative.
+    const maxDurationSeconds = billing.affordableCallSeconds(user.walletBalance);
+
     const assistantOverrides = await buildAssistantOverrides({
       assistantId,
       memory,
@@ -3875,6 +3882,7 @@ const makeOutboundCall = async (req, res) => {
         firstMessageMode: message
           ? "assistant-speaks-first"
           : "assistant-speaks-first-with-model-generated-message",
+        ...(maxDurationSeconds && { maxDurationSeconds }),
       },
     });
 
@@ -3951,7 +3959,7 @@ const sendChatMessage = async (req, res) => {
   // Feature gate + monthly "Messages" cap for this sub-account
   const chatBlockReason =
     checkFeature(user, "chat") ||
-    checkUsageLimit(user, chatSubaccountId, "messages");
+    (await checkUsageLimit(user, chatSubaccountId, "messages"));
   if (chatBlockReason) {
     return res.send({ status: false, reply: [{ role: "assistant", content: chatBlockReason }] });
   }
@@ -3990,15 +3998,14 @@ const sendChatMessage = async (req, res) => {
       });
     }
 
-    const amountToDeduct = response.data.cost || 0;
-    user.walletBalance -= amountToDeduct;
-    user.billingEvents.push({
-      callId: response.data.id,
+    await billing.chargeWallet({
+      user,
+      amount: response.data.cost || 0,
       type: "chat_message",
-      amount: amountToDeduct,
+      callId: response.data.id,
       subaccountId: chatSubaccountId || undefined, // enables snapshot message caps
     });
-    await user.save();
+    await maybeAutoTopUp(user._id);
 
     // ---- PER-CUSTOMER MEMORY (write) ----
     const answer = response.data.output

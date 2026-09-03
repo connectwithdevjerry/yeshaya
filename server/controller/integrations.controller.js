@@ -25,6 +25,8 @@ const {
 const VoiceResponse = require("twilio").twiml.VoiceResponse;
 const MessagingResponse = require("twilio").twiml.MessagingResponse;
 const { checkFeature, checkUsageLimit } = require("../helpers/snapshotLimits");
+const billing = require("../helpers/billing");
+const { maybeAutoTopUp } = require("../helpers/autoTopUp");
 const {
   loadMemory,
   ensureMemory,
@@ -1251,6 +1253,9 @@ const twilioCallReceiver = async (req, res) => {
       phone: callerNumber,
     });
 
+    // Bound the call to what the wallet can cover (see makeOutboundCall).
+    const maxDurationSeconds = billing.affordableCallSeconds(user.walletBalance);
+
     const assistantOverrides = await buildAssistantOverrides({
       assistantId: assistant,
       memory,
@@ -1258,6 +1263,7 @@ const twilioCallReceiver = async (req, res) => {
       base: {
         ...(message && { firstMessage: message }),
         firstMessageMode: "assistant-speaks-first",
+        ...(maxDurationSeconds && { maxDurationSeconds }),
       },
     });
 
@@ -1338,7 +1344,7 @@ const twilioSmsReceiver = async (req, res) => {
     // Same gates the other chat channels enforce: wallet, feature flag, cap.
     if (user.walletBalance <= 0) return reply(null);
     if (checkFeature(user, "chat")) return reply(null);
-    if (checkUsageLimit(user, subaccount, "messages")) return reply(null);
+    if (await checkUsageLimit(user, subaccount, "messages")) return reply(null);
 
     // ---- PER-CUSTOMER MEMORY (read) ----
     const memory = await ensureMemory({
@@ -1366,16 +1372,17 @@ const twilioSmsReceiver = async (req, res) => {
       .filter((c) => typeof c === "string" && c.trim())
       .join("\n\n");
 
-    // Bill the owning agency's wallet, same shape as the other chat channels.
-    const amountToDeduct = response.data.cost || 0;
-    user.walletBalance -= amountToDeduct;
-    user.billingEvents.push({
+    // Provider cost for the reply; the platform fee is added by chargeWallet.
+    // Recorded as SMS_CHARGE — the same type the send_sms tool uses — so both
+    // SMS paths land in one bucket on invoices and in the monthly message cap.
+    await billing.chargeWallet({
+      user,
+      amount: response.data.cost || 0,
+      type: "SMS_CHARGE",
       callId: response.data.id,
-      type: "chat_message",
-      amount: amountToDeduct,
       subaccountId: subaccount || undefined,
     });
-    await user.save();
+    await maybeAutoTopUp(user._id);
 
     // ---- PER-CUSTOMER MEMORY (write) ----
     await recordTurns(

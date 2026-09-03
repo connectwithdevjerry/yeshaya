@@ -30,11 +30,6 @@ const checkSnapshotLimit = (user, sub, type) => {
 
 const CHARGE_TYPES = ["end-of-call-report", "call.ended", "call.analysis.completed"];
 
-const monthStart = () => {
-  const n = new Date();
-  return new Date(n.getFullYear(), n.getMonth(), 1);
-};
-
 // Find which sub-account owns a given Vapi assistant
 const resolveSubaccountId = (user, assistantId) => {
   for (const sub of user?.ghlSubAccountIds || []) {
@@ -45,29 +40,23 @@ const resolveSubaccountId = (user, assistantId) => {
   return null;
 };
 
-// Sum this sub-account's usage for the current month from recorded billingEvents
-const usageThisMonth = (user, subaccountId) => {
-  const start = monthStart();
-  let minutes = 0;
-  let messages = 0;
-  for (const e of user?.billingEvents || []) {
-    if (e.subaccountId !== subaccountId) continue;
-    if (e.processedAt && new Date(e.processedAt) < start) continue;
-    if (e.type === "chat_message") messages += 1;
-    else if (CHARGE_TYPES.includes(e.type)) minutes += (e.durationSec || 0) / 60;
-  }
-  return { minutes, messages };
-};
+// Sum this sub-account's usage for the current month.
+//
+// Delegates to the billing helper, which reads the billingEvent collection and
+// merges in any history still embedded on the user document. Async because the
+// events no longer live on the document already in memory.
+const usageThisMonth = (user, subaccountId) =>
+  require("./billing").usageThisMonth(user, subaccountId);
 
 // kind: "calling" (minutes) | "messages" → reason string if exceeded, else null
-const checkUsageLimit = (user, subaccountId, kind) => {
+const checkUsageLimit = async (user, subaccountId, kind) => {
   if (!subaccountId) return null;
   const lim = user?.snapshot?.limits?.[kind];
   if (!lim || !lim.enabled) return null;
   const cap = num(lim.value);
   if (cap <= 0) return null; // unlimited
 
-  const usage = usageThisMonth(user, subaccountId);
+  const usage = await usageThisMonth(user, subaccountId);
   if (kind === "calling" && usage.minutes >= cap) {
     return `Monthly call-minute limit reached (${cap} min) for this sub-account.`;
   }

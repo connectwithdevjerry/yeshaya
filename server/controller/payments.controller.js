@@ -5,6 +5,8 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { createNotification } = require("./notification.controller");
 const { resolveSubaccountId, checkUsageLimit, featureEnabled } = require("../helpers/snapshotLimits");
 const { captureVapiCall } = require("../helpers/customerMemory");
+const billing = require("../helpers/billing");
+const { maybeAutoTopUp } = require("../helpers/autoTopUp");
 require("dotenv").config();
 
 const CHARGE_TYPES = ["end-of-call-report", "call.ended", "call.analysis.completed"];
@@ -30,17 +32,7 @@ const checkNumberLimits = async (user, phoneSid) => {
   const limits = setting?.limits;
   if (!limits) return null;
 
-  const now = new Date();
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  const events = (user.billingEvents || []).filter(
-    (e) => e.phoneSid === phoneSid && CHARGE_TYPES.includes(e.type),
-  );
-  const callsToday = events.filter((e) => new Date(e.processedAt) >= dayStart).length;
-  const monthSpend = events
-    .filter((e) => new Date(e.processedAt) >= monthStart)
-    .reduce((s, e) => s + (e.amount || 0), 0);
+  const { callsToday, monthSpend } = await billing.numberUsage(user, phoneSid);
 
   if (limits.maxCallsPerDay > 0 && callsToday >= limits.maxCallsPerDay) {
     return `Daily call limit reached (${limits.maxCallsPerDay}) for this number.`;
@@ -213,15 +205,6 @@ const stripeWebhook = async (req, res) => {
       const user = await userModel.findById(userId);
       if (!user) return res.json({ received: true });
 
-      // ── Idempotency: never credit the same PaymentIntent twice ──
-      const alreadyCredited = (user.billingEvents || []).some(
-        (e) => e.callId === paymentIntent.id,
-      );
-      if (alreadyCredited) {
-        console.log(`Skipping duplicate top-up for ${paymentIntent.id}`);
-        return res.json({ received: true });
-      }
-
       const pm = paymentMethodId ? await stripe.paymentMethods.retrieve(paymentMethodId) : null;
 
       if (pm && !pm.customer) {
@@ -237,25 +220,25 @@ const stripeWebhook = async (req, res) => {
         });
       }
 
-      // 1. Update wallet balance
-      user.walletBalance += amountUsd; // convert to dollars
-
-      // 2. Log transaction (strongly recommended)
-
-      user.billingEvents.push({
-        callId: paymentIntent.id,
-        type: "WALLET_TOPUP",
+      // Credit the wallet atomically. Idempotency is enforced by a unique index
+      // on the PaymentIntent id, so a Stripe retry cannot double-credit.
+      const result = await billing.creditWallet({
+        userId,
         amount: amountUsd,
+        type: "WALLET_TOPUP",
+        callId: paymentIntent.id,
       });
 
-      await user.save();
+      if (!result.credited) {
+        console.log(`Skipping duplicate top-up for ${paymentIntent.id}`);
+        return res.json({ received: true });
+      }
 
-      // Notify user of successful payment
       await createNotification({
         userId,
         type: "payment_received",
         title: "Wallet Topped Up",
-        message: `$${amountUsd.toFixed(2)} has been added to your wallet. New balance: $${user.walletBalance.toFixed(2)}.`,
+        message: `$${amountUsd.toFixed(2)} has been added to your wallet. New balance: $${(result.balance ?? 0).toFixed(2)}.`,
         metadata: { amount: amountUsd, paymentIntentId: paymentIntent.id },
       });
 
@@ -271,15 +254,12 @@ const stripeWebhook = async (req, res) => {
     console.error("Payment failed for user:", userId);
 
     if (userId) {
-      const user = await userModel.findById(userId);
-      if (user) {
-        user.billingEvents.push({
-          callId: paymentIntent.id,
-          type: "WALLET_TOPUP_FAILED",
-          amount: (paymentIntent.amount || 0) / 100,
-        });
-        await user.save();
-      }
+      await billing.recordEvent({
+        userId,
+        type: "WALLET_TOPUP_FAILED",
+        amount: (paymentIntent.amount || 0) / 100,
+        callId: paymentIntent.id,
+      });
     }
   }
 
@@ -293,100 +273,20 @@ const autoTopUpLowWalletUsers = async (req, res) => {
   const { userId } = req.body;
   console.log("Auto-charge triggered for user:", userId);
 
-  try {
-    const user = await userModel.findById(userId);
+  const result = await maybeAutoTopUp(userId);
 
-    if (!user) {
-      return res.status(404).send({ status: false, message: "User not found" });
-    }
-
-    if (!user.isActive || !user.autoCardPay?.status) {
-      return res.status(400).send({
-        status: false,
-        message: "Auto-charge not enabled for this user",
-      });
-    }
-
-    if (user.walletBalance >= user.autoCardPay.least) {
-      return res.status(200).send({
-        status: true,
-        message: "Wallet above threshold, no charge needed",
-      });
-    }
-
-    // 1️ Get saved card
-    const paymentMethods = await stripe.paymentMethods.list({
-      customer: user.stripeCustomerId,
-      type: "card",
-    });
-
-    if (!paymentMethods.data.length) {
-      console.warn(`No saved card for user ${user._id}`);
-      return res
-        .status(400)
-        .send({ status: false, message: "No saved card for this user" });
-    }
-
-    const paymentMethod = paymentMethods.data[0];
-
-    // 2️ Charge amount
-    const amountToCharge = user.autoCardPay.refillAmount || 10; // dollars
-    const amountCents = Math.round(amountToCharge * 100);
-
-    const paymentIntent = await stripe.paymentIntents.create(
-      {
-        amount: amountCents,
-        currency: "usd",
-        customer: user.stripeCustomerId,
-        payment_method: paymentMethod.id,
-        off_session: true,
-        confirm: true,
-        description: "Auto-deduction for wallet balance",
-        metadata: {
-          userId: user._id.toString(),
-          type: "AUTO_DEDUCT",
-        },
-      },
-      {
-        stripeAccount: process.env.STRIPE_PLATFORM_ACCOUNT_ID, // if using connected accounts
-      },
-    );
-
-    // 3️ Only credit the wallet if the charge actually succeeded
-    if (paymentIntent.status !== "succeeded") {
-      console.warn(`Auto-charge not completed (status: ${paymentIntent.status}) for user ${user._id}`);
-      return res.status(402).send({
-        status: false,
-        message: `Charge not completed (${paymentIntent.status})`,
-        paymentIntentId: paymentIntent.id,
-      });
-    }
-
-    // 4️ Credit wallet + log billing event (single save)
-    user.walletBalance += amountToCharge;
-    user.dateUpdated = new Date();
-    user.billingEvents.push({
-      callId: paymentIntent.id,
-      type: "AUTO_WALLET_TOPUP",
-      amount: amountToCharge,
-    });
-    await user.save();
-
-    console.log(`Auto-charge successful for user ${user._id}`);
+  if (result.toppedUp) {
     return res.send({
       status: true,
       message: "Auto-charge successful",
-      paymentIntentId: paymentIntent.id,
+      paymentIntentId: result.paymentIntentId,
     });
-  } catch (error) {
-    if (error.code === "authentication_required") {
-      console.error(`Card requires authentication for user ${userId}`);
-    } else {
-      console.error(`Auto-charge failed for user ${userId}:`, error.message);
-    }
-
-    return res.status(500).send({ status: false, message: error.message });
   }
+
+  const benign = ["above-threshold", "auto-pay-disabled"];
+  return res
+    .status(benign.includes(result.reason) ? 200 : 400)
+    .send({ status: benign.includes(result.reason), message: result.reason });
 };
 
 const callBillingWebhook = async (req, res) => {
@@ -447,7 +347,7 @@ const callBillingWebhook = async (req, res) => {
     const limitReason =
       (featureEnabled(user, "voice") ? null : "Voice calling is disabled for this agency.") ||
       (await checkNumberLimits(user, phoneSid)) ||
-      checkUsageLimit(user, subaccountId, "calling");
+      (await checkUsageLimit(user, subaccountId, "calling"));
     if (limitReason) {
       res.status(200).json({ error: limitReason });
       try {
@@ -488,15 +388,6 @@ const callBillingWebhook = async (req, res) => {
       durationSec,
     });
 
-    // ---- IDEMPOTENCY: charge a given call only ONCE, regardless of which ----
-    // ---- event(s) Vapi sends (call.ended, end-of-call-report, analysis). ----
-    const alreadyBilled = (user.billingEvents || []).some(
-      (e) => e.callId === call.id && CHARGE_TYPES.includes(e.type),
-    );
-    if (alreadyBilled) {
-      return res.sendStatus(200);
-    }
-
     // Resolve the final call cost from whichever event arrived first.
     // end-of-call-report carries the complete cost; the others are fallbacks.
     let amountToDeduct = 0;
@@ -509,20 +400,31 @@ const callBillingWebhook = async (req, res) => {
     }
     amountToDeduct = Number(amountToDeduct) || 0;
 
-    // ---- DEDUCT WALLET (single charge per call) ----
-    user.walletBalance -= amountToDeduct;
+    if (amountToDeduct === 0 && !durationSec) {
+      console.log(`Call ${call.id} had no cost and no duration — not billed.`);
+      return res.sendStatus(200);
+    }
 
-    user.billingEvents.push({
-      callId: call.id,
-      type,
+    // ---- DEDUCT WALLET ----
+    // One charge per call, whichever of Vapi's three events arrives first: the
+    // idempotency key is the call id, not the event type, and it is enforced by
+    // a unique index rather than by scanning history in memory.
+    const charge = await billing.chargeWallet({
+      user,
       amount: amountToDeduct,
-      phoneSid: phoneSid || undefined,   // enables per-number limit tracking
-      subaccountId: subaccountId || undefined, // enables snapshot call-minute caps
+      type,
+      callId: call.id,
+      idempotencyKey: `call:${call.id}`,
+      subaccountId: subaccountId || undefined,
+      phoneSid: phoneSid || undefined,
       durationSec: durationSec || undefined,
     });
 
-    user.dateUpdated = new Date();
-    await user.save();
+    if (!charge.charged) {
+      return res.sendStatus(200); // already billed for this call
+    }
+
+    await maybeAutoTopUp(user._id);
 
     // Fire call completed notification
     if (type === "end-of-call-report" || type === "call.ended") {
@@ -534,8 +436,8 @@ const callBillingWebhook = async (req, res) => {
         userId: user._id,
         type: "call_completed",
         title: "Call Completed",
-        message: `A call has ended. Duration: ${durationText}. Cost: $${amountToDeduct.toFixed(4)}.`,
-        metadata: { callId: call.id, cost: amountToDeduct, duration: durationSec },
+        message: `A call has ended. Duration: ${durationText}. Cost: $${charge.amount.toFixed(4)}.`,
+        metadata: { callId: call.id, cost: charge.amount, duration: durationSec },
       });
     }
 
@@ -550,7 +452,12 @@ const getTransactionHistory = async (req, res) => {
   try {
     const userId = req.user;
     const user = await userModel.findById(userId);
-    return res.send({ status: true, data: user.billingEvents || [] });
+    if (!user) return res.send({ status: false, message: "User not found" });
+
+    // Merged view of the billingEvent collection and any history still on the
+    // user document, so nothing disappears before the backfill has run.
+    const data = await billing.listEvents(user);
+    return res.send({ status: true, data });
   } catch (error) {
     return res.send({ status: false, message: error.message });
   }
@@ -618,13 +525,31 @@ const updateAutoChargingSettings = async (req, res) => {
       return res.send({ status: false, message: "User not found" });
     }
 
+    const nextLeast = least !== undefined ? Number(least) : user.autoCardPay.least;
+    const nextRefill =
+      refillAmount !== undefined ? Number(refillAmount) : user.autoCardPay.refillAmount;
+
+    if (!(nextLeast >= 0) || !(nextRefill > 0)) {
+      return res.send({
+        status: false,
+        message: "Threshold must be zero or more and refill amount must be greater than zero.",
+      });
+    }
+
+    // A refill smaller than the threshold leaves the balance still below it
+    // after topping up, so the next charge triggers another top-up — the card
+    // gets hit repeatedly to climb out. Reject the combination up front.
+    if (nextRefill < nextLeast) {
+      return res.send({
+        status: false,
+        message: `Refill amount ($${nextRefill}) must be at least the low-balance threshold ($${nextLeast}), otherwise one top-up cannot clear it.`,
+      });
+    }
+
     user.autoCardPay = {
       status: status !== undefined ? status : user.autoCardPay.status,
-      least: least !== undefined ? least : user.autoCardPay.least,
-      refillAmount:
-        refillAmount !== undefined
-          ? refillAmount
-          : user.autoCardPay.refillAmount,
+      least: nextLeast,
+      refillAmount: nextRefill,
     };
 
     await user.save();
@@ -649,43 +574,27 @@ const handleVapiSmsBilling = async (req, res) => {
       if (smsTool) {
         // Find user via metadata passed from Vapi call
         // (Ensure you pass 'userId' in the assistant's customer metadata)
-        const userId = message.call.customer.extension;
+        const userId = message.call?.customer?.extension;
         const user = await userModel.findById(userId);
 
         if (!user) return res.status(404).send("User not found");
 
-        const smsCost = 0.05; // Set your price per SMS
+        // Tagging the sub-account is what puts this charge into the monthly
+        // message cap and onto the agency's invoice; without it the spend was
+        // invisible to both.
+        const subaccountId = resolveSubaccountId(user, message.call?.assistantId);
 
-        // 2. Deduct from Wallet
-        user.walletBalance -= smsCost;
-
-        // 3. Log the Billing Event
-        user.billingEvents.push({
+        await billing.chargeWallet({
+          user,
+          amount: 0, // no provider cost surfaces here; the platform fee applies
           type: "SMS_CHARGE",
-          amount: smsCost,
-          timestamp: new Date(),
+          callId: smsTool.id,
+          subaccountId: subaccountId || undefined,
+          idempotencyKey: `sms:${smsTool.id}`,
         });
 
-        await user.save();
+        await maybeAutoTopUp(user._id);
 
-        // 4. Check for Auto-Refill Logic (uses the autoCardPay schema field)
-        if (
-          user.autoCardPay?.status &&
-          user.stripeCustomerId &&
-          user.walletBalance <= (user.autoCardPay.least || 0)
-        ) {
-          console.log(`Low balance (${user.walletBalance}). Triggering auto-refill…`);
-          // Delegate to the dedicated, success-gated auto top-up flow
-          try {
-            await axios.post(`${process.env.SERVER_URL}/integrations/autopay/webhook`, {
-              userId: user._id.toString(),
-            });
-          } catch (e) {
-            console.error("Auto-refill trigger failed:", e.message);
-          }
-        }
-
-        // 5. Respond to Vapi to allow the assistant to continue
         return res.status(200).json({
           results: [
             { toolCallId: smsTool.id, result: "SMS processed and billed." },
