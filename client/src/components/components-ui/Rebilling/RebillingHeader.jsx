@@ -58,17 +58,12 @@ const RebillingHeader = () => {
           <Settings className="w-3.5 h-3.5" />
           Stripe settings
         </button>
-<<<<<<< HEAD
-        <button onClick={() => navigate("/dashboard")} className="p-2 hover:bg-gray-100 rounded-lg">
-          <ArrowUpRight size={16} className="text-gray-500" />
-=======
         <button
           onClick={handleOpenStripe}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 text-xs font-semibold hover:bg-gray-50 hover:border-gray-300 transition-all"
         >
           <ArrowUpRight className="w-3.5 h-3.5" />
           Open Stripe
->>>>>>> projects-ui
         </button>
       </div>
     </div>

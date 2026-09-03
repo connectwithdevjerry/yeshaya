@@ -110,15 +110,8 @@ export const ChatLabView = () => {
               >
                 {msg.role === "user" ? (
                   <div className="flex flex-col items-end gap-1">
-<<<<<<< HEAD
-                    <span className="text-xs font-bold text-gray-500 mr-1">
-                      You
-                    </span>
-                    <div className="bg-white border border-gray-100 px-4 py-2 rounded-xl text-gray-800 shadow-md font-medium hover:shadow-lg transition-shadow duration-200">
-=======
                     <span className="text-[10px] font-bold text-gray-400 mr-1">You</span>
                     <div className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm font-medium shadow-md shadow-indigo-500/15 max-w-sm">
->>>>>>> projects-ui
                       {msg.content}
                     </div>
                   </div>
@@ -131,15 +124,6 @@ export const ChatLabView = () => {
                       <span className="text-[10px] font-bold text-gray-600">{msg.name}</span>
                     </div>
                     {msg.isLoading ? (
-<<<<<<< HEAD
-                      <div className="w-full max-w-[400px] bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 p-4 rounded-xl space-y-3 shadow-sm">
-                        <div className="h-3 bg-gray-300 rounded-full w-full animate-pulse"></div>
-                        <div className="h-3 bg-gray-300 rounded-full w-[85%] animate-pulse"></div>
-                        <div className="h-3 bg-gray-300 rounded-full w-[40%] animate-pulse"></div>
-                      </div>
-                    ) : (
-                      <div className="w-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white p-4 rounded-xl shadow-md text-sm font-medium leading-relaxed whitespace-pre-wrap transition-all duration-300 hover:shadow-lg">
-=======
                       <div className="bg-gray-50 border border-gray-100 px-4 py-3 rounded-2xl rounded-tl-sm space-y-2.5 min-w-[180px]">
                         {[100, 80, 50].map((w, j) => (
                           <div key={j} className={`h-2 bg-gray-200 rounded-full animate-pulse`} style={{ width: `${w}%` }} />
@@ -147,7 +131,6 @@ export const ChatLabView = () => {
                       </div>
                     ) : (
                       <div className="bg-gray-50 border border-gray-100 text-gray-800 px-4 py-2.5 rounded-2xl rounded-tl-sm text-sm leading-relaxed whitespace-pre-wrap shadow-sm">
->>>>>>> projects-ui
                         {msg.content}
                       </div>
                     )}

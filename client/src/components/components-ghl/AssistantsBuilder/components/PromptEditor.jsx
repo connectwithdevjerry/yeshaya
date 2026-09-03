@@ -68,15 +68,7 @@ const TabButton = ({ tab, isActive, onClick }) => {
 const PillButton = ({ icon: Icon, label, onClick, className = "" }) => (
   <button
     onClick={onClick}
-<<<<<<< HEAD
-    className={`px-4 py-2 text-sm font-medium transition-all duration-200 border-b-2 ${
-      isActive
-        ? "border-indigo-600 bg-indigo-50/50 text-indigo-700 font-bold"
-        : "border-transparent text-gray-500 hover:bg-gray-50"
-    }`}
-=======
     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50 transition-all ${className}`}
->>>>>>> projects-ui
   >
     <Icon className="w-3.5 h-3.5 flex-shrink-0" />
     {label}
@@ -84,27 +76,8 @@ const PillButton = ({ icon: Icon, label, onClick, className = "" }) => (
 );
 
 export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
-<<<<<<< HEAD
-  const dispatch = useDispatch();
-  const [activeTab, setActiveTab] = useState("Builder");
-  const [isToolkitOpen, setIsToolkitOpen] = useState(false);
-  const [isGeneratePromptModalOpen, setIsGeneratePromptModalOpen] =
-    useState(false);
-  const [isDynamicGreetingModalOpen, setIsDynamicGreetingModalOpen] =
-    useState(false);
-  const [isSnippetsOpen, setIsSnippetsOpen] = useState(false);
-
-  // ✅ States for loading and success feedback
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [copySuccess, setCopySuccess] = useState(null); // 'url' or 'json'
-
-  const maxChars = 8024;
-  const charCount = promptContent.length;
-  const navigate = useNavigate();
-=======
   const dispatch    = useDispatch();
   const navigate    = useNavigate();
->>>>>>> projects-ui
   const [searchParams] = useSearchParams();
 
   const [activeTab,                   setActiveTab]                   = useState(
@@ -145,15 +118,9 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
   };
 
   useEffect(() => {
-<<<<<<< HEAD
-    if (selectedAssistant) {
-      if (selectedAssistant.voice)
-        setVoiceDisplay(formatVoiceDisplay(selectedAssistant.voice));
-=======
     if (selectedAssistant && !promptContent) {
       const systemPrompt = selectedAssistant.model?.systemPrompt || "";
       setPromptContent(systemPrompt);
->>>>>>> projects-ui
       if (selectedAssistant.id) setAssistantTag(selectedAssistant.id);
     }
   }, [selectedAssistant]);
@@ -248,53 +215,6 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-bold text-gray-800">Global Prompt</h2>
 
-<<<<<<< HEAD
-              {/* ✅ ACTION GROUP: Split URL & JSON Button */}
-              <div className="flex items-center border border-blue-200 rounded-md bg-white overflow-hidden shadow-sm">
-                <button
-                  onClick={() => handleCopyAction("url")}
-                  disabled={isGenerating}
-                  className="hover:bg-blue-50 p-2 flex items-center gap-1.5 border-r border-blue-100 disabled:opacity-50 transition-colors active:scale-95"
-                  title="Copy Outbound URL"
-                >
-                  {isGenerating ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : copySuccess === "url" ? (
-                    <Check size={14} className="text-green-500" />
-                  ) : (
-                    <Copy size={14} />
-                  )}
-                  <span className="font-semibold">URL</span>
-                </button>
-                <button
-                  onClick={() => handleCopyAction("json")}
-                  disabled={isGenerating}
-                  className="hover:bg-blue-50 p-2 flex items-center gap-1.5 disabled:opacity-50 transition-colors active:scale-95"
-                  title="Copy Full JSON Response"
-                >
-                  {isGenerating ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : copySuccess === "json" ? (
-                    <Check size={14} className="text-green-500" />
-                  ) : (
-                    <Code size={14} />
-                  )}
-                  <span className="font-semibold">JSON</span>
-                </button>
-              </div>
-
-              <div className="relative">
-                <button
-                  className="hover:bg-blue-50 p-2 flex items-center gap-1"
-                  onClick={() => setIsSnippetsOpen(!isSnippetsOpen)}
-                >
-                  <Pencil size={15} /> Snippet
-                </button>
-                <PromptSnippetsDropdown
-                  isOpen={isSnippetsOpen}
-                  onClose={() => setIsSnippetsOpen(false)}
-                  onAddSnippet={handleAddSnippet}
-=======
             {/* Character bar */}
             <div className="flex items-center gap-2">
               <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -302,7 +222,6 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
                   className={`h-full rounded-full ${pct > 90 ? "bg-rose-500" : pct > 70 ? "bg-amber-400" : "bg-indigo-500"}`}
                   animate={{ width: `${pct}%` }}
                   transition={{ duration: 0.3 }}
->>>>>>> projects-ui
                 />
               </div>
               <span className={`text-[10px] font-medium tabular-nums ${pct > 90 ? "text-rose-500" : "text-gray-400"}`}>
@@ -465,18 +384,6 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
         </div>
       </div>
 
-<<<<<<< HEAD
-      <div className="flex-1 overflow-hidden">{renderContentView()}</div>
-
-      {activeTab === "Builder" && !isToolkitOpen && (
-        <button
-          onClick={toggleToolkit}
-          className="absolute top-1/2 right-0 transform -translate-y-1/2 translate-x-1/2 z-10 p-2 bg-white border border-gray-300 rounded-full shadow-md text-gray-500 hover:text-indigo-600 hover:scale-110 active:scale-95 transition-all duration-200"
-        >
-          <ArrowLeft size={20} />
-        </button>
-      )}
-=======
       {/* Content */}
       <div className="flex-1 overflow-hidden">
         <AnimatePresence mode="wait">
@@ -494,7 +401,6 @@ export const GlobalPromptEditor = ({ promptContent, setPromptContent }) => {
           </motion.div>
         </AnimatePresence>
       </div>
->>>>>>> projects-ui
 
       <GeneratePromptModal
         isOpen={isGeneratePromptModalOpen}

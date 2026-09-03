@@ -9,7 +9,7 @@ import {
   BarChart2, List, RefreshCw, TrendingUp,
 } from "lucide-react";
 import MetricCard       from "../../components/components-ghl/CallCenter/MetricCard";
-import DownloadContact  from "../../components/components-ghl/CallCenter/DownloadContact";
+import CallList         from "../../components/components-ghl/CallCenter/CallList";
 import PieChartsDashboard from "../../components/components-ghl/CallCenter/PieChartDashboard";
 import CallCharts       from "../../components/components-ghl/CallCenter/CallsChart";
 import { getAssistantAnalytics } from "../../store/slices/assistantsSlice";
@@ -216,7 +216,7 @@ const CallDashboard = () => {
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.18 }}
           >
-            <DownloadContact />
+            <CallList />
           </motion.div>
         )}
 

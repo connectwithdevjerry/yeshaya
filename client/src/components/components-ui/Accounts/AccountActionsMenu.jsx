@@ -42,18 +42,9 @@ const AccountActionsMenu = ({ isOpen, onClose, account, anchorRef, position, onE
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (
-<<<<<<< HEAD
-        menuRef.current &&
-        !menuRef.current.contains(event.target) &&
-        (!anchorRef?.current || !anchorRef.current.contains(event.target))
-      ) {
-        onClose();
-      }
-=======
         menuRef.current && !menuRef.current.contains(e.target) &&
         anchorRef.current && !anchorRef.current.contains(e.target)
       ) onClose();
->>>>>>> projects-ui
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
