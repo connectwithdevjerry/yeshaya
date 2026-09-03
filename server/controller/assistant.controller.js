@@ -1318,26 +1318,92 @@ const createCustomTool = async (req, res) => {
   }
 };
 
+// Vapi's tool-call payload is not one fixed shape, and every assumption the
+// handler made about it failed silently — a tool that cannot read its arguments
+// just returns nothing useful, and the assistant stalls or improvises.
+//
+// `arguments` follows the OpenAI convention and arrives as a JSON *string* on
+// current payloads; destructuring it as an object yields undefined for every
+// field, which is why check_availability and book_appointment never saw a date.
+const parseToolArgs = (raw) => {
+  if (!raw) return {};
+  if (typeof raw === "object") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    console.error("Could not parse tool arguments:", raw);
+    return {};
+  }
+};
+
+// The assistant id has moved between payload versions. Look everywhere before
+// giving up — failing to find it means the owner lookup returns nothing and
+// EVERY tool answers "Configuration error".
+const resolveAssistantId = (message) =>
+  message?.assistantId ||
+  message?.assistant?.id ||
+  message?.call?.assistantId ||
+  message?.call?.assistant?.id ||
+  "";
+
+// Older payloads use toolCallList; newer ones use toolCalls.
+const toolCallsFrom = (message) => {
+  const list = message?.toolCalls || message?.toolCallList || [];
+  return Array.isArray(list) ? list : [];
+};
+
 const executeToolFromVapi = async (req, res) => {
   const { message } = req.body;
   const { userId } = req.params;
 
-  console.log("Received Vapi Tool Webhook:", message);
+  if (message?.type !== "tool-calls") return res.send();
 
-  if (message.type !== "tool-calls") return res.send();
+  const toolCalls = toolCallsFrom(message);
+  if (!toolCalls.length) {
+    console.error("tool-calls webhook with no tool calls:", JSON.stringify(message)?.slice(0, 500));
+    return res.status(200).json({ results: [] });
+  }
 
-  console.log("Received tool call from Vapi:", message);
+  // The model can emit several tool calls in one turn. Only the first was ever
+  // answered, so Vapi waited on results for the rest that never came — dead air
+  // on the call until it gave up.
+  if (toolCalls.length > 1) {
+    const results = [];
+    for (const single of toolCalls) {
+      const captured = { statusCode: 200, body: null };
+      const fakeRes = {
+        status(code) { captured.statusCode = code; return this; },
+        json(body) { captured.body = body; return this; },
+        send(body) { captured.body = body; return this; },
+      };
+      await executeToolFromVapi(
+        { ...req, body: { message: { ...message, toolCalls: [single], toolCallList: undefined } } },
+        fakeRes,
+      );
+      const r = captured.body?.results;
+      if (Array.isArray(r)) results.push(...r);
+    }
+    return res.status(200).json({ results });
+  }
 
-  console.log("..........................................................");
+  const toolCall = toolCalls[0];
+  const assistantId = resolveAssistantId(message);
 
-  const toolCall = message.toolCalls[0];
-  const assistantId = message.assistantId; // Vapi sends this automatically
+  if (!assistantId) {
+    console.error("tool-call webhook carried no assistant id");
+    return res.status(200).json({
+      results: [{ toolCallId: toolCall.id, error: "Configuration error." }],
+    });
+  }
 
   try {
-    // 1. Find the User who owns this specific assistant
-    const user = await userModel.findOne({
-      "ghlSubAccountIds.vapiAssistants.assistantId": assistantId,
-    });
+    // 1. Find the User who owns this specific assistant.
+    // Only ghlSubAccountIds is used below; selecting it keeps the unbounded
+    // billingEvents and savedContacts arrays out of a request that is happening
+    // while a caller waits on the line.
+    const user = await userModel
+      .findOne({ "ghlSubAccountIds.vapiAssistants.assistantId": assistantId })
+      .select("ghlSubAccountIds");
 
     if (!user) {
       console.error("Assistant not found in database");
@@ -1362,6 +1428,13 @@ const executeToolFromVapi = async (req, res) => {
       }
     }
 
+    if (!targetSubAccount || !targetAssistant) {
+      console.error(`Assistant ${assistantId} not found under any sub-account`);
+      return res.status(200).json({
+        results: [{ toolCallId: toolCall.id, error: "Configuration error." }],
+      });
+    }
+
     // 3. Get Credentials
     const locationId = targetSubAccount.accountId;
     const calendarId = targetAssistant.calendar; // Uses the first calendar
@@ -1371,13 +1444,33 @@ const executeToolFromVapi = async (req, res) => {
     // attached to the right person's durable memory.
     const callerNumber = message.call?.customer?.number || "";
 
-    // 4. IMPORTANT: GHL API v2 requires an Access Token (not just a refresh token)
-    // You must have a helper to refresh this token, as they expire every 20 hours.
-    const tkns = await getSubGhlTokens(userId, locationId);
+    const { name } = toolCall.function || {};
+    const args = parseToolArgs(toolCall.function?.arguments ?? toolCall.arguments);
 
-    const accessToken = tkns.data.access_token;
+    // GHL credentials are only needed by the tools that call GoHighLevel.
+    // Fetching them for every tool added a round-trip (and a second full user
+    // load) to tools like search_the_web that never use them — paid in silence
+    // while the caller waits.
+    const NEEDS_GHL = new Set([
+      "check_availability", "book_appointment", "get_user_calendar_events",
+      "update_user_details", "add_tag", "remove_tag", "create_task", "self_schedule",
+    ]);
 
-    const { name, arguments: args } = toolCall.function;
+    let accessToken = null;
+    if (NEEDS_GHL.has(name)) {
+      const tkns = await getSubGhlTokens(userId, locationId);
+      accessToken = tkns.data.access_token;
+    }
+
+    if ((name === "check_availability" || name === "book_appointment") && !calendarId) {
+      console.error(`Assistant ${assistantId} has no calendar linked`);
+      return res.status(200).json({
+        results: [{
+          toolCallId: toolCall.id,
+          result: "I can't reach the booking calendar right now. Someone from the team will follow up to schedule.",
+        }],
+      });
+    }
 
     // 1 --- TOOL: CHECK AVAILABILITY ---
     if (name === "check_availability") {
@@ -2024,6 +2117,13 @@ const executeToolFromVapi = async (req, res) => {
         });
       }
     }
+    // No branch matched. Always answer: an unhandled tool name used to fall out
+    // of this chain with no response, leaving Vapi waiting on a result that
+    // never arrived.
+    console.error(`Unhandled tool "${name}" for assistant ${assistantId}`);
+    return res.status(200).json({
+      results: [{ toolCallId: toolCall.id, error: `Unknown tool: ${name}` }],
+    });
   } catch (error) {
     console.error("GHL Error:", error.response?.data || error.message);
     res.status(200).json({
@@ -2033,7 +2133,9 @@ const executeToolFromVapi = async (req, res) => {
 };
 
 const getSubGhlTokens = async (userId, accountId) => {
-  const user = await userModel.findById(userId);
+  // Only the sub-account list is read or written here; the rest of the document
+  // is dead weight on a request that blocks a live call.
+  const user = await userModel.findById(userId).select("ghlSubAccountIds");
   const ghlSubAccountIds = user.ghlSubAccountIds;
   const SUB_CLIENT_ID = process.env.GHL_SUB_CLIENT_ID;
   const SUB_CLIENT_SECRET = process.env.GHL_SUB_CLIENT_SECRET;
@@ -4589,6 +4691,10 @@ module.exports = {
   getUserAnalytics,
   getTeamNotes,
   updateTeamNotes,
+  // exported for tests
+  parseToolArgs,
+  resolveAssistantId,
+  toolCallsFrom,
   getSubAccountSpend,
   getSubAccountGhlDetails,
   importContacts,

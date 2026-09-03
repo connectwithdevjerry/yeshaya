@@ -1169,7 +1169,10 @@ const twilioCallReceiver = async (req, res) => {
 
     console.log(`Incoming call detected from: ${callerNumber}`);
 
-    const user = await userModel.findById(userId);
+    // Answering a call is time-critical — Twilio gives this webhook a few
+    // seconds before it drops the call — so load only what routing needs
+    // instead of the whole user document.
+    const user = await userModel.findById(userId).select("ghlSubAccountIds");
 
     const targetSubaccount = user.ghlSubAccountIds.filter(
       (account) => account.accountId === subaccount,
