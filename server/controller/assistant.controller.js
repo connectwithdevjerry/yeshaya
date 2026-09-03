@@ -52,7 +52,8 @@ const toolsProperties = {
   },
   update_user_details: {
     description:
-      "Updates the contact's information in the CRM. The fields that can be updated using this tool are first name, last name, email, phone number, full address, timezone and website.",
+      "Updates the contact's information in the CRM. Pass the first name, last name, email and any notes or mapped custom fields you have collected. " +
+      "Do NOT ask the customer for their phone number: on a call or a text it is already known from the number they contacted you on, and the system attaches it to the contact for you.",
     properties: {
       firstName: { type: "string", description: "The customer's first name" },
       lastName: { type: "string", description: "The customer's last name" },
@@ -313,7 +314,8 @@ If you do not know something for certain, it is fine to say you don't know. Avoi
    - Ask if they prefer an in-office appointment at 695 Truman Parkway, Boston or a virtual consultation.
    - Use check_availability and get_user_calendar_events to check available appointment times.
    - Present options to the user and confirm their preference.
-   - Collect necessary contact information (name, email, phone) using update_user_details.
+   - Collect the contact information you still need (name and email) using update_user_details.
+   - Never ask a caller for their phone number: you already have the number they are calling from, and it is saved automatically.
    - Use book_appointment to schedule the confirmed time.
    - Send a confirmation message with appointment details.
 
@@ -1549,7 +1551,13 @@ const executeToolFromVapi = async (req, res) => {
       // Step A: Upsert Contact
       const contactRes = await axios.post(
         "https://services.leadconnectorhq.com/contacts/upsert",
-        { email: customerEmail, firstName: customerName, locationId },
+        {
+          email: customerEmail,
+          firstName: customerName,
+          locationId,
+          // Known from the call itself — the assistant is told not to ask.
+          ...(callerNumber && { phone: callerNumber }),
+        },
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -1634,11 +1642,18 @@ const executeToolFromVapi = async (req, res) => {
     if (name === "update_user_details") {
       const { firstName, lastName, email, customFields: collected } = args;
 
+      // The phone number is never asked for. On a call or a text we already
+      // hold the number the customer contacted us on, so it goes onto the CRM
+      // contact from here; an assistant that volunteers one anyway (a custom
+      // tool, or a number given in a web chat) is still honoured.
+      const phone = toE164(args.phone || args.customerPhone) || callerNumber || undefined;
+
       const payload = {
         locationId: locationId, // Extracted from your ghlSubAccountIds array
         firstName,
         lastName,
         email,
+        ...(phone && { phone }),
       };
 
       // Map collected custom-field values → GHL custom field IDs using the

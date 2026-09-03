@@ -6,6 +6,10 @@
 // the idempotency guarantee depends on. Run against a real MongoDB before ship.
 const assert = require("assert");
 
+// autoTopUp builds a Stripe client at require time and throws without a key.
+// Nothing here reaches Stripe, so a stub keeps the file runnable under npm test.
+process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_stub";
+
 let pass = 0, fail = 0;
 const t = (name, fn) => {
   try { fn(); console.log(`  ok   ${name}`); pass++; }
