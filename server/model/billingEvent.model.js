@@ -39,6 +39,10 @@ const billingEventSchema = new mongoose.Schema(
     subaccountId: { type: String, default: "" }, // enables per-sub-account caps
     phoneSid: { type: String, default: "" }, // enables per-number budgets
     durationSec: { type: Number },
+    // Vapi's own reason a call ended (customer-ended-call, pipeline-error-…,
+    // exceeded-max-duration, …). Recorded so a dropped call can be explained
+    // afterwards instead of guessed at.
+    endedReason: { type: String, default: "" },
 
     // Set for anything with a natural identity, so a retried webhook cannot
     // charge twice. Absent for events that have no stable id.

@@ -1184,6 +1184,23 @@ const twilioCallReceiver = async (req, res) => {
       (vapiAssistant) => vapiAssistant.assistantId === assistant,
     );
 
+    // Enforce the agency's voice limits HERE, before answering. Doing it
+    // mid-call means hanging up on someone in the middle of a sentence; doing
+    // it here costs the caller nothing but a busy signal.
+    const gateUser = await userModel
+      .findById(userId)
+      .select("walletBalance snapshot billingEvents");
+    const blockReason =
+      (gateUser && gateUser.walletBalance <= 0 ? "Wallet balance exhausted." : null) ||
+      checkFeature(gateUser, "voice") ||
+      (await checkUsageLimit(gateUser, subaccount, "calling"));
+    if (blockReason) {
+      console.warn(`Refusing inbound call for ${userId}/${subaccount}: ${blockReason}`);
+      const twiml = new VoiceResponse();
+      twiml.say("We're unable to take your call right now. Please try again later.");
+      return res.type("text/xml").send(twiml.toString());
+    }
+
     const targetPhoneNumber = targetAssistant[0].numberDetails.filter(
       (number) => number.phoneNum === receiverNumber,
     );

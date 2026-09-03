@@ -96,6 +96,7 @@ const chargeWallet = async ({
   subaccountId,
   phoneSid,
   durationSec,
+  endedReason,
   idempotencyKey,
   platformFee = true,
 }) => {
@@ -124,6 +125,7 @@ const chargeWallet = async ({
       subaccountId: subaccountId || "",
       phoneSid: phoneSid || "",
       durationSec: durationSec || undefined,
+      endedReason: endedReason || "",
       idempotencyKey: key,
       processedAt: new Date(),
     });
