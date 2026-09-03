@@ -15,6 +15,12 @@ const getVapiInstance = () => {
   return globalVapiInstance;
 };
 
+const ROLE_STYLES = {
+  AI:     "bg-gray-50 border border-gray-100 text-gray-800 rounded-tl-sm",
+  User:   "bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-tr-sm",
+  System: "bg-amber-50 border border-amber-100 text-amber-700 text-xs",
+};
+
 export const VoiceLabView = () => {
   const vapiRef      = useRef(null);
   const chatEndRef   = useRef(null);

@@ -35,7 +35,6 @@ const GenerateAssistantFormModal = ({ isOpen, onClose }) => {
 
     setLoading(true);
     try {
-      setIsSubmitting(true);
       await dispatch(
         createAssistant({ name, description, subaccountId })
       ).unwrap();
