@@ -17,9 +17,20 @@ const customerMemoryModel = require("../model/customerMemory.model");
 
 // Turns kept verbatim. Older turns are folded into the rolling summary.
 const MAX_TURNS = 40;
-// Turns actually shown to the model — enough for continuity, small enough to
-// leave room for the assistant's own (often long) system prompt.
-const CONTEXT_TURNS = 12;
+// Turns actually shown to the model.
+//
+// This is a latency budget, not a capacity one. The block below is appended to
+// the assistant's system prompt, so it is re-sent on EVERY turn of a call —
+// tokens here are paid over and over, and on voice they are paid in dead air
+// while the caller waits. Injecting a dozen 1200-character turns pushed several
+// thousand tokens into every single response.
+const CONTEXT_TURNS = 4;
+// Prior turns are for orientation, not transcription — a clipped line is enough
+// to remind the model what was discussed.
+const CONTEXT_TURN_CHARS = 200;
+// Hard ceiling on the whole injected block. Whatever the memory holds, this is
+// the most that ever reaches the prompt.
+const MAX_BLOCK_CHARS = 1400;
 const MAX_FACTS = 60;
 const MAX_INTERACTIONS = 20;
 const MAX_SUMMARY_CHARS = 1500;
@@ -402,6 +413,8 @@ const buildMemoryBlock = (memory, { maxTurns = CONTEXT_TURNS, assistantId } = {}
   if (!memory || memory.optedOut) return "";
 
   const parts = [];
+  // Ordered most- to least-useful, because the tail is what gets trimmed when
+  // the block exceeds its budget.
 
   const who = [
     memory.name && `name: ${memory.name}`,
@@ -424,8 +437,8 @@ const buildMemoryBlock = (memory, { maxTurns = CONTEXT_TURNS, assistantId } = {}
 
   if (memory.facts?.length) {
     const facts = memory.facts
-      .slice(-25)
-      .map((f) => `- ${f.key}: ${f.value}`)
+      .slice(-10)
+      .map((f) => `- ${f.key}: ${clip(f.value, 120)}`)
       .join("\n");
     parts.push(`Confirmed details:\n${facts}`);
   }
@@ -433,8 +446,8 @@ const buildMemoryBlock = (memory, { maxTurns = CONTEXT_TURNS, assistantId } = {}
   if (memory.interactions?.length) {
     const recent = memory.interactions
       .filter((i) => i.summary)
-      .slice(-3)
-      .map((i) => `- [${i.channel || "?"}] ${i.summary}`)
+      .slice(-2)
+      .map((i) => `- [${i.channel || "?"}] ${clip(i.summary, 200)}`)
       .join("\n");
     if (recent) parts.push(`Recent interactions:\n${recent}`);
   }
@@ -443,20 +456,24 @@ const buildMemoryBlock = (memory, { maxTurns = CONTEXT_TURNS, assistantId } = {}
     const recent = memory.turns
       .filter((t) => !assistantId || t.assistantId === assistantId)
       .slice(-maxTurns)
-      .map((t) => `${t.role === "user" ? "Customer" : "You"}: ${t.content}`)
+      .map((t) => `${t.role === "user" ? "Customer" : "You"}: ${clip(t.content, CONTEXT_TURN_CHARS)}`)
       .join("\n");
     if (recent) parts.push(`Most recent messages:\n${recent}`);
   }
 
   if (!parts.length) return "";
 
-  return [
+  const body = [
     "## Customer memory",
     "This is a returning customer. The notes below come from your previous conversations with them across phone, SMS, and chat.",
     "Use them to stay consistent and avoid asking again for anything you already know. Do not read this section aloud or mention that you have notes. If the customer contradicts a note, trust the customer and continue.",
     "",
     ...parts,
   ].join("\n");
+
+  // Trim from the tail: the header and contact details matter more than the
+  // oldest replayed turn.
+  return body.length > MAX_BLOCK_CHARS ? `${body.slice(0, MAX_BLOCK_CHARS - 1)}…` : body;
 };
 
 // The assistant's own team notes — knowledge about the business that applies to
@@ -471,7 +488,9 @@ const buildNotesBlock = (notes) => {
     "## Team notes",
     "Standing notes from the team that apply to every conversation. Follow them. Do not read them aloud or mention that they exist.",
     "",
-    clip(text, 4000),
+    // Also re-sent on every turn, so it carries the same latency budget as the
+    // memory block above.
+    clip(text, 1200),
   ].join("\n");
 };
 
@@ -507,6 +526,26 @@ const recentTurnsFor = (memory, { limit = CONTEXT_TURNS, assistantId } = {}) =>
 //   2. A model override that appends the block to the assistant's own system
 //      prompt — works with no prompt changes at all. Requires reading the
 //      assistant back from Vapi so the rest of its model config is preserved.
+// The assistant's own config, briefly cached. Reading it back from Vapi sits on
+// the path between a call arriving and being answered, so the round-trip is
+// time-to-answer the caller experiences as silence. Assistant configs change
+// rarely; a short TTL removes the round-trip for back-to-back calls without
+// holding a stale prompt for long.
+const ASSISTANT_CACHE_TTL_MS = 60_000;
+const assistantCache = new Map();
+
+const fetchAssistant = async (assistantId) => {
+  const hit = assistantCache.get(assistantId);
+  if (hit && Date.now() - hit.at < ASSISTANT_CACHE_TTL_MS) return hit.data;
+
+  const { data } = await axios.get(`https://api.vapi.ai/assistant/${assistantId}`, {
+    headers: vapiHeaders(),
+    timeout: 10_000,
+  });
+  assistantCache.set(assistantId, { at: Date.now(), data });
+  return data;
+};
+
 const buildAssistantOverrides = async ({ assistantId, memory, assistantNotes, base = {} }) => {
   const block = buildContextBlock(memory, { assistantNotes });
   if (!block) return base;
@@ -522,10 +561,7 @@ const buildAssistantOverrides = async ({ assistantId, memory, assistantNotes, ba
   };
 
   try {
-    const { data: assistant } = await axios.get(
-      `https://api.vapi.ai/assistant/${assistantId}`,
-      { headers: vapiHeaders(), timeout: 10_000 },
-    );
+    const assistant = await fetchAssistant(assistantId);
 
     const model = assistant?.model;
     if (model && typeof model === "object") {
@@ -708,6 +744,7 @@ module.exports = {
   // config
   memoryEnabled,
   CONTEXT_TURNS,
+  MAX_BLOCK_CHARS,
   // identity
   normalizePhone,
   normalizeEmail,

@@ -6,7 +6,10 @@ const userModel = require("./model/user.model");
 require("dotenv").config();
 
 const getSubGhlTokens = async (userId, accountId) => {
-  const user = await userModel.findById(userId);
+  // Only the sub-account list is read or written here. Loading the full
+  // document pulled the unbounded billingEvents array along with it, on a
+  // request that can be blocking a live call.
+  const user = await userModel.findById(userId).select("ghlSubAccountIds");
   const ghlSubAccountIds = user.ghlSubAccountIds;
   const SUB_CLIENT_ID = process.env.GHL_SUB_CLIENT_ID;
   const SUB_CLIENT_SECRET = process.env.GHL_SUB_CLIENT_SECRET;

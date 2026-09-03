@@ -78,11 +78,33 @@ const memory = {
   });
 
   console.log("\n-- degradation --");
+  // A cold assistant id: nothing cached, so a failed read must degrade.
   getHandler = async () => { throw Object.assign(new Error("boom"), { response: { status: 500 } }); };
-  ov = await M.buildAssistantOverrides({ assistantId: "ast_1", memory, base: { firstMessage: "Hi!" } });
+  ov = await M.buildAssistantOverrides({ assistantId: "ast_cold", memory, base: { firstMessage: "Hi!" } });
   t("unreadable assistant does not throw", () => assert.strictEqual(ov.firstMessage, "Hi!"));
-  t("no model override when the read failed", () => assert.strictEqual(ov.model, undefined));
+  t("no model override when the read failed and nothing is cached", () =>
+    assert.strictEqual(ov.model, undefined));
   t("{{memory}} still available as a fallback", () => assert.ok(ov.variableValues.memory));
+
+  // ast_1 was read successfully earlier, so its config is cached. A transient
+  // Vapi failure should not cost the caller their memory injection.
+  ov = await M.buildAssistantOverrides({ assistantId: "ast_1", memory, base: {} });
+  t("a cached config survives a transient Vapi failure", () => assert.ok(ov.model));
+  t("and still carries the memory", () =>
+    assert.ok(ov.model.messages[0].content.includes("2019 Civic")));
+
+  console.log("\n-- the read is cached, not repeated per call --");
+  calls.get.length = 0;
+  let served = 0;
+  getHandler = async () => {
+    served += 1;
+    return { data: { model: { provider: "openai", model: "gpt-4o", messages: [{ role: "system", content: "Base." }] } } };
+  };
+  await M.buildAssistantOverrides({ assistantId: "ast_fresh", memory, base: {} });
+  await M.buildAssistantOverrides({ assistantId: "ast_fresh", memory, base: {} });
+  await M.buildAssistantOverrides({ assistantId: "ast_fresh", memory, base: {} });
+  t("three calls to one assistant hit Vapi once, not three times", () =>
+    assert.strictEqual(served, 1));
 
   ov = await M.buildAssistantOverrides({ assistantId: "ast_1", memory: null, base: { firstMessage: "Hi!" } });
   t("no memory = base returned untouched, no Vapi read", () =>
