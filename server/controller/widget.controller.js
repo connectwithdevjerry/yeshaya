@@ -287,7 +287,6 @@ const widgetChat = async (req, res) => {
       user,
       amount: response.data.cost || 0,
       type: "chat_message",
-      kind: "chat",
       callId: response.data.id,
       subaccountId: widget.subaccountId || undefined,
     });

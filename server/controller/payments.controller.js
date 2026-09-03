@@ -400,6 +400,11 @@ const callBillingWebhook = async (req, res) => {
     }
     amountToDeduct = Number(amountToDeduct) || 0;
 
+    if (amountToDeduct === 0 && !durationSec) {
+      console.log(`Call ${call.id} had no cost and no duration — not billed.`);
+      return res.sendStatus(200);
+    }
+
     // ---- DEDUCT WALLET ----
     // One charge per call, whichever of Vapi's three events arrives first: the
     // idempotency key is the call id, not the event type, and it is enforced by
@@ -408,7 +413,6 @@ const callBillingWebhook = async (req, res) => {
       user,
       amount: amountToDeduct,
       type,
-      kind: "call",
       callId: call.id,
       idempotencyKey: `call:${call.id}`,
       subaccountId: subaccountId || undefined,
@@ -582,9 +586,8 @@ const handleVapiSmsBilling = async (req, res) => {
 
         await billing.chargeWallet({
           user,
-          amount: billing.SMS_PRICE,
+          amount: 0, // no provider cost surfaces here; the platform fee applies
           type: "SMS_CHARGE",
-          kind: "sms",
           callId: smsTool.id,
           subaccountId: subaccountId || undefined,
           idempotencyKey: `sms:${smsTool.id}`,

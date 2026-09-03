@@ -10,11 +10,11 @@ through `helpers/billing.js` — never by mutating the user document.
 
 | Channel | Charged | Event type |
 |---|---|---|
-| Voice | Vapi call cost | `end-of-call-report` / `call.ended` / `call.analysis.completed` |
-| Dashboard chat | Vapi chat cost | `chat_message` |
-| Widget chat | Vapi chat cost | `chat_message` |
-| Inbound SMS | Vapi chat cost + `SMS_PRICE` | `SMS_CHARGE` |
-| `send_sms` tool | `SMS_PRICE` | `SMS_CHARGE` |
+| Voice | call cost + fee | `end-of-call-report` / `call.ended` / `call.analysis.completed` |
+| Dashboard chat | chat cost + fee | `chat_message` |
+| Widget chat | chat cost + fee | `chat_message` |
+| Inbound SMS | chat cost + fee | `SMS_CHARGE` |
+| `send_sms` tool | fee only | `SMS_CHARGE` |
 | Top-up | — | `WALLET_TOPUP` / `AUTO_WALLET_TOPUP` |
 
 **Rebilling (documents only).** `snapshot.rebilling` sets what an agency charges
@@ -42,12 +42,34 @@ undercharges rather than double-charges.
 usage positive and relied on `type` for direction; `billing.legacyEvents()`
 normalises it.
 
-## Resell markup
+## Two prices, two layers
 
-`resellConfig.<bucket>.{enabled, resellPrice}` marks usage up before it hits the
-wallet. `resellPrice` is a **multiplier** (1.3 = cost + 30%). Disabled by
-default, so no existing account's pricing changed when this was wired up — it
-had been declared in the schema and read nowhere.
+Keeping these apart is the thing to get right.
+
+**The platform fee — what agencies pay us.** `PLATFORM_FEE` ($0.05) is added to
+provider cost on every billable usage event: one voice call, one chat message,
+one SMS. It applies to every agency and is not configurable by them. This is the
+platform's margin, and `chargeWallet` is the only place it is applied.
+
+`rawAmount` and `platformFee` are stored on every event, so total margin over a
+period is a sum over those rows — no need to re-derive it from prices.
+
+A call that never connected (no provider cost, no duration) is not usage and is
+not billed at all — no fee, no event.
+
+**Resell — what an agency charges *its* clients.** `resellConfig.<bucket>` is
+per-unit pricing an agency sets for the people it resells to, and it is
+**off by default**: an agency controls its own prices, and until it sets them
+nothing is rebilled.
+
+Resell **never touches the agency's own wallet.** The agency always pays
+provider cost + platform fee, whether or not it resells. Marking resale up must
+not make the reseller pay us more. It is consumed only by the rebilling
+breakdown, which turns usage into invoices for the agency's clients.
+
+> Two configs currently express the same thing: `resellConfig` (per bucket) and
+> the older `snapshot.rebilling` prices. `resellConfig` wins where it is enabled,
+> `snapshot.rebilling` is the fallback. Worth consolidating on one.
 
 ## Spend controls
 
@@ -89,7 +111,7 @@ node scripts/backfillBillingEvents.js --clear  # empty the arrays
 
 | Variable | Default | Effect |
 |---|---|---|
-| `SMS_PRICE` | `0.05` | Fee per outbound SMS segment |
+| `PLATFORM_FEE_PER_USAGE` | `0.05` | What we charge per billable usage event |
 | `ESTIMATED_CALL_COST_PER_MINUTE` | `0.25` | Used only to size the call-duration cap |
 | `MAX_CALL_SECONDS` | `3600` | Ceiling for that cap |
 

@@ -29,9 +29,11 @@ const billingEventSchema = new mongoose.Schema(
 
     amount: { type: Number, required: true, default: 0 },
 
-    // What the provider actually cost us, before any resell markup. Kept so a
-    // margin report can be produced later without re-deriving it.
+    // What the provider actually cost, and the platform fee added on top. Kept
+    // separately so margin is a direct sum over these rows rather than
+    // something that has to be re-derived from prices later.
     rawAmount: { type: Number },
+    platformFee: { type: Number, default: 0 },
 
     callId: { type: String, default: "" }, // Vapi call/chat id, or Stripe PI id
     subaccountId: { type: String, default: "" }, // enables per-sub-account caps

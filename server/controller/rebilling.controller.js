@@ -21,12 +21,26 @@ const currentPeriod = () => {
 // billing period so usage isn't counted cumulatively/forever.
 // Returns { prices, breakdown: [...] }
 const computeBreakdown = async (user, period = currentPeriod()) => {
+  // What this agency charges the clients it resells to. Two places can set it:
+  // resellConfig (per-bucket, wins when enabled) and the older snapshot.rebilling
+  // prices. Both are off by default — an agency sets its own prices, and until
+  // it does, nothing is rebilled. Neither affects what the agency pays us.
   const rb = user.snapshot?.rebilling || {};
+  const priceFor = (bucket, legacy) => {
+    const resell = billing.resellPriceFor(user, bucket);
+    if (resell !== null) return { enabled: true, price: resell, source: "resellConfig" };
+    return {
+      enabled: !!legacy?.enabled,
+      price: num(legacy?.price),
+      source: "snapshot.rebilling",
+    };
+  };
+
   const prices = {
-    voice: { enabled: !!rb.voice?.enabled, price: num(rb.voice?.price) },
-    chat:  { enabled: !!rb.chat?.enabled,  price: num(rb.chat?.price)  },
-    kb:    { enabled: !!rb.kb?.enabled,    price: num(rb.kb?.price)    },
-    phone: { enabled: !!rb.phone?.enabled, price: num(rb.phone?.price) },
+    voice: priceFor("voice", rb.voice),
+    chat:  priceFor("chat",  rb.chat),
+    kb:    priceFor("kb",    rb.kb),
+    phone: priceFor("phone", rb.phone),
   };
 
   const subStats = {};

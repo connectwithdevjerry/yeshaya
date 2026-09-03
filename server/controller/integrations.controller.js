@@ -1369,15 +1369,13 @@ const twilioSmsReceiver = async (req, res) => {
       .filter((c) => typeof c === "string" && c.trim())
       .join("\n\n");
 
-    // Bill the agency: the assistant's reply cost, plus the flat fee for the
-    // SMS segment we send back. Recorded as SMS_CHARGE — the same type the
-    // send_sms tool uses — so both SMS paths land in one bucket on invoices and
-    // in the monthly message cap.
+    // Provider cost for the reply; the platform fee is added by chargeWallet.
+    // Recorded as SMS_CHARGE — the same type the send_sms tool uses — so both
+    // SMS paths land in one bucket on invoices and in the monthly message cap.
     await billing.chargeWallet({
       user,
-      amount: (response.data.cost || 0) + billing.SMS_PRICE,
+      amount: response.data.cost || 0,
       type: "SMS_CHARGE",
-      kind: "sms",
       callId: response.data.id,
       subaccountId: subaccount || undefined,
     });

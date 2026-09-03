@@ -72,14 +72,42 @@ const reset = (balance = 100) => {
 };
 
 (async () => {
-  console.log("\n-- atomic debit --");
+  console.log("\n-- platform fee --");
   reset(100);
   const r = await billing.chargeWallet({
     user: users[UID], userId: UID, amount: 2.5, type: "chat_message", callId: "c1",
   });
-  t("wallet debited", () => assert.strictEqual(users[UID].walletBalance, 97.5));
-  t("charge reported", () => { assert.strictEqual(r.charged, true); assert.strictEqual(r.amount, 2.5); });
-  t("event recorded as negative", () => assert.strictEqual(events[0].amount, -2.5));
+  t("charged provider cost + the $0.05 platform fee", () =>
+    assert.strictEqual(r.amount, 2.55));
+  t("wallet debited by the total", () =>
+    assert.strictEqual(users[UID].walletBalance, 97.45));
+  t("provider cost and fee stored separately for margin", () => {
+    assert.strictEqual(events[0].rawAmount, 2.5);
+    assert.strictEqual(events[0].platformFee, 0.05);
+    assert.strictEqual(events[0].amount, -2.55);
+  });
+
+  reset(100);
+  await billing.chargeWallet({
+    user: users[UID], userId: UID, amount: 0, type: "SMS_CHARGE", callId: "s1",
+  });
+  t("a zero-cost usage still carries the fee", () =>
+    assert.strictEqual(Math.round(users[UID].walletBalance * 100) / 100, 99.95));
+
+  reset(100);
+  await billing.chargeWallet({
+    user: users[UID], userId: UID, amount: 7, type: "adjustment",
+    callId: "adj1", platformFee: false,
+  });
+  t("non-usage movements can opt out of the fee", () =>
+    assert.strictEqual(users[UID].walletBalance, 93));
+
+  reset(100);
+  await billing.chargeWallet({
+    user: users[UID], userId: UID, amount: 0.0000031, type: "chat_message", callId: "f1",
+  });
+  t("float noise in provider cost does not drift the balance", () =>
+    assert.strictEqual(users[UID].walletBalance, 99.949997));
 
   console.log("\n-- concurrency: the bug this replaces --");
   reset(100);
@@ -89,7 +117,8 @@ const reset = (balance = 100) => {
     billing.chargeWallet({ user: users[UID], userId: UID, amount: 1, type: "chat_message", callId: "c" }),
   ]);
   t("three concurrent charges all land (no lost update)", () =>
-    assert.strictEqual(users[UID].walletBalance, 91));
+    // 9 of provider cost + 3 x 0.05 fee
+    assert.strictEqual(Math.round(users[UID].walletBalance * 100) / 100, 90.85));
   t("three events recorded", () => assert.strictEqual(events.length, 3));
 
   console.log("\n-- idempotency --");
@@ -107,7 +136,8 @@ const reset = (balance = 100) => {
     assert.strictEqual(retry.charged, false);
     assert.strictEqual(retry.reason, "duplicate");
   });
-  t("wallet debited exactly once", () => assert.strictEqual(users[UID].walletBalance, 96));
+  t("wallet debited exactly once, fee included once", () =>
+    assert.strictEqual(users[UID].walletBalance, 95.95));
   t("a different Vapi event type for the same call cannot double-charge", () =>
     assert.strictEqual(events.length, 1));
 
@@ -122,26 +152,26 @@ const reset = (balance = 100) => {
     assert.strictEqual(users[UID].walletBalance, 60);
   });
 
-  console.log("\n-- resell markup (opt-in, off by default) --");
-  const plain = { _id: UID };
-  t("no config = charge cost", () => assert.strictEqual(billing.applyResellMarkup(plain, "call", 10), 10));
-  t("disabled = charge cost", () => assert.strictEqual(
-    billing.applyResellMarkup({ resellConfig: { aiVoiceMinutes: { enabled: false, resellPrice: 2 } } }, "call", 10), 10));
-  t("enabled applies the multiplier", () => assert.strictEqual(
-    billing.applyResellMarkup({ resellConfig: { aiVoiceMinutes: { enabled: true, resellPrice: 1.3 } } }, "call", 10), 13));
-  t("enabled with no price is a no-op", () => assert.strictEqual(
-    billing.applyResellMarkup({ resellConfig: { aiVoiceMinutes: { enabled: true, resellPrice: 0 } } }, "call", 10), 10));
-  t("markup reaches the wallet", async () => {});
+  console.log("\n-- resell is the agency's price to ITS clients, not ours to them --");
+  const off = { _id: UID };
+  t("no config = not rebilling", () => assert.strictEqual(billing.resellPriceFor(off, "voice"), null));
+  t("disabled = not rebilling", () => assert.strictEqual(
+    billing.resellPriceFor({ resellConfig: { aiVoiceMinutes: { enabled: false, resellPrice: 2 } } }, "voice"), null));
+  t("enabled with a price returns it", () => assert.strictEqual(
+    billing.resellPriceFor({ resellConfig: { aiVoiceMinutes: { enabled: true, resellPrice: 0.4 } } }, "voice"), 0.4));
+  t("enabled with no price is still not rebilling", () => assert.strictEqual(
+    billing.resellPriceFor({ resellConfig: { aiVoiceMinutes: { enabled: true, resellPrice: 0 } } }, "voice"), null));
+
   reset(100);
+  const reseller = {
+    _id: UID,
+    resellConfig: { aiChatMessages: { enabled: true, resellPrice: 5 } },
+  };
   await billing.chargeWallet({
-    user: { _id: UID, resellConfig: { aiChatMessages: { enabled: true, resellPrice: 2 } } },
-    userId: UID, amount: 3, type: "chat_message", kind: "chat", callId: "m1",
+    user: reseller, userId: UID, amount: 1, type: "chat_message", callId: "rs1",
   });
-  t("marked-up amount debited, raw cost retained", () => {
-    assert.strictEqual(users[UID].walletBalance, 94);
-    assert.strictEqual(events[0].rawAmount, 3);
-    assert.strictEqual(events[0].amount, -6);
-  });
+  t("an agency that resells does NOT pay us more — still cost + fee", () =>
+    assert.strictEqual(users[UID].walletBalance, 98.95));
 
   console.log("\n-- usage rollups --");
   reset(100);
@@ -190,7 +220,8 @@ const reset = (balance = 100) => {
   await billing.chargeWallet({ user: nu, userId: UID, amount: 2, type: "end-of-call-report", callId: "n2", phoneSid: "PN1" });
   await billing.chargeWallet({ user: nu, userId: UID, amount: 9, type: "end-of-call-report", callId: "n3", phoneSid: "PN2" });
   const nUsage = await billing.numberUsage(nu, "PN1");
-  t("spend scoped to the number", () => assert.strictEqual(nUsage.monthSpend, 5));
+  t("spend scoped to the number (cost + fee)", () =>
+    assert.strictEqual(Math.round(nUsage.monthSpend * 100) / 100, 5.1));
   t("calls today counted", () => assert.strictEqual(nUsage.callsToday, 2));
 
   console.log("\n-- call-duration budgeting --");

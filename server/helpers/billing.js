@@ -22,9 +22,14 @@ const num = (v) => {
   return isNaN(n) ? 0 : n;
 };
 
-// Flat fee for one outbound SMS segment we send on the agency's behalf. Single
-// source of truth: it used to be a magic 0.05 inline in the Vapi tool handler.
-const SMS_PRICE = num(process.env.SMS_PRICE) || 0.05;
+// What the platform charges an agency on top of provider cost, per billable
+// usage event — one voice call, one chat message, one SMS. This is the
+// platform's margin and it applies to every agency; it is not something an
+// agency configures.
+const PLATFORM_FEE = (() => {
+  const v = process.env.PLATFORM_FEE_PER_USAGE;
+  return v === undefined || v === "" ? 0.05 : num(v);
+})();
 
 // Used only to bound how long a call may run on a nearly-empty wallet. A rough
 // over-estimate is the safe direction: it shortens the cap.
@@ -44,29 +49,30 @@ const SMS_TYPES = ["SMS_CHARGE"];
 const USAGE_TYPES = [...CALL_TYPES, ...CHAT_TYPES, ...SMS_TYPES];
 const TOPUP_TYPES = ["WALLET_TOPUP", "AUTO_WALLET_TOPUP"];
 
-// ─── Resell markup ───────────────────────────────────────────────────────────
+// ─── Resell (agency → its own clients) ──────────────────────────────────────
 
-// resellConfig lets an agency mark usage up before it hits their wallet. Each
-// entry is { enabled, resellPrice } and defaults to disabled, so pricing is
-// unchanged for every existing account until someone turns it on explicitly.
+// resellConfig is what an agency charges the people IT resells to. It never
+// touches the agency's own wallet — that is always provider cost plus the
+// platform fee. Marking resale up must not make the reseller pay us more.
 //
-// `resellPrice` is a multiplier on provider cost (1.3 = cost + 30%). A value of
-// 0 or less is treated as "not configured" and leaves the cost alone.
-const RESELL_KEYS = {
-  call: "aiVoiceMinutes",
+// Each bucket is { enabled, resellPrice }, where resellPrice is the agency's
+// per-unit price to its client. Disabled by default: an agency sets its own
+// prices, and until it does, nothing is rebilled. Consumed by the rebilling
+// breakdown in controller/rebilling.controller.js.
+const RESELL_BUCKETS = {
+  voice: "aiVoiceMinutes",
   chat: "aiChatMessages",
-  sms: "aiChatMessages",
   kb: "voiceKnowledgeBases",
   phone: "phoneNumbers",
 };
 
-const applyResellMarkup = (user, kind, rawAmount) => {
-  const key = RESELL_KEYS[kind];
-  const cfg = key && user?.resellConfig?.[key];
-  if (!cfg?.enabled) return rawAmount;
-  const multiplier = num(cfg.resellPrice);
-  if (multiplier <= 0) return rawAmount;
-  return Math.round(rawAmount * multiplier * 1e6) / 1e6;
+// The agency's per-unit resale price for one bucket, or null when they have not
+// enabled it.
+const resellPriceFor = (user, bucket) => {
+  const cfg = user?.resellConfig?.[RESELL_BUCKETS[bucket]];
+  if (!cfg?.enabled) return null;
+  const price = num(cfg.resellPrice);
+  return price > 0 ? price : null;
 };
 
 // ─── Writing ─────────────────────────────────────────────────────────────────
@@ -74,28 +80,31 @@ const applyResellMarkup = (user, kind, rawAmount) => {
 const keyFor = (type, callId) => (callId ? `${type}:${callId}` : undefined);
 
 // Debit the wallet and record the event. Returns:
-//   { charged: true,  amount, balance }  — money moved
+//   { charged: true,  amount, rawAmount, platformFee, balance }
 //   { charged: false, reason: "duplicate" } — already recorded, nothing moved
 //
-// `kind` selects the resell bucket ("call" | "chat" | "sms"); omit it to charge
-// the raw amount with no markup.
+// The agency is charged provider cost plus one PLATFORM_FEE. Pass
+// `platformFee: false` for a movement that is not billable usage.
 const chargeWallet = async ({
   user,
   userId,
   amount,
   type,
-  kind,
   callId,
   subaccountId,
   phoneSid,
   durationSec,
   idempotencyKey,
+  platformFee = true,
 }) => {
   const id = userId || user?._id;
   if (!id || !type) throw new Error("chargeWallet requires userId and type");
 
   const rawAmount = Math.max(0, num(amount));
-  const finalAmount = kind ? applyResellMarkup(user, kind, rawAmount) : rawAmount;
+  const fee = platformFee ? PLATFORM_FEE : 0;
+  // Round to whole hundredths of a cent: provider costs carry long decimals and
+  // accumulating their float error across thousands of charges drifts the balance.
+  const finalAmount = Math.round((rawAmount + fee) * 1e6) / 1e6;
   const key = idempotencyKey || keyFor(type, callId);
 
   // Insert first: the unique index is what makes this idempotent. If the row
@@ -108,6 +117,7 @@ const chargeWallet = async ({
       type,
       amount: -finalAmount,
       rawAmount,
+      platformFee: fee,
       callId: callId || "",
       subaccountId: subaccountId || "",
       phoneSid: phoneSid || "",
@@ -126,7 +136,13 @@ const chargeWallet = async ({
     { new: true, select: "walletBalance autoCardPay stripeCustomerId isActive" },
   );
 
-  return { charged: true, amount: finalAmount, rawAmount, balance: updated?.walletBalance ?? null };
+  return {
+    charged: true,
+    amount: finalAmount,
+    rawAmount,
+    platformFee: fee,
+    balance: updated?.walletBalance ?? null,
+  };
 };
 
 // Credit the wallet (top-ups). Same idempotency guarantee.
@@ -277,7 +293,7 @@ const affordableCallSeconds = (walletBalance) => {
 };
 
 module.exports = {
-  SMS_PRICE,
+  PLATFORM_FEE,
   ESTIMATED_CALL_COST_PER_MINUTE,
   MAX_CALL_SECONDS,
   CALL_TYPES,
@@ -285,7 +301,8 @@ module.exports = {
   SMS_TYPES,
   USAGE_TYPES,
   TOPUP_TYPES,
-  applyResellMarkup,
+  RESELL_BUCKETS,
+  resellPriceFor,
   chargeWallet,
   creditWallet,
   recordEvent,
