@@ -324,7 +324,13 @@ const callBillingWebhook = async (req, res) => {
             },
           },
         );
-        console.log("Call terminated successfully due to low balance.");
+        console.warn(
+          `⚠️ TERMINATED call ${call.id} — ${
+            balanceTooLow
+              ? `wallet balance $${user.walletBalance} is at or below zero`
+              : `no user owns assistant ${call.assistantId}`
+          }. Event type: ${type}.`,
+        );
       } catch (terminateErr) {
         // If it's a 404, the call already ended naturally
         if (terminateErr.response?.status !== 404) {
@@ -349,16 +355,14 @@ const callBillingWebhook = async (req, res) => {
       (await checkNumberLimits(user, phoneSid)) ||
       (await checkUsageLimit(user, subaccountId, "calling"));
     if (limitReason) {
-      res.status(200).json({ error: limitReason });
-      try {
-        await axios.post(`https://api.vapi.ai/call/${call.id}/terminate`, {}, {
-          headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}`, "Content-Type": "application/json" },
-        });
-        console.log(`Call terminated — ${limitReason}`);
-      } catch (e) {
-        if (e.response?.status !== 404) console.error("Terminate Error:", e.response?.data || e.message);
-      }
-      return;
+      // Deliberately NOT terminated. A monthly minute cap or per-number budget
+      // crossed while someone is mid-sentence is not worth hanging up on them
+      // for; the overshoot is one call. These limits are enforced when a call
+      // STARTS (see twilioCallReceiver and makeOutboundCall), which is where
+      // refusing costs the caller nothing.
+      console.warn(
+        `⚠️ Limit reached during call ${call.id} (${limitReason}) — allowing it to finish; new calls are refused at start.`,
+      );
     }
 
     const typeStatus = CHARGE_TYPES;
@@ -400,6 +404,11 @@ const callBillingWebhook = async (req, res) => {
     }
     amountToDeduct = Number(amountToDeduct) || 0;
 
+    const endedReason = call.endedReason || req.body.message?.endedReason || "";
+    if (endedReason) {
+      console.log(`Call ${call.id} ended: ${endedReason} (duration ${durationSec ?? "?"}s)`);
+    }
+
     if (amountToDeduct === 0 && !durationSec) {
       console.log(`Call ${call.id} had no cost and no duration — not billed.`);
       return res.sendStatus(200);
@@ -418,6 +427,7 @@ const callBillingWebhook = async (req, res) => {
       subaccountId: subaccountId || undefined,
       phoneSid: phoneSid || undefined,
       durationSec: durationSec || undefined,
+      endedReason,
     });
 
     if (!charge.charged) {

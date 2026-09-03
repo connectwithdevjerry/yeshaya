@@ -73,9 +73,15 @@ breakdown, which turns usage into invoices for the agency's clients.
 
 ## Spend controls
 
-- **Per call.** `affordableCallSeconds()` sets `maxDurationSeconds` on the Vapi
-  override when the balance is thin. The balance is only checked *before* a call
-  starts, so without this one long call could overdraw without bound.
+- **Per call.** `callDurationCap()` sets `maxDurationSeconds` on the Vapi
+  override, and **only** from the `MAX_CALL_SECONDS` env var. Unset means no cap.
+
+  It deliberately does not scale with the balance. It used to: the cap was
+  balance ÷ an estimated cost per minute, which meant every agency under ~$15
+  had its calls hard-terminated by Vapi part-way through — four minutes or less
+  under $1. Refusing to *start* a call on an empty wallet already bounds the
+  exposure to one call, and one call overshooting by a few dollars is a far
+  smaller problem than customer calls dropping mid-sentence.
 - **Per number.** `numberSetting.limits` — calls/day and monthly budget.
 - **Per sub-account.** `snapshot.limits` — monthly call-minutes and messages.
   Chat and SMS both count toward the message cap.
@@ -112,8 +118,7 @@ node scripts/backfillBillingEvents.js --clear  # empty the arrays
 | Variable | Default | Effect |
 |---|---|---|
 | `PLATFORM_FEE_PER_USAGE` | `0.05` | What we charge per billable usage event |
-| `ESTIMATED_CALL_COST_PER_MINUTE` | `0.25` | Used only to size the call-duration cap |
-| `MAX_CALL_SECONDS` | `3600` | Ceiling for that cap |
+| `MAX_CALL_SECONDS` | unset | Absolute ceiling on call length. Unset = no cap |
 
 ## Tests
 

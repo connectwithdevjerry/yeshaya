@@ -3868,10 +3868,9 @@ const makeOutboundCall = async (req, res) => {
       phone: customerNumber,
     });
 
-    // Bound the call to what the wallet can actually cover. The balance is only
-    // checked before a call starts, so without this one long call can drive it
-    // arbitrarily negative.
-    const maxDurationSeconds = billing.affordableCallSeconds(user.walletBalance);
+    // Absolute ceiling only, and only if one is configured. This must never be
+    // derived from the wallet balance — doing so cut live calls off mid-sentence.
+    const maxDurationSeconds = billing.callDurationCap();
 
     const assistantOverrides = await buildAssistantOverrides({
       assistantId,
