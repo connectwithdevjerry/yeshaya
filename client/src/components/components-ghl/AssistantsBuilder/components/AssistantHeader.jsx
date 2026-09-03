@@ -34,15 +34,11 @@ const IconButton = ({ icon: Icon, tooltip, onClick, active }) => (
     whileHover={{ scale: 1.08 }}
     whileTap={{ scale: 0.94 }}
     onClick={onClick}
-<<<<<<< HEAD
-    className="p-2 rounded-md text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 focus:scale-110 active:scale-95 transition-all duration-200"
-=======
     className={`p-2 rounded-xl transition-all duration-150 ${
       active
         ? "bg-indigo-50 text-indigo-600"
         : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"
     }`}
->>>>>>> projects-ui
     title={tooltip}
     aria-label={tooltip}
   >
@@ -284,18 +280,12 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
           {issueCount} {issueCount === 1 ? "Issue" : "Issues"}
         </button>
 
-<<<<<<< HEAD
-        <button
-          onClick={onSave}
-          className="flex items-center space-x-2 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium rounded-md shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-200 border-none"
-=======
         <motion.button
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           onClick={handleSave}
           disabled={saving}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-xs font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all disabled:opacity-70"
->>>>>>> projects-ui
         >
           {saving ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />

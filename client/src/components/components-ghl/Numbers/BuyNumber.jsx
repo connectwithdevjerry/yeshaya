@@ -11,17 +11,11 @@ import { fetchAvailableNumbers, buyNumber } from "../../../store/slices/numberSl
 import { fetchAssistants } from "../../../store/slices/assistantsSlice";
 import toast from "react-hot-toast";
 
-<<<<<<< HEAD
-const getCapabilityIcons = (capabilities) => {
-  if (!capabilities) return [];
-  const icons = [];
-=======
 const capIcons = (caps) => [
   caps?.voice && { Icon: Phone,        label: "Voice", color: "text-indigo-500 bg-indigo-50 border-indigo-100" },
   caps?.SMS   && { Icon: MessageSquare, label: "SMS",   color: "text-sky-500 bg-sky-50 border-sky-100" },
   caps?.MMS   && { Icon: Volume2,       label: "MMS",   color: "text-violet-500 bg-violet-50 border-violet-100" },
 ].filter(Boolean);
->>>>>>> projects-ui
 
 const ITEMS_PER_PAGE = 10;
 
@@ -29,36 +23,6 @@ const BuyNumberModal = ({ isOpen, onClose, onBought }) => {
   const [areaCode,          setAreaCode]          = useState("");
   const [selectedNumber,    setSelectedNumber]    = useState(null);
   const [selectedAssistant, setSelectedAssistant] = useState("");
-<<<<<<< HEAD
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
-  const [buyingNumber, setBuyingNumber] = useState(false);
-
-  const dispatch = useDispatch();
-  const {
-    data: availableNumbers,
-    loading,
-    error,
-  } = useSelector((state) => state.numbers);
-  const { data: assistants, loading: assistantsLoading } = useSelector(
-    (state) => state.assistants
-  );
-
-  const searchParams = new URLSearchParams(window.location.search);
-  const urlSubaccountId = searchParams.get("subaccount");
-  const activeSubaccountId = urlSubaccountId || localStorage.getItem("selectedSubaccountId");
-
-  // ✅ Fetch numbers and assistants when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      dispatch(fetchAvailableNumbers());
-
-      if (activeSubaccountId) {
-        dispatch(fetchAssistants(activeSubaccountId));
-      }
-    }
-  }, [isOpen, activeSubaccountId, dispatch]);
-=======
   const [currentPage,       setCurrentPage]       = useState(1);
   const [buyingNumber,      setBuyingNumber]      = useState(false);
 
@@ -67,7 +31,6 @@ const BuyNumberModal = ({ isOpen, onClose, onBought }) => {
   const { data: assistants, loading: assistantsLoading } = useSelector((s) => s.assistants);
   const searchParams = new URLSearchParams(window.location.search);
   const subaccountId = searchParams.get("subaccount");
->>>>>>> projects-ui
 
   useEffect(() => {
     if (isOpen) {
@@ -89,42 +52,6 @@ const BuyNumberModal = ({ isOpen, onClose, onBought }) => {
   const paginated   = filtered.slice(start, start + ITEMS_PER_PAGE);
 
   const handleBuy = async () => {
-<<<<<<< HEAD
-    if (selectedNumber && selectedAssistant && activeSubaccountId) {
-      setBuyingNumber(true);
-
-      try {
-        const resultAction = await dispatch(
-          buyNumber({
-            subaccountId: activeSubaccountId,
-            assistantId: selectedAssistant,
-            number: selectedNumber.phoneNumber,
-          })
-        );
-
-        if (buyNumber.fulfilled.match(resultAction)) {
-          console.log(
-            "✅ Number purchased successfully:",
-            resultAction.payload
-          );
-          toast.success("Number purchased successfully");
-          // Optionally refresh the available numbers list
-          dispatch(fetchAvailableNumbers());
-          onClose();
-        } else {
-          console.error("❌ Failed to buy number:", resultAction.payload);
-          toast.error(`Failed to buy number: ${resultAction.payload}`);
-        }
-      } catch (error) {
-        console.error("❌ Error buying number:", error);
-        toast.error("An error occurred while buying the number");
-      } finally {
-        setBuyingNumber(false);
-      }
-    } else {
-      if (!activeSubaccountId) {
-        toast.error("Subaccount ID is missing. Please select a subaccount.");
-=======
     if (!selectedNumber || !selectedAssistant) return;
     if (!subaccountId) { toast.error("No subaccount selected"); return; }
     setBuyingNumber(true);
@@ -137,7 +64,6 @@ const BuyNumberModal = ({ isOpen, onClose, onBought }) => {
         onClose();
       } else {
         toast.error(result.payload || "Failed to buy number");
->>>>>>> projects-ui
       }
     } catch {
       toast.error("An error occurred");
