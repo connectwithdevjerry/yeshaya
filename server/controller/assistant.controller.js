@@ -3951,6 +3951,7 @@ const makeOutboundCall = async (req, res) => {
       assistantId,
       memory,
       assistantNotes: targetAssistant.teamNotes,
+      caller: { number: customerNumber },
       base: {
         firstMessage: message,
         firstMessageMode: message

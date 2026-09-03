@@ -175,6 +175,29 @@ const OWNER = "owner_a";
   t("loadMemory returns null when it cannot scope", () =>
     assert.strictEqual(unscopedRead, null));
 
+  console.log("\n-- the live call's own facts, memory or not --");
+  t("a FIRST-TIME caller's number still reaches the assistant", () => {
+    // The case that was broken: no memory, so nothing used to be injected, and
+    // the assistant asked an inbound caller to read out the number it rang from.
+    const b = M.buildContextBlock(null, { caller: { number: "+15551234567" } });
+    assert.ok(b.includes("+15551234567"));
+    assert.ok(/ALREADY have their phone number/.test(b));
+    assert.ok(/never ask them to read it out/.test(b));
+  });
+  t("no caller number means no call block", () =>
+    assert.strictEqual(M.buildCallBlock({}), ""));
+  t("the caller's name is included when known", () =>
+    assert.ok(M.buildCallBlock({ number: "+1555", name: "Dana" }).includes("Their name is Dana")));
+  t("call facts and memory both appear for a returning caller", () => {
+    const b = M.buildContextBlock(
+      { identityKey: "phone:+1555", name: "Dana Reed", phone: "+15551234567",
+        interactionCount: 2, channels: ["call"], facts: [], turns: [], interactions: [] },
+      { caller: { number: "+15551234567" } },
+    );
+    assert.ok(/## This call/.test(b));
+    assert.ok(/## Customer memory/.test(b));
+  });
+
   console.log("\n-- recognising a returning caller --");
   t("the block tells the assistant NOT to ask for known details", () => {
     const block = M.buildMemoryBlock({

@@ -57,6 +57,13 @@ summary, `structuredData`), every chat/SMS/widget message, and the
 id and ignores contentless events, so repeated webhooks are safe. Text channels
 count a whole back-and-forth as one interaction via a 30-minute session window.
 
+**The live call.** Separately from memory, the caller's own number is injected
+on every call — inbound (from Twilio's `From`) and outbound (the number dialled)
+— together with an instruction never to ask for it. This does not depend on
+memory: a first-time caller has none, which is precisely the call on which the
+assistant is collecting details and so needs it most. Prompts can also use
+`{{customerPhone}}` and `{{customerName}}`.
+
 **Read.** Rendered as a prompt block and injected two ways on voice calls: the
 assistant is read back from Vapi and the block is *appended* to its own system
 prompt (nothing is replaced), and `{{memory}}` / `{{customerName}}` /
