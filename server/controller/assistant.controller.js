@@ -5,7 +5,7 @@ const VAPI_API_KEY = process.env.VAPI_API_KEY;
 const { VapiClient } = require("@vapi-ai/server-sdk");
 const FormData = require("form-data");
 const fs = require("fs");
-const { fillTemplate, extractText } = require("../helperFunctions");
+const { fillTemplate, extractText, toE164 } = require("../helperFunctions");
 const { MAKE_OUTBOUND_CALL } = require("../constants");
 const emailHelper = require("../resendObject");
 const { createNotification } = require("./notification.controller");
@@ -18,11 +18,14 @@ const appointmentModel = require("../model/appointment.model");
 const { fmtWhen, confirmationEmail } = require("../helpers/appointmentEmails");
 const kbFileModel = require("../model/kbFile.model");
 const { saveImageToDB } = require("../cloudinaryImageHandler");
+const { reportCalendarProblem } = require("../helpers/calendarHealth");
 const {
   resolveSubaccountId,
   checkFeature,
   checkUsageLimit,
 } = require("../helpers/snapshotLimits");
+const billing = require("../helpers/billing");
+const { maybeAutoTopUp } = require("../helpers/autoTopUp");
 const {
   loadMemory,
   ensureMemory,
@@ -1464,6 +1467,14 @@ const executeToolFromVapi = async (req, res) => {
 
     if ((name === "check_availability" || name === "book_appointment") && !calendarId) {
       console.error(`Assistant ${assistantId} has no calendar linked`);
+      // Tell the agency now rather than leaving them to discover it from a
+      // customer. Deduped to once a day per assistant.
+      reportCalendarProblem({
+        userId: user._id,
+        subaccountId: locationId,
+        assistantId,
+        reason: "no calendar is linked to it",
+      }).catch(() => {});
       return res.status(200).json({
         results: [{
           toolCallId: toolCall.id,
@@ -1478,16 +1489,41 @@ const executeToolFromVapi = async (req, res) => {
       const startMs = new Date(`${startTime}T00:00:00Z`).getTime();
       const endMs = new Date(`${startTime}T23:59:59Z`).getTime();
 
-      const response = await axios.get(
-        `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`,
-        {
-          params: { startDate: startMs, endDate: endMs },
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Version: "2021-07-28",
+      let response;
+      try {
+        response = await axios.get(
+          `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`,
+          {
+            params: { startDate: startMs, endDate: endMs },
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-07-28",
+            },
+            timeout: 10_000,
           },
-        },
-      );
+        );
+      } catch (slotsErr) {
+        // 404 here means the calendar itself is gone from GoHighLevel, not that
+        // there happen to be no slots. Saying "no availability" would send the
+        // caller away believing the diary is full.
+        if (slotsErr.response?.status === 404) {
+          console.error(`Calendar ${calendarId} not found in GHL for assistant ${assistantId}`);
+          reportCalendarProblem({
+            userId: user._id,
+            subaccountId: locationId,
+            assistantId,
+            reason: "its linked calendar no longer exists in GoHighLevel",
+          }).catch(() => {});
+          return res.status(200).json({
+            results: [{
+              toolCallId: toolCall.id,
+              result: "I can't reach the booking calendar right now. Someone from the team will follow up to schedule.",
+            }],
+          });
+        }
+        throw slotsErr;
+      }
+
       // Return available slots to Vapi
       return res.json({
         results: [
@@ -2522,19 +2558,49 @@ const getConnectedCalendar = async (req, res) => {
       throw err;
     }
 
-    const config = {
-      method: "get",
-      maxBodyLength: Infinity,
-      url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${tkns.data.access_token}`,
-        Version: "2021-04-15",
-      },
-    };
+    // An empty id would build ".../calendars/" — the collection endpoint, not a
+    // calendar — and whatever that returns would be read as "connected".
+    if (!targetAssistant.calendar) {
+      return res.send({
+        status: false,
+        calendarLinked: false,
+        message: "No calendar is linked to this assistant.",
+      });
+    }
 
-    const response = await axios.request(config);
-    return res.send({ status: true, data: response.data || {} });
+    try {
+      const response = await axios.get(
+        `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${tkns.data.access_token}`,
+            Version: "2021-04-15",
+          },
+          timeout: 10_000,
+        },
+      );
+      return res.send({ status: true, calendarLinked: true, data: response.data || {} });
+    } catch (calErr) {
+      // A calendar deleted, unshared or reassigned in GoHighLevel is a
+      // different problem from a network blip, and only the first needs the
+      // user to relink. Both used to surface as "Request failed with status
+      // code 404", which reads like a transient error and is easy to ignore.
+      if (calErr.response?.status === 404) {
+        console.warn(
+          `Assistant ${assistantId} points at calendar ${targetAssistant.calendar}, which no longer exists in GHL.`,
+        );
+        return res.send({
+          status: false,
+          calendarLinked: true,
+          calendarMissing: true,
+          calendarId: targetAssistant.calendar,
+          message:
+            "The linked calendar no longer exists in GoHighLevel. It may have been deleted or unshared — pick a calendar again.",
+        });
+      }
+      throw calErr;
+    }
   } catch (error) {
     console.error("Error fetching connected calendar:", error.message);
     return res.send({
@@ -3809,7 +3875,17 @@ const generateOutBoundCallUrl = async (req, res) => {
 const makeOutboundCall = async (req, res) => {
   console.log("Initiating outbound call...");
   const { assistantId, poutboundId } = req.query;
-  const { customerNumber, fromNumber, dynamicValues } = req.body;
+  const { fromNumber, dynamicValues } = req.body;
+
+  // Dialled numbers arrive however a human typed them, or however an API
+  // caller formatted them. Vapi 400s on anything that is not exactly E.164.
+  const customerNumber = toE164(req.body.customerNumber);
+  if (!customerNumber) {
+    return res.send({
+      status: false,
+      message: `"${req.body.customerNumber ?? ""}" is not a valid phone number. Use international format, e.g. +15551234567.`,
+    });
+  }
 
   try {
     const userId = poutboundId;
@@ -3867,6 +3943,10 @@ const makeOutboundCall = async (req, res) => {
       phone: customerNumber,
     });
 
+    // Absolute ceiling only, and only if one is configured. This must never be
+    // derived from the wallet balance — doing so cut live calls off mid-sentence.
+    const maxDurationSeconds = billing.callDurationCap();
+
     const assistantOverrides = await buildAssistantOverrides({
       assistantId,
       memory,
@@ -3876,6 +3956,7 @@ const makeOutboundCall = async (req, res) => {
         firstMessageMode: message
           ? "assistant-speaks-first"
           : "assistant-speaks-first-with-model-generated-message",
+        ...(maxDurationSeconds && { maxDurationSeconds }),
       },
     });
 
@@ -3952,7 +4033,7 @@ const sendChatMessage = async (req, res) => {
   // Feature gate + monthly "Messages" cap for this sub-account
   const chatBlockReason =
     checkFeature(user, "chat") ||
-    checkUsageLimit(user, chatSubaccountId, "messages");
+    (await checkUsageLimit(user, chatSubaccountId, "messages"));
   if (chatBlockReason) {
     return res.send({ status: false, reply: [{ role: "assistant", content: chatBlockReason }] });
   }
@@ -3991,15 +4072,14 @@ const sendChatMessage = async (req, res) => {
       });
     }
 
-    const amountToDeduct = response.data.cost || 0;
-    user.walletBalance -= amountToDeduct;
-    user.billingEvents.push({
-      callId: response.data.id,
+    await billing.chargeWallet({
+      user,
+      amount: response.data.cost || 0,
       type: "chat_message",
-      amount: amountToDeduct,
+      callId: response.data.id,
       subaccountId: chatSubaccountId || undefined, // enables snapshot message caps
     });
-    await user.save();
+    await maybeAutoTopUp(user._id);
 
     // ---- PER-CUSTOMER MEMORY (write) ----
     const answer = response.data.output

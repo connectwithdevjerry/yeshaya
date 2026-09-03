@@ -154,9 +154,45 @@ const fillTemplate = (template, values) => {
   });
 };
 
+// ─── Phone numbers ───────────────────────────────────────────────────────────
+
+// Vapi rejects a call outright ("customer.number must be a valid phone number
+// in the E.164 format", HTTP 400) if the number is not exactly E.164, and the
+// caller just hears the call fail. Twilio usually sends E.164 in `From`, but
+// not always: a withheld caller id can arrive as "anonymous", SIP traffic as
+// "sip:+15551234567@domain", and numbers typed into the dashboard for outbound
+// calls arrive however a human typed them.
+//
+// Returns a clean E.164 string, or "" when the input cannot be one.
+const toE164 = (raw) => {
+  if (!raw) return "";
+  let v = String(raw).trim();
+
+  // "sip:+15551234567@carrier.com" / "tel:+15551234567" / "client:name"
+  const sip = v.match(/^(?:sips?|tel):([^@;]+)/i);
+  if (sip) v = sip[1];
+
+  const hadPlus = v.startsWith("+");
+  const digits = v.replace(/\D/g, "");
+  if (!digits) return ""; // "anonymous", "unknown", "restricted", …
+
+  let e164;
+  if (hadPlus) e164 = `+${digits}`;
+  else if (digits.length === 10) e164 = `+1${digits}`; // bare US number
+  else if (digits.length === 11 && digits.startsWith("1")) e164 = `+${digits}`;
+  else e164 = `+${digits}`;
+
+  return isE164(e164) ? e164 : "";
+};
+
+// E.164: "+", a non-zero leading digit, 15 digits total at most.
+const isE164 = (v) => /^\+[1-9]\d{1,14}$/.test(String(v || ""));
+
 module.exports = {
   extractText,
   fillTemplate,
   extractVariables,
   getSubGhlTokens,
+  toE164,
+  isE164,
 };

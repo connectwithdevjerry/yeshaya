@@ -1,6 +1,8 @@
 const widgetModel = require("../model/widget.model");
 const userModel = require("../model/user.model");
 const { checkFeature, checkUsageLimit } = require("../helpers/snapshotLimits");
+const billing = require("../helpers/billing");
+const { maybeAutoTopUp } = require("../helpers/autoTopUp");
 const {
   ensureMemory,
   recordTurns,
@@ -232,7 +234,7 @@ const widgetChat = async (req, res) => {
     // Wallet, feature gate, and monthly message cap — all surface as "unavailable"
     if (user.walletBalance <= 0) return res.json(unavailable);
     if (checkFeature(user, "chat")) return res.json(unavailable);
-    if (checkUsageLimit(user, widget.subaccountId, "messages")) return res.json(unavailable);
+    if (await checkUsageLimit(user, widget.subaccountId, "messages")) return res.json(unavailable);
 
     const history = (Array.isArray(messages) ? messages : [])
       .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
@@ -248,6 +250,8 @@ const widgetChat = async (req, res) => {
     // browser-scoped visitor id.
     const memory = await ensureMemory({
       ownerUserId: widget.ownerUserId,
+      // An untied widget still gets its own scope (see scopeOf) rather than an
+      // agency-wide bucket shared with every other untied widget.
       subaccountId: widget.subaccountId,
       phone: contact?.phone,
       email: contact?.email,
@@ -281,15 +285,14 @@ const widgetChat = async (req, res) => {
     }
 
     // Bill the owning agency's wallet (same shape as authed chat)
-    const amount = response.data.cost || 0;
-    user.walletBalance -= amount;
-    user.billingEvents.push({
-      callId: response.data.id,
+    await billing.chargeWallet({
+      user,
+      amount: response.data.cost || 0,
       type: "chat_message",
-      amount,
+      callId: response.data.id,
       subaccountId: widget.subaccountId || undefined,
     });
-    await user.save();
+    await maybeAutoTopUp(user._id);
 
     // ---- PER-CUSTOMER MEMORY (write) ----
     const answer = response.data.output

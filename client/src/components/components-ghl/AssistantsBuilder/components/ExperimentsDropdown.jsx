@@ -7,7 +7,16 @@ export const ExperimentsDropdown = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   const selectedAssistant = useSelector((s) => s.assistants?.selectedAssistant);
-  const { checks, issueCount } = auditAssistant(selectedAssistant);
+  // Selected as primitives: an object literal from useSelector has a new
+  // identity every call and would re-render on any store change.
+  const calendarLinked  = useSelector((s) => s.assistants?.calendarLinked);
+  const calendarMissing = useSelector((s) => s.assistants?.calendarMissing);
+  const calendarRecon   = useSelector((s) => s.assistants?.calendarReconnectRequired);
+  const calendarStatus =
+    calendarLinked === null || calendarLinked === undefined
+      ? null // not checked yet — the audit simply omits the booking row
+      : { calendarLinked, calendarMissing, reconnectRequired: calendarRecon };
+  const { checks, issueCount } = auditAssistant(selectedAssistant, calendarStatus);
   const total = checks.length;
   const passed = total - issueCount;
 

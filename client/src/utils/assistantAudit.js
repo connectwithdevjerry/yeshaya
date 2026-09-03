@@ -5,7 +5,10 @@
 //
 // Each check: { id, label, status: "pass" | "warn", detail }
 
-export const auditAssistant = (assistant) => {
+// `calendar` is the result of the connected-calendar check, when one has been
+// run: { calendarLinked, calendarMissing, reconnectRequired }. It is optional —
+// the audit still works without it, it just cannot report on booking.
+export const auditAssistant = (assistant, calendar) => {
   const model = assistant?.model || {};
   const voice = assistant?.voice || {};
 
@@ -61,6 +64,33 @@ export const auditAssistant = (assistant) => {
           : "No tools attached — add some from the Toolkit (optional).",
     },
   ];
+
+  // Booking. Nothing used to check this, so a calendar that had been deleted or
+  // unshared in GoHighLevel stayed silently broken until a caller asked for an
+  // appointment and the assistant could not answer.
+  if (calendar) {
+    const bookingCheck = calendar.reconnectRequired
+      ? {
+          status: "warn",
+          detail:
+            "This sub-account's GoHighLevel connection has expired, so booking and availability will fail. Reconnect it.",
+        }
+      : calendar.calendarMissing
+        ? {
+            status: "warn",
+            detail:
+              "The linked calendar no longer exists in GoHighLevel — it may have been deleted or unshared. Pick a calendar again.",
+          }
+        : calendar.calendarLinked === false
+          ? {
+              status: "warn",
+              detail:
+                "No calendar is linked, so this assistant cannot check availability or book appointments.",
+            }
+          : { status: "pass", detail: "A GoHighLevel calendar is linked and reachable." };
+
+    checks.push({ id: "calendar", label: "Booking calendar", ...bookingCheck });
+  }
 
   const issues = checks.filter((c) => c.status === "warn");
   return { checks, issues, issueCount: issues.length };

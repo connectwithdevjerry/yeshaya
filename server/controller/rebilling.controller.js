@@ -1,10 +1,10 @@
-const axios = require("axios");
 const userModel = require("../model/user.model");
 const invoiceModel = require("../model/invoice.model");
 const { getNextSequence } = require("../model/counter.model");
 const { generateInvoicePdf } = require("../helpers/invoicePdf");
 const { saveImageToDB } = require("../cloudinaryImageHandler");
 const emailHelper = require("../resendObject");
+const billing = require("../helpers/billing");
 
 const num = (v) => {
   const n = parseFloat(v);
@@ -21,17 +21,29 @@ const currentPeriod = () => {
 // billing period so usage isn't counted cumulatively/forever.
 // Returns { prices, breakdown: [...] }
 const computeBreakdown = async (user, period = currentPeriod()) => {
+  // What this agency charges the clients it resells to. Two places can set it:
+  // resellConfig (per-bucket, wins when enabled) and the older snapshot.rebilling
+  // prices. Both are off by default — an agency sets its own prices, and until
+  // it does, nothing is rebilled. Neither affects what the agency pays us.
   const rb = user.snapshot?.rebilling || {};
-  const prices = {
-    voice: { enabled: !!rb.voice?.enabled, price: num(rb.voice?.price) },
-    chat:  { enabled: !!rb.chat?.enabled,  price: num(rb.chat?.price)  },
-    kb:    { enabled: !!rb.kb?.enabled,    price: num(rb.kb?.price)    },
-    phone: { enabled: !!rb.phone?.enabled, price: num(rb.phone?.price) },
+  const priceFor = (bucket, legacy) => {
+    const resell = billing.resellPriceFor(user, bucket);
+    if (resell !== null) return { enabled: true, price: resell, source: "resellConfig" };
+    return {
+      enabled: !!legacy?.enabled,
+      price: num(legacy?.price),
+      source: "snapshot.rebilling",
+    };
   };
 
-  const assistantToAccount = {};
-  const subStats = {};
+  const prices = {
+    voice: priceFor("voice", rb.voice),
+    chat:  priceFor("chat",  rb.chat),
+    kb:    priceFor("kb",    rb.kb),
+    phone: priceFor("phone", rb.phone),
+  };
 
+  const subStats = {};
   user.ghlSubAccountIds.forEach((sub) => {
     const id = sub.accountId;
     const phoneCount = (sub.vapiAssistants || []).reduce(
@@ -46,38 +58,27 @@ const computeBreakdown = async (user, period = currentPeriod()) => {
       phone: { count: phoneCount, billable: 0 },
       totalBillable: 0,
     };
-    (sub.vapiAssistants || []).forEach((a) => {
-      if (a.assistantId) assistantToAccount[a.assistantId] = id;
-    });
   });
 
-  const uniqueAssistantIds = Object.keys(assistantToAccount);
-  if (uniqueAssistantIds.length > 0) {
-    const callArrays = await Promise.all(
-      uniqueAssistantIds.map((id) =>
-        axios.get("https://api.vapi.ai/call", {
-          params: {
-            assistantId: id,
-            // Scope usage to the billing period (Vapi ISO date filters)
-            createdAtGe: new Date(period.start).toISOString(),
-            createdAtLe: new Date(period.end).toISOString(),
-          },
-          headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}` },
-        }).then((r) => r.data.map((c) => ({ ...c, _assistantId: id }))).catch(() => []),
-      ),
-    );
-    callArrays.flat().forEach((call) => {
-      const accountId = assistantToAccount[call._assistantId];
-      const stat = subStats[accountId];
-      if (!stat) return;
-      if (call.type === "chat" || call.type === "webChat") {
-        stat.chat.messages += 1;
-      } else {
-        stat.voice.calls += 1;
-        stat.voice.minutes += (call.durationSeconds || 0) / 60;
-      }
-    });
-  }
+  // One pass over this period's billing events, bucketed by sub-account.
+  const events = await billing.listEvents(user, {
+    since: period.start,
+    until: period.end,
+  });
+
+  events.forEach((e) => {
+    const stat = subStats[e.subaccountId];
+    if (!stat) return; // event predates sub-account tagging, or sub-account is gone
+    if (billing.CALL_TYPES.includes(e.type)) {
+      stat.voice.calls += 1;
+      stat.voice.minutes += (e.durationSec || 0) / 60;
+    } else if (
+      billing.CHAT_TYPES.includes(e.type) ||
+      billing.SMS_TYPES.includes(e.type)
+    ) {
+      stat.chat.messages += 1;
+    }
+  });
 
   const breakdown = Object.values(subStats).map((s) => {
     s.voice.minutes = Math.round(s.voice.minutes * 100) / 100;

@@ -22,8 +22,6 @@ const customerMemoryRoutes = require("./route/customerMemory.route");
 const cookieParser = require("cookie-parser");
 const { verifyAccessToken } = require("./jwt_helpers");
 const { stripeWebhook } = require("./controller/payments.controller");
-const userModel = require("./model/user.model");
-const { default: axios } = require("axios");
 require("dotenv").config();
 
 const app = express();
@@ -118,8 +116,8 @@ app.get("/", (req, res) => {
   res.send("homepage");
 });
 
-const { createNotification } = require("./controller/notification.controller");
 const { startAppointmentReminders } = require("./helpers/appointmentReminders");
+const { startCalendarHealthChecks } = require("./helpers/calendarHealth");
 
 // ── Connect to MongoDB then start server ──────────────────────────────────────
 mongoose
@@ -130,57 +128,15 @@ mongoose
     // Appointment reminder scheduler (24h + 1h before)
     startAppointmentReminders();
 
-    // ── Wallet change stream (must run after DB connects) ──────────────────
-    const changeStream = userModel.watch([
-      {
-        $match: {
-          "updateDescription.updatedFields.walletBalance": { $exists: true },
-        },
-      },
-    ]);
+    // Daily sweep for calendars that have silently stopped working
+    startCalendarHealthChecks();
 
-    changeStream.on("change", async (change) => {
-      try {
-        const userId = change.documentKey._id;
-
-        const user = await userModel
-          .findById(userId)
-          .select("walletBalance autoCardPay.least autoCardPay.status");
-
-        if (!user) return;
-
-        if (
-          user.autoCardPay.status &&
-          user.walletBalance < user.autoCardPay.least
-        ) {
-          await axios.post(
-            `${process.env.SERVER_URL}/integrations/autopay/webhook`,
-            {
-              userId,
-              walletBalance: user.walletBalance,
-              least: user.autoCardPay.least,
-            },
-          );
-
-          await createNotification({
-            userId,
-            type: "low_balance",
-            title: "Low Wallet Balance",
-            message: `Your wallet balance ($${user.walletBalance.toFixed(2)}) has dropped below your threshold ($${user.autoCardPay.least}). Auto top-up has been triggered.`,
-            metadata: {
-              walletBalance: user.walletBalance,
-              threshold: user.autoCardPay.least,
-            },
-          });
-        }
-      } catch (err) {
-        console.error("changeStream handler error:", err.message);
-      }
-    });
-
-    changeStream.on("error", (err) => {
-      console.error("MongoDB changeStream error:", err.message);
-    });
+    // Auto top-up is no longer driven by a MongoDB change stream. This process
+    // runs on Vercel's serverless runtime, where nothing keeps a change stream
+    // open, so the listener was not reliably firing in production and wallets
+    // could hit zero with no top-up and no warning. helpers/autoTopUp is now
+    // called directly after every debit instead, which behaves the same in a
+    // long-running process and in a serverless function.
 
     app.listen(PORT, (err) => {
       if (err) {

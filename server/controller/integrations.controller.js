@@ -21,10 +21,13 @@ const {
   extractVariables,
   fillTemplate,
   getSubGhlTokens,
+  toE164,
 } = require("../helperFunctions");
 const VoiceResponse = require("twilio").twiml.VoiceResponse;
 const MessagingResponse = require("twilio").twiml.MessagingResponse;
 const { checkFeature, checkUsageLimit } = require("../helpers/snapshotLimits");
+const billing = require("../helpers/billing");
+const { maybeAutoTopUp } = require("../helpers/autoTopUp");
 const {
   loadMemory,
   ensureMemory,
@@ -1164,15 +1167,36 @@ const twilioCallReceiver = async (req, res) => {
 
     console.log("Received incoming call webhook from Twilio:", req.params);
 
-    const callerNumber = req.body.From;
+    // Vapi rejects the whole call with a 400 if this is not exactly E.164, and
+    // the caller simply hears it fail. Twilio does not always send E.164:
+    // withheld caller id arrives as "anonymous", SIP traffic as a sip: URI.
+    const rawFrom = req.body.From;
+    const callerNumber = toE164(rawFrom);
     const receiverNumber = req.body.To;
 
-    console.log(`Incoming call detected from: ${callerNumber}`);
+    console.log(`Incoming call detected from: ${callerNumber || `(unusable: ${JSON.stringify(rawFrom)})`}`);
+
+    if (!callerNumber) {
+      // Nothing usable to identify the caller by. Answering with a spoken
+      // message beats a failed call with no explanation. A shared placeholder
+      // is deliberately NOT used: every anonymous caller would then share one
+      // customer-memory record, and each would hear the last one's history.
+      console.warn(
+        `Inbound call with no usable caller id (From=${JSON.stringify(rawFrom)}) for ${subaccount}. Refusing.`,
+      );
+      const twiml = new VoiceResponse();
+      twiml.say(
+        "Sorry, we can't take calls from a withheld number. Please call again with your caller ID enabled.",
+      );
+      return res.type("text/xml").send(twiml.toString());
+    }
 
     // Answering a call is time-critical — Twilio gives this webhook a few
     // seconds before it drops the call — so load only what routing needs
     // instead of the whole user document.
-    const user = await userModel.findById(userId).select("ghlSubAccountIds");
+    const user = await userModel
+      .findById(userId)
+      .select("ghlSubAccountIds walletBalance snapshot");
 
     const targetSubaccount = user.ghlSubAccountIds.filter(
       (account) => account.accountId === subaccount,
@@ -1181,6 +1205,25 @@ const twilioCallReceiver = async (req, res) => {
     const targetAssistant = targetSubaccount[0].vapiAssistants.filter(
       (vapiAssistant) => vapiAssistant.assistantId === assistant,
     );
+
+    // Enforce the agency's voice limits HERE, before answering. Doing it
+    // mid-call means hanging up on someone in the middle of a sentence; doing
+    // it here costs the caller nothing but a busy signal.
+    // Deliberately NOT selecting billingEvents: it is the unbounded array whose
+    // removal from this path was the point of the last latency fix. Usage for
+    // the cap therefore comes from the billingEvent collection alone, which
+    // under-counts pre-migration history — the safe direction, since
+    // over-counting here would refuse calls that should be allowed.
+    const blockReason =
+      (user.walletBalance <= 0 ? "Wallet balance exhausted." : null) ||
+      checkFeature(user, "voice") ||
+      (await checkUsageLimit(user, subaccount, "calling"));
+    if (blockReason) {
+      console.warn(`Refusing inbound call for ${userId}/${subaccount}: ${blockReason}`);
+      const twiml = new VoiceResponse();
+      twiml.say("We're unable to take your call right now. Please try again later.");
+      return res.type("text/xml").send(twiml.toString());
+    }
 
     const targetPhoneNumber = targetAssistant[0].numberDetails.filter(
       (number) => number.phoneNum === receiverNumber,
@@ -1197,47 +1240,57 @@ const twilioCallReceiver = async (req, res) => {
     const checkMessageAvailability =
       inboundDynamicMessage && inboundDynamicMessage.trim() !== "";
 
-    const refreshGhlTokensValue = await getSubGhlTokens(userId, subaccount);
-
-    if (!refreshGhlTokensValue.status) {
-      throw new Error(
-        `Failed to refresh GHL tokens: ${refreshGhlTokensValue.message}`,
-      );
-    }
-
-    const accessToken = refreshGhlTokensValue?.data?.access_token;
-
+    // GoHighLevel is consulted ONLY to personalise the opening line, and only
+    // when a dynamic greeting is configured. It used to be fetched
+    // unconditionally, and any failure — a disconnected sub-account, an expired
+    // refresh token, a slow GHL response — threw out of here into the catch
+    // below, which answers Twilio with "an error occurred connecting your call".
+    //
+    // That meant a broken CRM connection took down every inbound voice call,
+    // for a feature the call does not depend on. It is now best-effort: if GHL
+    // cannot be reached the caller still gets through, just with the
+    // un-personalised greeting.
     if (checkMessageAvailability) {
-      const response = await axios.get(
-        "https://services.leadconnectorhq.com/contacts/search",
-        {
-          params: {
-            locationId: subaccount,
-            query: callerNumber, // GHL search allows querying by phone number string
-          },
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Version: "2021-07-28", // Required GHL API Version
-            Accept: "application/json",
-          },
-        },
-      );
+      try {
+        const tokens = await getSubGhlTokens(userId, subaccount);
+        const accessToken = tokens?.data?.access_token;
+        if (!accessToken) throw new Error(tokens?.message || "no GHL access token");
 
-      console.log({ ghlContactSearchResponse: response.data });
+        const response = await axios.get(
+          "https://services.leadconnectorhq.com/contacts/search",
+          {
+            params: {
+              locationId: subaccount,
+              query: callerNumber, // GHL search allows querying by phone number string
+            },
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-07-28", // Required GHL API Version
+              Accept: "application/json",
+            },
+            // Twilio drops the call if this webhook takes too long, so never
+            // wait on GHL longer than answering the call can afford.
+            timeout: 4000,
+          },
+        );
 
-      // GHL returns an array of contacts. We check if at least one exists.
-      const contacts = response.data.contacts;
-      if (contacts && contacts.length > 0) {
-        myCustomer = contacts[0];
+        const contacts = response.data?.contacts;
+        if (contacts && contacts.length > 0) myCustomer = contacts[0];
+
+        extractVariables(inboundDynamicMessage).forEach((variable) => {
+          greetingsValues[variable] = myCustomer[variable] || "there!";
+        });
+      } catch (ghlErr) {
+        console.warn(
+          `GHL lookup skipped for inbound call (${subaccount}): ${
+            ghlErr.code || ghlErr.response?.data?.message || ghlErr.message
+          } — answering with the un-personalised greeting.`,
+        );
+        // Fill the template's variables so it does not read out "{{firstName}}".
+        extractVariables(inboundDynamicMessage).forEach((variable) => {
+          greetingsValues[variable] = "there!";
+        });
       }
-
-      const greetingsVariables = extractVariables(inboundDynamicMessage);
-
-      const variableValues = greetingsVariables.map((variable) => {
-        // if (!myCustomer[variable]) return false;
-        greetingsValues[variable] = myCustomer[variable] || "there!";
-        return true;
-      });
     }
 
     const message = fillTemplate(inboundDynamicMessage, greetingsValues);
@@ -1251,6 +1304,10 @@ const twilioCallReceiver = async (req, res) => {
       phone: callerNumber,
     });
 
+    // Absolute ceiling only, and only if one is configured. This must never be
+    // derived from the wallet balance — doing so cut live calls off mid-sentence.
+    const maxDurationSeconds = billing.callDurationCap();
+
     const assistantOverrides = await buildAssistantOverrides({
       assistantId: assistant,
       memory,
@@ -1258,6 +1315,7 @@ const twilioCallReceiver = async (req, res) => {
       base: {
         ...(message && { firstMessage: message }),
         firstMessageMode: "assistant-speaks-first",
+        ...(maxDurationSeconds && { maxDurationSeconds }),
       },
     });
 
@@ -1309,7 +1367,9 @@ const twilioSmsReceiver = async (req, res) => {
     const { userId, subaccount, assistant } = req.params;
 
     // Twilio sends the sender's number in req.body.From and the text in Body.
-    const callerNumber = req.body.From;
+    // Normalised so an SMS and a call from the same person resolve to one
+    // customer-memory record rather than two.
+    const callerNumber = toE164(req.body.From) || req.body.From;
     const userText = String(req.body.Body || "").trim();
 
     console.log(`Incoming SMS from ${callerNumber} to assistant ${assistant}`);
@@ -1338,7 +1398,7 @@ const twilioSmsReceiver = async (req, res) => {
     // Same gates the other chat channels enforce: wallet, feature flag, cap.
     if (user.walletBalance <= 0) return reply(null);
     if (checkFeature(user, "chat")) return reply(null);
-    if (checkUsageLimit(user, subaccount, "messages")) return reply(null);
+    if (await checkUsageLimit(user, subaccount, "messages")) return reply(null);
 
     // ---- PER-CUSTOMER MEMORY (read) ----
     const memory = await ensureMemory({
@@ -1366,16 +1426,17 @@ const twilioSmsReceiver = async (req, res) => {
       .filter((c) => typeof c === "string" && c.trim())
       .join("\n\n");
 
-    // Bill the owning agency's wallet, same shape as the other chat channels.
-    const amountToDeduct = response.data.cost || 0;
-    user.walletBalance -= amountToDeduct;
-    user.billingEvents.push({
+    // Provider cost for the reply; the platform fee is added by chargeWallet.
+    // Recorded as SMS_CHARGE — the same type the send_sms tool uses — so both
+    // SMS paths land in one bucket on invoices and in the monthly message cap.
+    await billing.chargeWallet({
+      user,
+      amount: response.data.cost || 0,
+      type: "SMS_CHARGE",
       callId: response.data.id,
-      type: "chat_message",
-      amount: amountToDeduct,
       subaccountId: subaccount || undefined,
     });
-    await user.save();
+    await maybeAutoTopUp(user._id);
 
     // ---- PER-CUSTOMER MEMORY (write) ----
     await recordTurns(
