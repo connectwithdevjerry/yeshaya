@@ -60,27 +60,47 @@ const SkeletonRow = () => (
 );
 
 /* empty state */
-const EmptyState = ({ filtered, onAdd, onClear }) => (
+const EmptyState = ({ filtered, onAdd, onClear, source, onShowAll }) => {
+  // "From assistants" is empty until an assistant has actually spoken to
+  // someone, so say that rather than implying there are no contacts at all —
+  // the full address book is one click away.
+  const assistantEmpty = !filtered && source === "assistant";
+
+  return (
   <div className="flex flex-col items-center justify-center py-20 text-center">
     <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center mb-4">
       <Users className="w-8 h-8 text-indigo-400" />
     </div>
     <p className="text-sm font-semibold text-gray-700">
-      {filtered ? "No contacts match your search" : "No contacts yet"}
+      {filtered
+        ? "No contacts match your search"
+        : assistantEmpty
+          ? "No contacts from assistants yet"
+          : "No contacts yet"}
     </p>
-    <p className="text-xs text-gray-400 mt-1 mb-5">
-      {filtered ? "Try a different search term or clear filters." : "Add your first contact to get started."}
+    <p className="text-xs text-gray-400 mt-1 mb-5 max-w-sm">
+      {filtered
+        ? "Try a different search term or clear filters."
+        : assistantEmpty
+          ? "People appear here once an assistant has spoken to them on a call, text or chat. Contacts gathered before assistant memory was enabled won't be listed."
+          : "Add your first contact to get started."}
     </p>
-    {filtered
-      ? <button onClick={onClear} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-          <X className="w-3.5 h-3.5" /> Clear search
-        </button>
-      : <button onClick={onAdd} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all">
-          <UserPlus className="w-4 h-4" /> New Contact
-        </button>
-    }
+    {filtered ? (
+      <button onClick={onClear} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+        <X className="w-3.5 h-3.5" /> Clear search
+      </button>
+    ) : assistantEmpty ? (
+      <button onClick={onShowAll} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+        <Users className="w-3.5 h-3.5" /> Show all contacts
+      </button>
+    ) : (
+      <button onClick={onAdd} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all">
+        <UserPlus className="w-4 h-4" /> New Contact
+      </button>
+    )}
   </div>
-);
+  );
+};
 
 /* contact card (grid view) */
 const ContactCard = ({ contact, onEdit, onDelete, idx }) => (
@@ -174,17 +194,21 @@ const Contacts = () => {
   const [sortBy,          setSortBy]          = useState("createdAt");
   const [sortDir,         setSortDir]         = useState("desc");
   const [currentPage,     setCurrentPage]     = useState(1);
+  // "assistant" = only people an assistant actually spoke to (the default,
+  // because that is the list this page is useful for). "all" = every app-saved
+  // and GoHighLevel contact, most of which no assistant has touched.
+  const [contactSource,   setContactSource]   = useState("assistant");
   const [searchParams]    = useSearchParams();
 
   const { contacts = [], fetchingContacts } = useSelector((s) => s.assistants);
   const subaccountId = getSubaccountIdFromUrl(searchParams);
 
   useEffect(() => {
-    if (subaccountId) dispatch(fetchContacts({ subaccountId }));
-  }, [dispatch, subaccountId]);
+    if (subaccountId) dispatch(fetchContacts({ subaccountId, source: contactSource }));
+  }, [dispatch, subaccountId, contactSource]);
 
-  /* reset page on search/sort change */
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, sortBy, sortDir]);
+  /* reset page on search/sort/source change */
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, sortBy, sortDir, contactSource]);
 
   const handleEditClick   = (c) => { setSelectedContact(c); setIsPanelOpen(true); };
   const handleAddNew      = ()  => { setSelectedContact(null); setIsPanelOpen(true); };
@@ -198,7 +222,7 @@ const Contacts = () => {
       toast.success("Contact deleted");
       setShowDeleteModal(false);
       setContactToDelete(null);
-      dispatch(fetchContacts({ subaccountId }));
+      dispatch(fetchContacts({ subaccountId, source: contactSource }));
     } catch (err) { toast.error(err || "Failed to delete contact"); }
   };
 
@@ -287,6 +311,26 @@ const Contacts = () => {
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
+            </div>
+
+            {/* Source filter */}
+            <div className="flex bg-white border border-gray-200 rounded-xl p-0.5 gap-0.5">
+              {[
+                { key: "assistant", label: "From assistants" },
+                { key: "all",       label: "All contacts" },
+              ].map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setContactSource(key)}
+                  className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                    contactSource === key
+                      ? "bg-indigo-50 text-indigo-600"
+                      : "text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
 
             {/* View toggle */}
@@ -395,6 +439,8 @@ const Contacts = () => {
                             filtered={!!searchTerm}
                             onAdd={handleAddNew}
                             onClear={() => setSearchTerm("")}
+                            source={contactSource}
+                            onShowAll={() => setContactSource("all")}
                           />
                         </td>
                       </tr>
@@ -547,6 +593,8 @@ const Contacts = () => {
                   filtered={!!searchTerm}
                   onAdd={handleAddNew}
                   onClear={() => setSearchTerm("")}
+                  source={contactSource}
+                  onShowAll={() => setContactSource("all")}
                 />
               ) : (
                 <>
