@@ -1,9 +1,13 @@
-const axios = require("axios");
 const widgetModel = require("../model/widget.model");
 const userModel = require("../model/user.model");
 const { checkFeature, checkUsageLimit } = require("../helpers/snapshotLimits");
-
-const VAPI_API_KEY = process.env.VAPI_API_KEY;
+const {
+  ensureMemory,
+  recordTurns,
+  recordInteraction,
+  memorySystemTurns,
+  postVapiChat,
+} = require("../helpers/customerMemory");
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -190,7 +194,12 @@ const getWidgetConfig = async (req, res) => {
   }
 };
 
-// POST /embed/:publicId/chat  — stateless: the caller sends recent history
+// POST /embed/:publicId/chat
+//
+// The browser sends the turns it has locally; the server independently keeps a
+// durable memory for the visitor, so the conversation survives a cleared
+// localStorage and — once the visitor is identified by phone or email — joins up
+// with what the same person said on a call or over SMS.
 const widgetChat = async (req, res) => {
   // Generic, non-leaky failure reply shown to website visitors
   const unavailable = {
@@ -199,7 +208,7 @@ const widgetChat = async (req, res) => {
   };
   try {
     const { publicId } = req.params;
-    const { messages } = req.body;
+    const { messages, visitorId, contact } = req.body;
 
     const widget = await widgetModel.findOne({ publicId });
     if (!widget || widget.archived || !widget.active) {
@@ -231,15 +240,41 @@ const widgetChat = async (req, res) => {
     if (!history.length || history[history.length - 1].role !== "user") {
       return res.send({ status: false, message: "A user message is required" });
     }
+    const userText = history[history.length - 1].content;
 
-    const response = await axios.post(
-      "https://api.vapi.ai/chat",
-      { assistantId: widget.assistantId, input: history },
-      {
-        headers: { Authorization: `Bearer ${VAPI_API_KEY}`, "Content-Type": "application/json" },
-        timeout: 60_000,
-      },
-    );
+    // ---- PER-CUSTOMER MEMORY ----
+    // Keyed on the visitor's phone/email when the host page has identified them
+    // (which unifies this chat with their calls and texts), otherwise on the
+    // browser-scoped visitor id.
+    const memory = await ensureMemory({
+      ownerUserId: widget.ownerUserId,
+      subaccountId: widget.subaccountId,
+      phone: contact?.phone,
+      email: contact?.email,
+      name: contact?.name,
+      visitorId,
+      widgetId: publicId,
+    });
+
+    // The assistant's standing team notes, if the owner has written any.
+    const widgetAssistant = (user.ghlSubAccountIds || [])
+      .flatMap((sub) => sub.vapiAssistants || [])
+      .find((ast) => ast.assistantId === widget.assistantId);
+
+    // Prefer what the server remembers; fall back to the browser's copy when
+    // this is a brand-new visitor with nothing stored yet.
+    const input = memory?.turns?.length
+      ? [
+          ...memorySystemTurns(memory, { assistantNotes: widgetAssistant?.teamNotes }),
+          ...memory.turns.slice(-10).map((t) => ({ role: t.role, content: t.content })),
+          { role: "user", content: userText },
+        ]
+      : [
+          ...memorySystemTurns(memory, { assistantNotes: widgetAssistant?.teamNotes }),
+          ...history,
+        ];
+
+    const response = await postVapiChat({ assistantId: widget.assistantId, input });
 
     if (!Array.isArray(response.data.output) || response.data.output.length === 0) {
       return res.json(unavailable);
@@ -255,6 +290,27 @@ const widgetChat = async (req, res) => {
       subaccountId: widget.subaccountId || undefined,
     });
     await user.save();
+
+    // ---- PER-CUSTOMER MEMORY (write) ----
+    const answer = response.data.output
+      .map((m) => m?.content)
+      .filter((c) => typeof c === "string" && c.trim())
+      .join("\n\n");
+
+    await recordTurns(
+      memory,
+      [
+        { role: "user", content: userText },
+        ...(answer ? [{ role: "assistant", content: answer }] : []),
+      ],
+      { channel: "widget", assistantId: widget.assistantId, openAIApiKey: user.openAIApiKey },
+    );
+    await recordInteraction(memory, {
+      channel: "widget",
+      assistantId: widget.assistantId,
+      refId: response.data.id,
+      sessionWindowMinutes: 30, // one browsing session = one interaction
+    });
 
     return res.send({ status: true, reply: response.data.output });
   } catch (e) {
