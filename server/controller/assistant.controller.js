@@ -18,6 +18,7 @@ const appointmentModel = require("../model/appointment.model");
 const { fmtWhen, confirmationEmail } = require("../helpers/appointmentEmails");
 const kbFileModel = require("../model/kbFile.model");
 const { saveImageToDB } = require("../cloudinaryImageHandler");
+const { reportCalendarProblem } = require("../helpers/calendarHealth");
 const {
   resolveSubaccountId,
   checkFeature,
@@ -1465,6 +1466,14 @@ const executeToolFromVapi = async (req, res) => {
 
     if ((name === "check_availability" || name === "book_appointment") && !calendarId) {
       console.error(`Assistant ${assistantId} has no calendar linked`);
+      // Tell the agency now rather than leaving them to discover it from a
+      // customer. Deduped to once a day per assistant.
+      reportCalendarProblem({
+        userId: user._id,
+        subaccountId: locationId,
+        assistantId,
+        reason: "no calendar is linked to it",
+      }).catch(() => {});
       return res.status(200).json({
         results: [{
           toolCallId: toolCall.id,
@@ -1479,16 +1488,41 @@ const executeToolFromVapi = async (req, res) => {
       const startMs = new Date(`${startTime}T00:00:00Z`).getTime();
       const endMs = new Date(`${startTime}T23:59:59Z`).getTime();
 
-      const response = await axios.get(
-        `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`,
-        {
-          params: { startDate: startMs, endDate: endMs },
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Version: "2021-07-28",
+      let response;
+      try {
+        response = await axios.get(
+          `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`,
+          {
+            params: { startDate: startMs, endDate: endMs },
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-07-28",
+            },
+            timeout: 10_000,
           },
-        },
-      );
+        );
+      } catch (slotsErr) {
+        // 404 here means the calendar itself is gone from GoHighLevel, not that
+        // there happen to be no slots. Saying "no availability" would send the
+        // caller away believing the diary is full.
+        if (slotsErr.response?.status === 404) {
+          console.error(`Calendar ${calendarId} not found in GHL for assistant ${assistantId}`);
+          reportCalendarProblem({
+            userId: user._id,
+            subaccountId: locationId,
+            assistantId,
+            reason: "its linked calendar no longer exists in GoHighLevel",
+          }).catch(() => {});
+          return res.status(200).json({
+            results: [{
+              toolCallId: toolCall.id,
+              result: "I can't reach the booking calendar right now. Someone from the team will follow up to schedule.",
+            }],
+          });
+        }
+        throw slotsErr;
+      }
+
       // Return available slots to Vapi
       return res.json({
         results: [
