@@ -224,16 +224,36 @@ const reset = (balance = 100) => {
     assert.strictEqual(Math.round(nUsage.monthSpend * 100) / 100, 5.1));
   t("calls today counted", () => assert.strictEqual(nUsage.callsToday, 2));
 
-  console.log("\n-- call-duration budgeting --");
-  t("healthy balance needs no cap", () => assert.strictEqual(billing.affordableCallSeconds(1000), null));
-  t("empty wallet gets the floor, not zero", () =>
-    assert.strictEqual(billing.affordableCallSeconds(0), 60));
-  t("negative wallet gets the floor", () =>
-    assert.strictEqual(billing.affordableCallSeconds(-5), 60));
-  t("thin balance is capped proportionally", () => {
-    const secs = billing.affordableCallSeconds(1); // $1 at $0.25/min ≈ 4 min
-    assert.ok(secs >= 60 && secs <= 300, `got ${secs}`);
+  console.log("\n-- call-duration ceiling --");
+  // These assertions replace ones that pinned the opposite behaviour: the cap
+  // used to be balance ÷ estimated cost per minute, so every agency under ~$15
+  // had its calls hard-terminated by Vapi part-way through. The old tests
+  // asserted that as correct, which is why nothing caught it.
+  delete process.env.MAX_CALL_SECONDS;
+  t("no cap by default — calls are never cut short", () =>
+    assert.strictEqual(billing.callDurationCap(), null));
+  t("an empty wallet does NOT shorten a call", () => {
+    // The gate that refuses to start a call on an empty wallet is what bounds
+    // the exposure; the length of an in-progress call must not depend on it.
+    assert.strictEqual(billing.callDurationCap(), null);
   });
+
+  process.env.MAX_CALL_SECONDS = "1800";
+  t("an explicit ceiling is honoured", () =>
+    assert.strictEqual(billing.callDurationCap(), 1800));
+  t("the ceiling is a constant, not a function of the balance", () => {
+    const a = billing.callDurationCap();
+    const b = billing.callDurationCap();
+    assert.strictEqual(a, b);
+    assert.strictEqual(a, 1800);
+  });
+  process.env.MAX_CALL_SECONDS = "0";
+  t("a zero ceiling means no cap, not a zero-length call", () =>
+    assert.strictEqual(billing.callDurationCap(), null));
+  process.env.MAX_CALL_SECONDS = "not-a-number";
+  t("a malformed ceiling means no cap", () =>
+    assert.strictEqual(billing.callDurationCap(), null));
+  delete process.env.MAX_CALL_SECONDS;
 
   console.log("\n-- auto top-up sizing (the repeat-charge bug) --");
   t("refill larger than the gap is used as-is", () =>

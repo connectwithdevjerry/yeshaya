@@ -1253,8 +1253,9 @@ const twilioCallReceiver = async (req, res) => {
       phone: callerNumber,
     });
 
-    // Bound the call to what the wallet can cover (see makeOutboundCall).
-    const maxDurationSeconds = billing.affordableCallSeconds(user.walletBalance);
+    // Absolute ceiling only, and only if one is configured. This must never be
+    // derived from the wallet balance — doing so cut live calls off mid-sentence.
+    const maxDurationSeconds = billing.callDurationCap();
 
     const assistantOverrides = await buildAssistantOverrides({
       assistantId: assistant,

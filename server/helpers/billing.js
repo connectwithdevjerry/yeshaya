@@ -31,15 +31,17 @@ const PLATFORM_FEE = (() => {
   return v === undefined || v === "" ? 0.05 : num(v);
 })();
 
-// Used only to bound how long a call may run on a nearly-empty wallet. A rough
-// over-estimate is the safe direction: it shortens the cap.
-const ESTIMATED_CALL_COST_PER_MINUTE =
-  num(process.env.ESTIMATED_CALL_COST_PER_MINUTE) || 0.25;
-
-// Never let one call run away with the wallet, and never cut a call so short it
-// is useless.
-const MIN_CALL_SECONDS = 60;
-const MAX_CALL_SECONDS = num(process.env.MAX_CALL_SECONDS) || 3600;
+// An absolute ceiling on call length, in seconds. Opt-in: unset means no cap is
+// sent to Vapi at all.
+//
+// This deliberately does NOT scale with the wallet balance. It used to: the cap
+// was derived from balance ÷ an estimated cost per minute, which meant any
+// agency under ~$15 had every call hard-terminated by Vapi part-way through —
+// four minutes or less under $1. That traded a small, bounded risk (one call
+// overshooting the wallet by a few dollars) for a severe one (customer calls
+// cut off mid-sentence), which is the wrong way round. Refusing to *start* a
+// call on an empty wallet already bounds the exposure to a single call.
+const maxCallSeconds = () => num(process.env.MAX_CALL_SECONDS);
 
 // Charge types that represent a voice call, in both the new collection and the
 // legacy embedded array.
@@ -275,27 +277,18 @@ const numberUsage = async (user, phoneSid) => {
   };
 };
 
-// ─── Call-duration budgeting ─────────────────────────────────────────────────
+// ─── Call-duration ceiling ───────────────────────────────────────────────────
 
-// How long a call may run before it would overdraw the wallet. Returns null
-// when the balance comfortably covers a full-length call, so no cap is applied.
-//
-// Without this a single call can drive the balance arbitrarily negative: the
-// balance is only checked before the call starts, and nothing bounds the spend
-// once it is running.
-const affordableCallSeconds = (walletBalance) => {
-  const balance = num(walletBalance);
-  if (balance <= 0) return MIN_CALL_SECONDS;
-
-  const seconds = Math.floor((balance / ESTIMATED_CALL_COST_PER_MINUTE) * 60);
-  if (seconds >= MAX_CALL_SECONDS) return null; // no cap needed
-  return Math.max(MIN_CALL_SECONDS, seconds);
+// The absolute cap to put on a call, or null for no cap. Independent of the
+// wallet — see MAX_CALL_SECONDS above for why.
+const callDurationCap = () => {
+  const cap = maxCallSeconds();
+  return cap > 0 ? cap : null;
 };
 
 module.exports = {
   PLATFORM_FEE,
-  ESTIMATED_CALL_COST_PER_MINUTE,
-  MAX_CALL_SECONDS,
+  maxCallSeconds,
   CALL_TYPES,
   CHAT_TYPES,
   SMS_TYPES,
@@ -310,6 +303,6 @@ module.exports = {
   legacyEvents,
   usageThisMonth,
   numberUsage,
-  affordableCallSeconds,
+  callDurationCap,
   monthStart,
 };
