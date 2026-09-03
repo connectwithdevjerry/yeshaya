@@ -1174,7 +1174,9 @@ const twilioCallReceiver = async (req, res) => {
     // Answering a call is time-critical — Twilio gives this webhook a few
     // seconds before it drops the call — so load only what routing needs
     // instead of the whole user document.
-    const user = await userModel.findById(userId).select("ghlSubAccountIds");
+    const user = await userModel
+      .findById(userId)
+      .select("ghlSubAccountIds walletBalance snapshot");
 
     const targetSubaccount = user.ghlSubAccountIds.filter(
       (account) => account.accountId === subaccount,
@@ -1187,13 +1189,15 @@ const twilioCallReceiver = async (req, res) => {
     // Enforce the agency's voice limits HERE, before answering. Doing it
     // mid-call means hanging up on someone in the middle of a sentence; doing
     // it here costs the caller nothing but a busy signal.
-    const gateUser = await userModel
-      .findById(userId)
-      .select("walletBalance snapshot billingEvents");
+    // Deliberately NOT selecting billingEvents: it is the unbounded array whose
+    // removal from this path was the point of the last latency fix. Usage for
+    // the cap therefore comes from the billingEvent collection alone, which
+    // under-counts pre-migration history — the safe direction, since
+    // over-counting here would refuse calls that should be allowed.
     const blockReason =
-      (gateUser && gateUser.walletBalance <= 0 ? "Wallet balance exhausted." : null) ||
-      checkFeature(gateUser, "voice") ||
-      (await checkUsageLimit(gateUser, subaccount, "calling"));
+      (user.walletBalance <= 0 ? "Wallet balance exhausted." : null) ||
+      checkFeature(user, "voice") ||
+      (await checkUsageLimit(user, subaccount, "calling"));
     if (blockReason) {
       console.warn(`Refusing inbound call for ${userId}/${subaccount}: ${blockReason}`);
       const twiml = new VoiceResponse();
@@ -1216,47 +1220,57 @@ const twilioCallReceiver = async (req, res) => {
     const checkMessageAvailability =
       inboundDynamicMessage && inboundDynamicMessage.trim() !== "";
 
-    const refreshGhlTokensValue = await getSubGhlTokens(userId, subaccount);
-
-    if (!refreshGhlTokensValue.status) {
-      throw new Error(
-        `Failed to refresh GHL tokens: ${refreshGhlTokensValue.message}`,
-      );
-    }
-
-    const accessToken = refreshGhlTokensValue?.data?.access_token;
-
+    // GoHighLevel is consulted ONLY to personalise the opening line, and only
+    // when a dynamic greeting is configured. It used to be fetched
+    // unconditionally, and any failure — a disconnected sub-account, an expired
+    // refresh token, a slow GHL response — threw out of here into the catch
+    // below, which answers Twilio with "an error occurred connecting your call".
+    //
+    // That meant a broken CRM connection took down every inbound voice call,
+    // for a feature the call does not depend on. It is now best-effort: if GHL
+    // cannot be reached the caller still gets through, just with the
+    // un-personalised greeting.
     if (checkMessageAvailability) {
-      const response = await axios.get(
-        "https://services.leadconnectorhq.com/contacts/search",
-        {
-          params: {
-            locationId: subaccount,
-            query: callerNumber, // GHL search allows querying by phone number string
-          },
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Version: "2021-07-28", // Required GHL API Version
-            Accept: "application/json",
-          },
-        },
-      );
+      try {
+        const tokens = await getSubGhlTokens(userId, subaccount);
+        const accessToken = tokens?.data?.access_token;
+        if (!accessToken) throw new Error(tokens?.message || "no GHL access token");
 
-      console.log({ ghlContactSearchResponse: response.data });
+        const response = await axios.get(
+          "https://services.leadconnectorhq.com/contacts/search",
+          {
+            params: {
+              locationId: subaccount,
+              query: callerNumber, // GHL search allows querying by phone number string
+            },
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-07-28", // Required GHL API Version
+              Accept: "application/json",
+            },
+            // Twilio drops the call if this webhook takes too long, so never
+            // wait on GHL longer than answering the call can afford.
+            timeout: 4000,
+          },
+        );
 
-      // GHL returns an array of contacts. We check if at least one exists.
-      const contacts = response.data.contacts;
-      if (contacts && contacts.length > 0) {
-        myCustomer = contacts[0];
+        const contacts = response.data?.contacts;
+        if (contacts && contacts.length > 0) myCustomer = contacts[0];
+
+        extractVariables(inboundDynamicMessage).forEach((variable) => {
+          greetingsValues[variable] = myCustomer[variable] || "there!";
+        });
+      } catch (ghlErr) {
+        console.warn(
+          `GHL lookup skipped for inbound call (${subaccount}): ${
+            ghlErr.code || ghlErr.response?.data?.message || ghlErr.message
+          } — answering with the un-personalised greeting.`,
+        );
+        // Fill the template's variables so it does not read out "{{firstName}}".
+        extractVariables(inboundDynamicMessage).forEach((variable) => {
+          greetingsValues[variable] = "there!";
+        });
       }
-
-      const greetingsVariables = extractVariables(inboundDynamicMessage);
-
-      const variableValues = greetingsVariables.map((variable) => {
-        // if (!myCustomer[variable]) return false;
-        greetingsValues[variable] = myCustomer[variable] || "there!";
-        return true;
-      });
     }
 
     const message = fillTemplate(inboundDynamicMessage, greetingsValues);
