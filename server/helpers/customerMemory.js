@@ -94,6 +94,19 @@ const identityLabel = (memory) => {
   return memory.name || memory.phone || memory.email || memory.identityKey || "";
 };
 
+// The sub-account a memory belongs to. Memory is scoped per (agency,
+// sub-account, customer): two sub-accounts of the same agency are different
+// businesses to the caller, and must never see each other's conversations.
+//
+// A widget that is not tied to a sub-account still gets its own scope, keyed by
+// the widget, rather than sharing an agency-wide bucket.
+const scopeOf = (subaccountId, widgetId) => {
+  const sub = String(subaccountId || "").trim();
+  if (sub) return sub;
+  if (widgetId) return `widget:${widgetId}`;
+  return ""; // unscoped — callers refuse rather than pool
+};
+
 // ─── Load / create ───────────────────────────────────────────────────────────
 
 // Look up an existing memory. Never creates. Returns null when memory is
@@ -102,6 +115,7 @@ const loadMemory = async ({ ownerUserId, subaccountId, phone, email, visitorId, 
   if (!memoryEnabled() || !ownerUserId) return null;
   const identityKey = identityKeyFor({ phone, email, visitorId, widgetId, userId });
   if (!identityKey) return null;
+  if (!scopeOf(subaccountId, widgetId)) return null;
 
   try {
     const memory = await customerMemoryModel.findOne({
@@ -132,11 +146,23 @@ const ensureMemory = async ({
   const identityKey = identityKeyFor({ phone, email, visitorId, widgetId, userId });
   if (!identityKey) return null;
 
+  const scope = scopeOf(subaccountId, widgetId);
+  if (!scope) {
+    // Refusing rather than falling back to a blank scope: a blank one is a
+    // single shared bucket per agency, so two sub-accounts that both failed to
+    // resolve would share one record for the same caller — and each would be
+    // read the other's history.
+    console.warn(
+      `[customerMemory] no sub-account scope for ${identityKey}; not recording.`,
+    );
+    return null;
+  }
+
   try {
     const memory = await customerMemoryModel.findOneAndUpdate(
-      { ownerUserId, subaccountId: subaccountId || "", identityKey },
+      { ownerUserId, subaccountId: scope, identityKey },
       {
-        $setOnInsert: { ownerUserId, subaccountId: subaccountId || "", identityKey },
+        $setOnInsert: { ownerUserId, subaccountId: scope, identityKey },
       },
       { new: true, upsert: true, setDefaultsOnInsert: true },
     );
@@ -157,7 +183,7 @@ const ensureMemory = async ({
       try {
         return await customerMemoryModel.findOne({
           ownerUserId,
-          subaccountId: subaccountId || "",
+          subaccountId: scope,
           identityKey,
         });
       } catch (_) {
@@ -421,7 +447,21 @@ const buildMemoryBlock = (memory, { maxTurns = CONTEXT_TURNS, assistantId } = {}
     memory.phone && `phone: ${memory.phone}`,
     memory.email && `email: ${memory.email}`,
   ].filter(Boolean);
-  if (who.length) parts.push(`Known contact details — ${who.join(", ")}.`);
+  if (who.length) {
+    // Stated as an instruction, not a fact. The assistants' own prompts tell
+    // them to ask for a name to personalise the conversation, so simply listing
+    // what is known is not enough to stop them asking a returning caller for
+    // details they already gave.
+    parts.push(
+      [
+        `You ALREADY have this person's details: ${who.join(", ")}.`,
+        memory.name
+          ? `Greet them by name (${memory.name.split(/\s+/)[0]}) and do NOT ask for their name.`
+          : "",
+        "Do NOT ask for any detail listed above — you have it. Ask only for what is genuinely missing.",
+      ].filter(Boolean).join(" "),
+    );
+  }
 
   if (memory.interactionCount > 0) {
     const last = memory.lastInteractionAt
@@ -749,6 +789,7 @@ module.exports = {
   normalizePhone,
   normalizeEmail,
   identityKeyFor,
+  scopeOf,
   identityLabel,
   // load
   loadMemory,

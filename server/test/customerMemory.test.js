@@ -158,6 +158,43 @@ const OWNER = "owner_a";
   t("loadMemory refuses an opted-out customer", () => assert.ok(true));
   mem.optedOut = false;
 
+  console.log("\n-- scoping: an unresolved sub-account must not pool --");
+  t("a real sub-account scopes to itself", () =>
+    assert.strictEqual(M.scopeOf("loc_1", null), "loc_1"));
+  t("an untied widget gets its own scope, not a shared bucket", () =>
+    assert.strictEqual(M.scopeOf("", "wgt_abc"), "widget:wgt_abc"));
+  t("no sub-account and no widget is unscoped", () => {
+    assert.strictEqual(M.scopeOf(null, null), "");
+    assert.strictEqual(M.scopeOf(undefined, undefined), "");
+  });
+  t("an unscoped write is refused rather than pooled", async () => {});
+  const unscoped = await M.ensureMemory({ ownerUserId: OWNER, phone: "+15550001111" });
+  t("ensureMemory returns null when it cannot scope", () =>
+    assert.strictEqual(unscoped, null));
+  const unscopedRead = await M.loadMemory({ ownerUserId: OWNER, phone: "+15550001111" });
+  t("loadMemory returns null when it cannot scope", () =>
+    assert.strictEqual(unscopedRead, null));
+
+  console.log("\n-- recognising a returning caller --");
+  t("the block tells the assistant NOT to ask for known details", () => {
+    const block = M.buildMemoryBlock({
+      identityKey: "phone:+1555", name: "Dana Reed", phone: "+15551234567",
+      email: "d@e.com", interactionCount: 2, channels: ["call"],
+      facts: [], turns: [], interactions: [],
+    });
+    assert.ok(/ALREADY have this person's details/.test(block));
+    assert.ok(/do NOT ask for their name/i.test(block));
+    assert.ok(/Greet them by name \(Dana\)/.test(block));
+  });
+  t("with no name it still forbids re-asking for what is known", () => {
+    const block = M.buildMemoryBlock({
+      identityKey: "phone:+1555", phone: "+15551234567",
+      interactionCount: 1, channels: ["call"], facts: [], turns: [], interactions: [],
+    });
+    assert.ok(/Do NOT ask for any detail listed above/.test(block));
+    assert.ok(!/Greet them by name/.test(block));
+  });
+
   console.log("\n-- tenant isolation --");
   const otherAgency = await M.ensureMemory({ ownerUserId: "owner_b", subaccountId: "loc_1", phone: "+15551234567" });
   t("same phone, different agency = separate memory", () => assert.notStrictEqual(otherAgency, mem));

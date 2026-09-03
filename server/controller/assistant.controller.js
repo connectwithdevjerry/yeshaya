@@ -2523,19 +2523,49 @@ const getConnectedCalendar = async (req, res) => {
       throw err;
     }
 
-    const config = {
-      method: "get",
-      maxBodyLength: Infinity,
-      url: `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${tkns.data.access_token}`,
-        Version: "2021-04-15",
-      },
-    };
+    // An empty id would build ".../calendars/" — the collection endpoint, not a
+    // calendar — and whatever that returns would be read as "connected".
+    if (!targetAssistant.calendar) {
+      return res.send({
+        status: false,
+        calendarLinked: false,
+        message: "No calendar is linked to this assistant.",
+      });
+    }
 
-    const response = await axios.request(config);
-    return res.send({ status: true, data: response.data || {} });
+    try {
+      const response = await axios.get(
+        `https://services.leadconnectorhq.com/calendars/${targetAssistant.calendar}`,
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${tkns.data.access_token}`,
+            Version: "2021-04-15",
+          },
+          timeout: 10_000,
+        },
+      );
+      return res.send({ status: true, calendarLinked: true, data: response.data || {} });
+    } catch (calErr) {
+      // A calendar deleted, unshared or reassigned in GoHighLevel is a
+      // different problem from a network blip, and only the first needs the
+      // user to relink. Both used to surface as "Request failed with status
+      // code 404", which reads like a transient error and is easy to ignore.
+      if (calErr.response?.status === 404) {
+        console.warn(
+          `Assistant ${assistantId} points at calendar ${targetAssistant.calendar}, which no longer exists in GHL.`,
+        );
+        return res.send({
+          status: false,
+          calendarLinked: true,
+          calendarMissing: true,
+          calendarId: targetAssistant.calendar,
+          message:
+            "The linked calendar no longer exists in GoHighLevel. It may have been deleted or unshared — pick a calendar again.",
+        });
+      }
+      throw calErr;
+    }
   } catch (error) {
     console.error("Error fetching connected calendar:", error.message);
     return res.send({
