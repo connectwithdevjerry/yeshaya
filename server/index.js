@@ -111,6 +111,7 @@ app.use("/active-tags", activeTagRoutes);
 app.use("/memory", customerMemoryRoutes);
 app.use("/widgets", widgetRouter);
 app.use("/embed", embedRouter);
+app.use("/cron", require("./route/cron.route"));
 
 app.get("/", (req, res) => {
   res.send("homepage");

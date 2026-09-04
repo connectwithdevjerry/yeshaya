@@ -83,6 +83,15 @@ const runSweep = async () => {
 
 // Start the cron job (every 15 minutes)
 const startAppointmentReminders = () => {
+  // node-cron needs a process that stays alive between ticks. On Vercel the
+  // function is torn down after each request, so this never fired in
+  // production. The sweep is reached over HTTP there instead (see
+  // route/cron.route.js and vercel.json); this path is for a long-running host.
+  if (process.env.VERCEL) {
+    console.log("Serverless runtime detected — sweep runs via the cron endpoint, not node-cron.");
+    return;
+  }
+
   cron.schedule("*/15 * * * *", runSweep);
   console.log("⏰ Appointment reminder scheduler started (every 15m)");
   // run once shortly after boot to catch anything imminent
