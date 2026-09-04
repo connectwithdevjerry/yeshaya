@@ -1460,6 +1460,23 @@ const assistantsSlice = createSlice({
         state.calendarError = action.payload;
       })
 
+      // unlink calendar from assistant
+      .addCase(removeCalendarFromAssistant.pending, (state) => {
+        state.linkingCalendar = true;
+        state.calendarError = null;
+      })
+      .addCase(removeCalendarFromAssistant.fulfilled, (state) => {
+        state.linkingCalendar = false;
+        state.connectedCalendar = null;
+        state.calendarLinked = false;
+        state.calendarMissing = false;
+        if (state.selectedAssistant) state.selectedAssistant.calendar = "";
+      })
+      .addCase(removeCalendarFromAssistant.rejected, (state, action) => {
+        state.linkingCalendar = false;
+        state.calendarError = action.payload;
+      })
+
       // assistant tools (for toolkit "Added" state)
       .addCase(fetchAssistantTools.pending, (state) => {
         state.fetchingAssistantTools = true;
@@ -1516,6 +1533,20 @@ const assistantsSlice = createSlice({
         state.fetchingConnectedCalendar = false;
         state.calendarError = action.payload?.message || action.payload;
         state.calendarReconnectRequired = !!action.payload?.reconnectRequired;
+
+        // "No calendar is linked" comes back as a rejection, so leaving the
+        // previously fetched calendar in place kept the card badged Connected
+        // after it had been unlinked — and left the assistant audit reporting a
+        // linked, reachable calendar that was not there.
+        //
+        // An object payload means the server answered and told us the state; a
+        // string means the request itself failed, and a transport blip is no
+        // reason to claim the calendar is gone.
+        if (action.payload && typeof action.payload === "object") {
+          state.connectedCalendar = null;
+          state.calendarLinked = action.payload.calendarLinked !== false;
+          state.calendarMissing = !!action.payload.calendarMissing;
+        }
       })
 
       // 🔹 Add Tool to Assistant

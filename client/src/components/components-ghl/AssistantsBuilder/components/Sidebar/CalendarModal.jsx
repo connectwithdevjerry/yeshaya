@@ -168,7 +168,11 @@ export const CalendarModal = ({ isOpen, onClose }) => {
               ) : availableCalendars.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {availableCalendars.map((cal) => {
-                    const isConnected  = connectedCalendar?.calendar?.id === cal.id;
+                    // Both sides can be undefined — with no calendar linked
+                    // that comparison is true, and every card claims to be the
+                    // connected one.
+                    const linkedId    = connectedCalendar?.calendar?.id;
+                    const isConnected = !!linkedId && linkedId === cal.id;
                     const isLinkingThis = processingId === cal.id;
 
                     return (
