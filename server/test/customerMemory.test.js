@@ -258,15 +258,48 @@ const OWNER = "owner_a";
     const ctx = M.buildContextBlock(null, { assistantNotes: "Always mention the Friday promo." });
     assert.ok(ctx.includes("Team notes") && ctx.includes("Friday promo"));
   });
-  t("no memory and no notes = nothing injected", () => assert.strictEqual(M.buildContextBlock(null, {}), ""));
+  // There is always something to say now: the date. The model was answering
+  // from its training data and offering appointments in 2024.
+  t("with no memory and no notes, the date is still injected", () => {
+    const ctx = M.buildContextBlock(null, {});
+    assert.ok(ctx.includes("## Today"));
+    assert.ok(ctx.includes(M.currentIsoDate()));
+  });
   t("memorySystemTurns yields one system turn", () => {
     const turns = M.memorySystemTurns(mem, { assistantNotes: "note" });
     assert.strictEqual(turns.length, 1);
     assert.strictEqual(turns[0].role, "system");
     assert.ok(turns[0].content.includes("note"));
   });
-  t("memorySystemTurns is empty with nothing to say", () =>
-    assert.deepStrictEqual(M.memorySystemTurns(null, {}), []));
+  t("memorySystemTurns always carries the date, even with no memory", () => {
+    const turns = M.memorySystemTurns(null, {});
+    assert.strictEqual(turns.length, 1);
+    assert.ok(turns[0].content.includes("## Today"));
+  });
+
+  console.log("\n-- today's date --");
+  const AT = new Date("2026-09-04T02:30:00Z");
+  t("the date is stated in the business's timezone, not the server's", () => {
+    // 02:30 UTC on the 4th is still the 3rd in New York.
+    const ny = M.buildTodayBlock("America/New_York", AT);
+    assert.ok(ny.includes("2026-09-03"), ny);
+    assert.ok(ny.includes("Thursday"), ny);
+  });
+  t("with no timezone it says UTC rather than implying local", () => {
+    const utc = M.buildTodayBlock(undefined, AT);
+    assert.ok(utc.includes("2026-09-04"));
+    assert.ok(utc.includes("(UTC)"));
+  });
+  t("an invalid timezone falls back to UTC instead of throwing", () => {
+    const bad = M.buildTodayBlock("Mars/Olympus", AT);
+    assert.ok(bad.includes("(UTC)"));
+  });
+  t("the day of the week is given — 'next Tuesday' depends on it", () =>
+    assert.ok(/Thursday|Friday/.test(M.buildTodayBlock("UTC", AT))));
+  t("the model is told to distrust its own idea of the date", () =>
+    assert.ok(/your own idea of the current date is wrong/i.test(M.buildTodayBlock("UTC", AT))));
+  t("currentIsoDate matches the block's date", () =>
+    assert.strictEqual(M.currentIsoDate("America/New_York", AT), "2026-09-03"));
 
   console.log("\n-- Chat Lab scoping --");
   const tester = await M.ensureMemory({ ownerUserId: OWNER, subaccountId: "loc_1", userId: "u_dev" });

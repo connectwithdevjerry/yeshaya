@@ -535,8 +535,61 @@ const buildNotesBlock = (notes) => {
 };
 
 // Memory block + team notes, in the order they should reach the model.
-const buildContextBlock = (memory, { assistantNotes, caller, ...opts } = {}) =>
-  [buildNotesBlock(assistantNotes), buildCallBlock(caller), buildMemoryBlock(memory, opts)]
+// What day it is.
+//
+// Nothing in this codebase ever told the assistant, so the model answered from
+// its training data — offering appointments in June 2024 and computing "next
+// Tuesday" from a date two years gone. Every date it produced was wrong, which
+// is why availability was being checked for days in the past.
+//
+// The zone matters as much as the date: near midnight the day itself differs,
+// and "this afternoon" is meaningless without knowing what time it is where the
+// business is. When the sub-account's timezone is not known, UTC is stated
+// rather than implied, so the model does not silently assume local time.
+const buildTodayBlock = (timezone, now = new Date()) => {
+  const zone = isValidTimeZone(timezone) ? timezone : "UTC";
+  const fmt = (opts) =>
+    new Intl.DateTimeFormat("en-US", { timeZone: zone, ...opts }).format(now);
+
+  const date = fmt({ weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const time = fmt({ hour: "numeric", minute: "2-digit", hour12: true });
+  const iso = new Intl.DateTimeFormat("en-CA", {
+    timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(now);
+
+  return [
+    "## Today",
+    `It is ${date}, ${time} (${zone}). The ISO date is ${iso}.`,
+    "Work out every date the customer mentions — today, tomorrow, next Tuesday — from this, never from anything you think you know. Your own idea of the current date is wrong.",
+    "When a tool takes a date, give it in this timezone.",
+  ].join("\n");
+};
+
+// Today's date in the business's zone, as YYYY-MM-DD.
+const currentIsoDate = (timezone, now = new Date()) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: isValidTimeZone(timezone) ? timezone : "UTC",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(now);
+
+// True only for a zone this runtime's tz data knows.
+const isValidTimeZone = (tz) => {
+  if (!tz || typeof tz !== "string") return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const buildContextBlock = (memory, { assistantNotes, caller, timezone, ...opts } = {}) =>
+  [
+    buildTodayBlock(timezone),
+    buildNotesBlock(assistantNotes),
+    buildCallBlock(caller),
+    buildMemoryBlock(memory, opts),
+  ]
     .filter(Boolean)
     .join("\n\n");
 
@@ -614,9 +667,10 @@ const buildAssistantOverrides = async ({
   memory,
   assistantNotes,
   caller,
+  timezone,
   base = {},
 }) => {
-  const block = buildContextBlock(memory, { assistantNotes, caller });
+  const block = buildContextBlock(memory, { assistantNotes, caller, timezone });
   if (!block) return base;
 
   const overrides = {
@@ -629,6 +683,9 @@ const buildAssistantOverrides = async ({
       customerPhone: caller?.number || memory?.phone || "",
       customerName: memory?.name || caller?.name || "",
       isReturningCustomer: memory?.interactionCount > 0 ? "true" : "false",
+      // So a prompt can use {{currentDate}} directly if it wants to.
+      currentDate: currentIsoDate(timezone),
+      currentTimezone: isValidTimeZone(timezone) ? timezone : "UTC",
     },
   };
 
@@ -940,6 +997,8 @@ module.exports = {
   recentTurnsFor,
   // vapi
   buildAssistantOverrides,
+  buildTodayBlock,
+  currentIsoDate,
   postVapiCall,
   postVapiChat,
   turnsFromArtifact,
