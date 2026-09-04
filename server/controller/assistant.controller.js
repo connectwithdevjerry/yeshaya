@@ -12,6 +12,8 @@ const {
   validateContact,
   findDuplicateContact,
   mergeContactData,
+  isValidEmail,
+  normalizeEmail,
 } = require("../helpers/contactValidator");
 const appointmentModel = require("../model/appointment.model");
 const sendUserEmail = require("../helpers/sendUserEmail");
@@ -1348,6 +1350,26 @@ const slotsFromFreeSlots = (payload) => {
   return collected;
 };
 
+// The window covering a named calendar date in a given zone.
+//
+// Anchoring at midday UTC and asking which local day that falls in is right
+// almost everywhere, but not for a zone far enough east or west that midday UTC
+// lands on the neighbouring date. Nudge until the local date is the one asked
+// for.
+const localDayWindowFor = (isoDate, timeZone) => {
+  const noonUtc = toEpochMs(isoDate) + 12 * 60 * 60 * 1000;
+  for (const shift of [0, -12, 12]) {
+    const candidate = noonUtc + shift * 60 * 60 * 1000;
+    const [start, end] = dayWindowAround(candidate, timeZone);
+    const localDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: isValidTimeZone(timeZone) ? timeZone : "UTC",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date(start));
+    if (localDate === isoDate) return [start, end];
+  }
+  return dayWindowAround(noonUtc, timeZone);
+};
+
 // GET the calendar's free slots for a window. Shared by the availability check
 // and by booking, which has to confirm against the same list GoHighLevel will
 // validate the booking against.
@@ -1556,7 +1578,71 @@ const matchSlot = (slots, requested) => {
     if (best && bestGap <= 60_000) return best;
   }
 
+  // "1:30pm" written as 01:30. Considered only once the literal reading has
+  // matched nothing, and only against a slot the calendar actually publishes,
+  // so this can never invent a time that is not on offer.
+  if (wall) {
+    const hour = Number(wall[1]);
+    if (hour < 12) {
+      const pm = String(hour + 12).padStart(2, "0");
+      const shifted = list.find((slot) => {
+        const slotWall = slot.match(/T(\d{2}):(\d{2})/);
+        return slotWall && slotWall[1] === pm && slotWall[2] === wall[2];
+      });
+      if (shifted) {
+        console.warn(
+          `matchSlot read "${requested}" as ${shifted} — the assistant appears ` +
+            `to have written a PM time in 12-hour form.`,
+        );
+        return shifted;
+      }
+    }
+  }
+
   return null;
+};
+
+// An email address as it survives a phone call.
+//
+// GoHighLevel rejects the whole request with "email must be an email" if the
+// address is not one, which fails the booking after the customer has agreed a
+// time. And an address dictated aloud rarely arrives intact: a transcriber
+// hears "john at gmail dot com", or leaves spaces around the @.
+//
+// Returns "" for anything still not an address, so callers can leave the field
+// out entirely rather than send something GHL will refuse.
+const emailFromSpeech = (value) => {
+  if (typeof value !== "string") return "";
+  const spoken = value
+    .trim()
+    .replace(/\s+at\s+/gi, "@")
+    .replace(/\s+dot\s+/gi, ".")
+    .replace(/\s+underscore\s+/gi, "_")
+    .replace(/\s+dash\s+|\s+hyphen\s+/gi, "-")
+    .replace(/\s+/g, "");
+  const cleaned = normalizeEmail(spoken);
+  return isValidEmail(cleaned) ? cleaned : "";
+};
+
+// The fields that identify a customer to GoHighLevel's contact upsert. An
+// invalid email is dropped rather than sent: on a call the phone number
+// identifies them perfectly well, and a rejected upsert loses the booking.
+// `phoneIsFallback` keeps the caller's number out of a record identified by an
+// email that may not be theirs. add_tag and create_task take an email argument
+// that can name a third party, so their upsert must not stamp whoever happens
+// to be on the phone onto that person's contact — the number is used only when
+// there is no usable email and the upsert would otherwise fail outright.
+const contactIdentity = ({ email, phone, firstName, phoneIsFallback = false }) => {
+  const cleanEmail = emailFromSpeech(email);
+  if (email && !cleanEmail) {
+    console.warn(`Dropping unusable email from contact upsert: ${JSON.stringify(email)}`);
+  }
+  const usePhone = phone && (!phoneIsFallback || !cleanEmail);
+  return {
+    ...(cleanEmail && { email: cleanEmail }),
+    ...(usePhone && { phone }),
+    ...(firstName && { firstName }),
+  };
 };
 
 const parseToolArgs = (raw) => {
@@ -1832,7 +1918,14 @@ const executeToolFromVapi = async (req, res) => {
       const bookZone = isValidTimeZone(targetSubAccount?.timezone)
         ? targetSubAccount.timezone
         : null;
-      const [bookDayStart, bookDayEnd] = dayWindowAround(toEpochMs(requested), bookZone);
+      // Take the day from the date the assistant actually wrote, not from the
+      // instant it parses to. A time with no offset is read as UTC, so "01:30"
+      // lands on the previous day in any western zone — and the slots offered
+      // as alternatives were then for the wrong day.
+      const datePart = String(requested).match(/^(\d{4}-\d{2}-\d{2})/);
+      const [bookDayStart, bookDayEnd] = datePart
+        ? localDayWindowFor(datePart[1], bookZone)
+        : dayWindowAround(toEpochMs(requested), bookZone);
 
       let startTime = null;
       let offered = [];
@@ -1882,15 +1975,24 @@ const executeToolFromVapi = async (req, res) => {
       }
 
       // Step A: Upsert Contact
+      const identity = contactIdentity({
+        email: customerEmail,
+        firstName: customerName,
+        // Known from the call itself — the assistant is told not to ask.
+        phone: callerNumber,
+      });
+      if (!identity.email && !identity.phone) {
+        return res.json({
+          results: [{
+            toolCallId: toolCall.id,
+            result: "I need an email address to put the booking under. Could you spell it out for me?",
+          }],
+        });
+      }
+
       const contactRes = await axios.post(
         "https://services.leadconnectorhq.com/contacts/upsert",
-        {
-          email: customerEmail,
-          firstName: customerName,
-          locationId,
-          // Known from the call itself — the assistant is told not to ask.
-          ...(callerNumber && { phone: callerNumber }),
-        },
+        { ...identity, locationId },
         {
           timeout: TOOL_HTTP_TIMEOUT_MS,
           headers: {
@@ -2021,10 +2123,10 @@ const executeToolFromVapi = async (req, res) => {
 
       const payload = {
         locationId: locationId, // Extracted from your ghlSubAccountIds array
-        firstName,
         lastName,
-        email,
-        ...(phone && { phone }),
+        // An address that is not one fails the whole upsert with a 422, taking
+        // the name and custom fields down with it.
+        ...contactIdentity({ email, phone, firstName }),
       };
 
       // Map collected custom-field values → GHL custom field IDs using the
@@ -2102,9 +2204,19 @@ const executeToolFromVapi = async (req, res) => {
       }
 
       // Resolve the contact id by upserting on email (idempotent)
+      const tagIdentity = contactIdentity({
+        email: customerEmail,
+        phone: callerNumber,
+        phoneIsFallback: true,
+      });
+      if (!tagIdentity.email && !tagIdentity.phone) {
+        return res.status(200).json({
+          results: [{ toolCallId: toolCall.id, result: "I need a valid contact email to do that." }],
+        });
+      }
       const contactRes = await axios.post(
         "https://services.leadconnectorhq.com/contacts/upsert",
-        { email: customerEmail, locationId },
+        { ...tagIdentity, locationId },
         { headers: { Authorization: `Bearer ${accessToken}`, Version: "2021-07-28" }, timeout: TOOL_HTTP_TIMEOUT_MS },
       );
       const contactId = contactRes.data?.contact?.id;
@@ -2404,8 +2516,12 @@ const executeToolFromVapi = async (req, res) => {
         const contactRes = await axios.post(
           "https://services.leadconnectorhq.com/contacts/upsert",
           {
-            email: customerEmail,
-            firstName: customerName,
+            ...contactIdentity({
+              email: customerEmail,
+              firstName: customerName,
+              phone: callerNumber,
+              phoneIsFallback: true,
+            }),
             locationId,
           },
           {
@@ -2484,8 +2600,11 @@ const executeToolFromVapi = async (req, res) => {
         const contactRes = await axios.post(
           "https://services.leadconnectorhq.com/contacts/upsert",
           {
-            email: customerEmail,
-            firstName: customerName,
+            ...contactIdentity({
+              email: customerEmail,
+              firstName: customerName,
+              phone: callerNumber,
+            }),
             locationId,
           },
           {
@@ -5375,6 +5494,9 @@ module.exports = {
   slotsFromFreeSlots,
   toGhlAppointmentTime,
   matchSlot,
+  localDayWindowFor,
+  emailFromSpeech,
+  contactIdentity,
   isValidTimeZone,
   resolveAssistantId,
   toolCallsFrom,

@@ -17,7 +17,7 @@ const t = (name, fn) => {
   catch (e) { console.log(`  FAIL ${name}\n       ${e.message}`); fail++; }
 };
 
-const { parseToolArgs, resolveAssistantId, toolCallsFrom, toEpochMs, dayWindowAround, isValidTimeZone, slotsFromFreeSlots, toGhlAppointmentTime, matchSlot } = require("../controller/assistant.controller");
+const { parseToolArgs, resolveAssistantId, toolCallsFrom, toEpochMs, dayWindowAround, isValidTimeZone, slotsFromFreeSlots, toGhlAppointmentTime, matchSlot, emailFromSpeech, contactIdentity, localDayWindowFor } = require("../controller/assistant.controller");
 
 console.log("\n-- tool arguments --");
 t("JSON string is parsed (the OpenAI convention Vapi follows)", () =>
@@ -253,6 +253,89 @@ t("an empty or unusable slot list matches nothing", () => {
 });
 t("an unreadable request matches nothing rather than the first slot", () =>
   assert.strictEqual(matchSlot(DAY, "sometime tomorrow"), null));
+
+console.log("\n-- emails as they survive a phone call --");
+// GoHighLevel answers an address that is not one with a 422 —
+// "email must be an email" — which failed the booking after the customer had
+// already agreed a time.
+t("a real address passes through, normalised", () => {
+  assert.strictEqual(emailFromSpeech("john@gmail.com"), "john@gmail.com");
+  assert.strictEqual(emailFromSpeech(" JOHN@Gmail.COM "), "john@gmail.com");
+});
+t("a dictated address is reassembled", () => {
+  assert.strictEqual(emailFromSpeech("john at gmail dot com"), "john@gmail.com");
+  assert.strictEqual(emailFromSpeech("John At Gmail Dot Com"), "john@gmail.com");
+  assert.strictEqual(emailFromSpeech("john at gmail.com"), "john@gmail.com");
+});
+t("something that is not an address becomes empty, never sent", () => {
+  for (const bad of ["john gmail com", "no thanks", "", "   ", null, undefined, 42]) {
+    assert.strictEqual(emailFromSpeech(bad), "", `expected "" for ${JSON.stringify(bad)}`);
+  }
+});
+t("an unusable email is dropped, not passed to GHL", () => {
+  const id = contactIdentity({ email: "not an email", phone: "+15551234567", firstName: "Dana" });
+  assert.strictEqual(id.email, undefined);
+  assert.strictEqual(id.phone, "+15551234567");
+  assert.strictEqual(id.firstName, "Dana");
+});
+t("a caller with no email is still identifiable by phone", () => {
+  const id = contactIdentity({ phone: "+15551234567" });
+  assert.deepStrictEqual(id, { phone: "+15551234567" });
+});
+t("nothing usable yields nothing, so the caller is asked", () =>
+  assert.deepStrictEqual(contactIdentity({ email: "nope" }), {}));
+
+console.log("\n-- a PM time written in 12-hour form --");
+const PM_SLOTS = ["2026-09-10T13:00:00-04:00", "2026-09-10T13:30:00-04:00", "2026-09-10T14:00:00-04:00"];
+t("1:30pm written as 01:30 finds the 13:30 slot", () =>
+  assert.strictEqual(matchSlot(PM_SLOTS, "2026-09-10T01:30:00"), "2026-09-10T13:30:00-04:00"));
+t("but only when nothing matched literally", () => {
+  // With a real 01:30 slot on offer, the literal reading must win.
+  const overnight = ["2026-09-10T01:30:00-04:00", ...PM_SLOTS];
+  assert.strictEqual(matchSlot(overnight, "2026-09-10T01:30:00-04:00"), "2026-09-10T01:30:00-04:00");
+});
+t("and never invents a time the calendar is not offering", () =>
+  assert.strictEqual(matchSlot(["2026-09-10T14:00:00-04:00"], "2026-09-10T01:30:00"), null));
+t("an afternoon time is not shifted again", () =>
+  assert.strictEqual(matchSlot(PM_SLOTS, "2026-09-10T22:30:00"), null));
+
+console.log("\n-- not changing what already worked --");
+t("a contact identified by someone else's email keeps its own phone", () => {
+  // add_tag / create_task take an email that may name a third party; the person
+  // on the phone must not be stamped onto their record.
+  const id = contactIdentity({
+    email: "someone.else@example.com", phone: "+15551234567", phoneIsFallback: true,
+  });
+  assert.strictEqual(id.email, "someone.else@example.com");
+  assert.strictEqual(id.phone, undefined);
+});
+t("...but the number is still used when there is no usable email", () => {
+  const id = contactIdentity({ email: "garbled", phone: "+15551234567", phoneIsFallback: true });
+  assert.strictEqual(id.email, undefined);
+  assert.strictEqual(id.phone, "+15551234567");
+});
+t("booking still sends both — it is always the caller being booked", () => {
+  const id = contactIdentity({ email: "dana@example.com", phone: "+15551234567" });
+  assert.strictEqual(id.email, "dana@example.com");
+  assert.strictEqual(id.phone, "+15551234567");
+});
+
+const localDate = (ms, zone) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(ms));
+t("a named date resolves to that local day in any zone", () => {
+  for (const zone of ["America/New_York", "UTC", "Asia/Tokyo", "Pacific/Kiritimati", "Pacific/Midway"]) {
+    const [start, end] = localDayWindowFor("2026-09-10", zone);
+    assert.strictEqual(localDate(start, zone), "2026-09-10", `start wrong in ${zone}`);
+    assert.strictEqual(localDate(end, zone), "2026-09-10", `end wrong in ${zone}`);
+  }
+});
+t("an unknown zone still yields a whole day", () => {
+  const [start, end] = localDayWindowFor("2026-09-10", "Mars/Olympus");
+  assert.strictEqual(localDate(start, "UTC"), "2026-09-10");
+  assert.ok(end - start > 23 * 60 * 60 * 1000);
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
