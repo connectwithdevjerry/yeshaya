@@ -1325,6 +1325,29 @@ const createCustomTool = async (req, res) => {
   }
 };
 
+// Vapi gives this webhook `server.timeoutSeconds` (20) before it gives up and
+// the assistant stalls mid-sentence. Axios defaults to no timeout at all, so a
+// hung upstream held the request open past that with the caller listening to
+// silence. Nothing here may outlive the window Vapi is prepared to wait.
+const TOOL_HTTP_TIMEOUT_MS = 10_000;
+
+// GoHighLevel has returned free slots in more than one shape: a top-level
+// `slots` array, and an object keyed by date with a `slots` array under each
+// day. Reading only the first means a day full of availability reads as "No
+// slots found", which a caller cannot tell from a full diary.
+const slotsFromFreeSlots = (payload) => {
+  if (!payload || typeof payload !== "object") return [];
+  if (Array.isArray(payload.slots)) return payload.slots;
+
+  const collected = [];
+  for (const [key, value] of Object.entries(payload)) {
+    if (key === "traceId") continue;
+    if (Array.isArray(value)) collected.push(...value);
+    else if (Array.isArray(value?.slots)) collected.push(...value.slots);
+  }
+  return collected;
+};
+
 // ─── date arguments ──────────────────────────────────────────────────────────
 
 // Turns whatever the assistant put in a date argument into epoch milliseconds.
@@ -1631,6 +1654,7 @@ const executeToolFromVapi = async (req, res) => {
               endDate: endMs,
               ...(zone && { timezone: zone }),
             },
+            timeout: TOOL_HTTP_TIMEOUT_MS,
             headers: {
               Authorization: `Bearer ${accessToken}`,
               Version: "2021-07-28",
@@ -1660,12 +1684,13 @@ const executeToolFromVapi = async (req, res) => {
         throw slotsErr;
       }
 
-      // Return available slots to Vapi
+      const slots = slotsFromFreeSlots(response.data);
+
       return res.json({
         results: [
           {
             toolCallId: toolCall.id,
-            result: response.data.slots || "No slots found.",
+            result: slots.length ? slots : "No slots found.",
           },
         ],
       });
@@ -1704,12 +1729,24 @@ const executeToolFromVapi = async (req, res) => {
           ...(callerNumber && { phone: callerNumber }),
         },
         {
+          timeout: TOOL_HTTP_TIMEOUT_MS,
           headers: {
             Authorization: `Bearer ${accessToken}`,
             Version: "2021-07-28",
           },
         },
       );
+
+      const contactId = contactRes.data?.contact?.id;
+      if (!contactId) {
+        console.error("book_appointment: upsert returned no contact id", contactRes.data);
+        return res.status(200).json({
+          results: [{
+            toolCallId: toolCall.id,
+            result: "I couldn't save your details just now. Someone from the team will follow up to confirm.",
+          }],
+        });
+      }
 
       // Step B: Create Appointment (v2 endpoint is /calendars/events/appointments)
       const title = `Vapi Booking: ${customerName}`;
@@ -1718,11 +1755,12 @@ const executeToolFromVapi = async (req, res) => {
         {
           calendarId,
           locationId,
-          contactId: contactRes.data.contact.id,
+          contactId,
           startTime,
           title,
         },
         {
+          timeout: TOOL_HTTP_TIMEOUT_MS,
           headers: {
             Authorization: `Bearer ${accessToken}`,
             Version: "2021-07-28",
@@ -1748,7 +1786,7 @@ const executeToolFromVapi = async (req, res) => {
             subaccountId: locationId,
             calendarId,
             ghlEventId,
-            ghlContactId: contactRes.data.contact.id,
+            ghlContactId: contactId,
             customerName,
             customerEmail,
             startTime: new Date(startTime),
@@ -1821,6 +1859,7 @@ const executeToolFromVapi = async (req, res) => {
         "https://services.leadconnectorhq.com/contacts/upsert",
         payload,
         {
+          timeout: TOOL_HTTP_TIMEOUT_MS,
           headers: {
             Authorization: `Bearer ${accessToken}`,
             Version: "2021-07-28",
@@ -1878,7 +1917,7 @@ const executeToolFromVapi = async (req, res) => {
       const contactRes = await axios.post(
         "https://services.leadconnectorhq.com/contacts/upsert",
         { email: customerEmail, locationId },
-        { headers: { Authorization: `Bearer ${accessToken}`, Version: "2021-07-28" } },
+        { headers: { Authorization: `Bearer ${accessToken}`, Version: "2021-07-28" }, timeout: TOOL_HTTP_TIMEOUT_MS },
       );
       const contactId = contactRes.data?.contact?.id;
       if (!contactId) {
@@ -1891,9 +1930,9 @@ const executeToolFromVapi = async (req, res) => {
       const headers = { Authorization: `Bearer ${accessToken}`, Version: "2021-07-28", "Content-Type": "application/json" };
 
       if (name === "add_tag") {
-        await axios.post(url, { tags: tagList }, { headers });
+        await axios.post(url, { tags: tagList }, { headers, timeout: TOOL_HTTP_TIMEOUT_MS });
       } else {
-        await axios.delete(url, { headers, data: { tags: tagList } });
+        await axios.delete(url, { headers, data: { tags: tagList }, timeout: TOOL_HTTP_TIMEOUT_MS });
       }
 
       return res.status(200).json({
@@ -1908,16 +1947,37 @@ const executeToolFromVapi = async (req, res) => {
     if (name === "search_the_web") {
       const { query } = args;
 
+      if (!query || !String(query).trim()) {
+        return res.status(200).json({
+          results: [{ toolCallId: toolCall.id, result: "What would you like me to look up?" }],
+        });
+      }
+      if (!process.env.TAVILY_API_KEY) {
+        console.error("search_the_web called but TAVILY_API_KEY is not set");
+        return res.status(200).json({
+          results: [{ toolCallId: toolCall.id, result: "I can't search the web right now." }],
+        });
+      }
+
       // We use Axios to call Tavily (requires a TAVILY_API_KEY in your .env)
-      const searchResponse = await axios.post("https://api.tavily.com/search", {
-        api_key: process.env.TAVILY_API_KEY,
-        query: query,
-        search_depth: "basic", // "advanced" for deeper research
-        max_results: 5,
-      });
+      const searchResponse = await axios.post(
+        "https://api.tavily.com/search",
+        {
+          api_key: process.env.TAVILY_API_KEY,
+          query,
+          search_depth: "basic", // "advanced" for deeper research
+          max_results: 5,
+        },
+        { timeout: TOOL_HTTP_TIMEOUT_MS },
+      );
 
       // Tavily returns an array of objects. We extract the 'content' for the LLM.
-      const results = searchResponse.data.results
+      // An error body has no `results`, and mapping over undefined threw out of
+      // here into the generic "Service unavailable" the caller hears.
+      const hits = Array.isArray(searchResponse.data?.results)
+        ? searchResponse.data.results
+        : [];
+      const results = hits
         .map((r) => `Source: ${r.title}\nContent: ${r.content}\nURL: ${r.url}`)
         .join("\n\n");
 
@@ -1935,8 +1995,11 @@ const executeToolFromVapi = async (req, res) => {
     if (name === "get_user_calendar_events") {
       const { startDate, endDate } = args;
 
-      // Use the accessToken from your helper function
-      const accessToken = await getFreshAccessToken(user);
+      // `getFreshAccessToken` was never defined anywhere in the codebase, so
+      // this threw a ReferenceError every time the tool ran and the caller
+      // heard "service unavailable" — it has never worked. The sub-account
+      // token fetched above is the right one anyway: scoped to this location,
+      // not the agency.
 
       // Default range: If AI doesn't provide dates, look from 30 days ago to 90 days ahead
       // An unreadable date falls back to the default window rather than
@@ -1955,6 +2018,7 @@ const executeToolFromVapi = async (req, res) => {
             startTime: startAt,
             endTime: endAt,
           },
+          timeout: TOOL_HTTP_TIMEOUT_MS,
           headers: {
             Authorization: `Bearer ${accessToken}`,
             Version: "2021-07-28",
@@ -2001,6 +2065,13 @@ const executeToolFromVapi = async (req, res) => {
         });
       }
 
+      if (!process.env.FIRECRAWL_API_KEY) {
+        console.error("scrape_website called but FIRECRAWL_API_KEY is not set");
+        return res.status(200).json({
+          results: [{ toolCallId: toolCall.id, result: "I can't read that page right now." }],
+        });
+      }
+
       // Firecrawl API call
       const firecrawlResponse = await axios.post(
         "https://api.firecrawl.dev/v1/scrape",
@@ -2010,6 +2081,7 @@ const executeToolFromVapi = async (req, res) => {
           onlyMainContent: true, // Removes headers, footers, and nav bars
         },
         {
+          timeout: TOOL_HTTP_TIMEOUT_MS,
           headers: {
             Authorization: `Bearer ${process.env.FIRECRAWL_API_KEY}`,
             "Content-Type": "application/json",
@@ -2017,8 +2089,22 @@ const executeToolFromVapi = async (req, res) => {
         },
       );
 
-      // Firecrawl returns the result in data.markdown
-      const markdownContent = firecrawlResponse.data.data.markdown;
+      // Firecrawl returns the result in data.markdown. A page it could not
+      // render, a blocked domain or a plan limit all come back without it, and
+      // reading `.markdown` off undefined threw out of here.
+      const markdownContent = firecrawlResponse.data?.data?.markdown;
+      if (typeof markdownContent !== "string" || !markdownContent.trim()) {
+        console.warn(
+          `scrape_website got no content for ${url}:`,
+          firecrawlResponse.data?.error || firecrawlResponse.data?.warning || "empty response",
+        );
+        return res.status(200).json({
+          results: [{
+            toolCallId: toolCall.id,
+            result: `I couldn't read anything from ${url}.`,
+          }],
+        });
+      }
 
       // Truncate to avoid hitting Vapi/LLM context limits (approx 8k-10k chars)
       const finalContent =
@@ -2114,6 +2200,7 @@ const executeToolFromVapi = async (req, res) => {
             locationId,
           },
           {
+            timeout: TOOL_HTTP_TIMEOUT_MS,
             headers: {
               Authorization: `Bearer ${accessToken}`,
               Version: "2021-07-28",
@@ -2127,11 +2214,12 @@ const executeToolFromVapi = async (req, res) => {
           {
             calendarId,
             locationId,
-            contactId: contactRes.data.contact.id,
+            contactId: contactRes.data?.contact?.id,
             startTime,
             title: title || `Scheduled: ${customerName}`,
           },
           {
+            timeout: TOOL_HTTP_TIMEOUT_MS,
             headers: {
               Authorization: `Bearer ${accessToken}`,
               Version: "2021-07-28",
@@ -2192,6 +2280,7 @@ const executeToolFromVapi = async (req, res) => {
             locationId,
           },
           {
+            timeout: TOOL_HTTP_TIMEOUT_MS,
             headers: {
               Authorization: `Bearer ${accessToken}`,
               Version: "2021-07-28",
@@ -2199,7 +2288,13 @@ const executeToolFromVapi = async (req, res) => {
           },
         );
 
-        const contactId = contactRes.data.contact.id;
+        const contactId = contactRes.data?.contact?.id;
+        if (!contactId) {
+          console.error("create_task: upsert returned no contact id", contactRes.data);
+          return res.status(200).json({
+            results: [{ toolCallId: toolCall.id, error: "Could not find or create that contact." }],
+          });
+        }
 
         // Step B: Create Task
         const taskPayload = {
@@ -2212,6 +2307,7 @@ const executeToolFromVapi = async (req, res) => {
           `https://services.leadconnectorhq.com/contacts/${contactId}/tasks`,
           taskPayload,
           {
+            timeout: TOOL_HTTP_TIMEOUT_MS,
             headers: {
               Authorization: `Bearer ${accessToken}`,
               Version: "2021-07-28",
@@ -5010,6 +5106,7 @@ module.exports = {
   parseToolArgs,
   toEpochMs,
   dayWindowAround,
+  slotsFromFreeSlots,
   isValidTimeZone,
   resolveAssistantId,
   toolCallsFrom,
