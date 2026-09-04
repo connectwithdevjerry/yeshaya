@@ -17,7 +17,7 @@ const t = (name, fn) => {
   catch (e) { console.log(`  FAIL ${name}\n       ${e.message}`); fail++; }
 };
 
-const { parseToolArgs, resolveAssistantId, toolCallsFrom, toEpochMs, dayWindowAround, isValidTimeZone, slotsFromFreeSlots, toGhlAppointmentTime } = require("../controller/assistant.controller");
+const { parseToolArgs, resolveAssistantId, toolCallsFrom, toEpochMs, dayWindowAround, isValidTimeZone, slotsFromFreeSlots, toGhlAppointmentTime, matchSlot } = require("../controller/assistant.controller");
 
 console.log("\n-- tool arguments --");
 t("JSON string is parsed (the OpenAI convention Vapi follows)", () =>
@@ -224,6 +224,35 @@ t("a time that carries a zone is not flagged", () => {
 });
 t("an unreadable time is null, so booking asks again", () =>
   assert.strictEqual(toGhlAppointmentTime("some time next week").time, null));
+
+console.log("\n-- booking against the slots GHL published --");
+// GHL answers a booking whose startTime does not line up with a published slot
+// with "The slot you have selected is no longer available", on a free calendar.
+const DAY = [
+  "2026-09-10T09:00:00-04:00",
+  "2026-09-10T09:30:00-04:00",
+  "2026-09-10T14:00:00-04:00",
+];
+t("the slot the assistant echoed back is returned verbatim", () =>
+  assert.strictEqual(matchSlot(DAY, "2026-09-10T09:30:00-04:00"), "2026-09-10T09:30:00-04:00"));
+t("the same instant written as UTC still finds its slot", () =>
+  // 09:00-04:00 is 13:00Z — the booking that was being rejected.
+  assert.strictEqual(matchSlot(DAY, "2026-09-10T13:00:00.000Z"), "2026-09-10T09:00:00-04:00"));
+t("a wall-clock time with no zone matches the local slot, not UTC", () =>
+  assert.strictEqual(matchSlot(DAY, "2026-09-10T14:00:00"), "2026-09-10T14:00:00-04:00"));
+t("a few seconds of rounding is the same appointment", () =>
+  assert.strictEqual(matchSlot(DAY, "2026-09-10T09:00:30-04:00"), "2026-09-10T09:00:00-04:00"));
+t("a time nowhere near a slot matches nothing, so alternatives are offered", () => {
+  assert.strictEqual(matchSlot(DAY, "2026-09-10T11:15:00-04:00"), null);
+  assert.strictEqual(matchSlot(DAY, "2026-09-10T20:00:00-04:00"), null);
+});
+t("an empty or unusable slot list matches nothing", () => {
+  assert.strictEqual(matchSlot([], "2026-09-10T09:00:00-04:00"), null);
+  assert.strictEqual(matchSlot(null, "2026-09-10T09:00:00-04:00"), null);
+  assert.strictEqual(matchSlot([1, 2, null], "2026-09-10T09:00:00-04:00"), null);
+});
+t("an unreadable request matches nothing rather than the first slot", () =>
+  assert.strictEqual(matchSlot(DAY, "sometime tomorrow"), null));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
