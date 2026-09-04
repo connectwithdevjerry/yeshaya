@@ -1641,8 +1641,21 @@ const executeToolFromVapi = async (req, res) => {
       // one-second window.
       const zone = isValidTimeZone(timezone) ? timezone : null;
       const [dayStart, dayEnd] = dayWindowAround(startAt, zone);
-      const startMs = dayStart;
+
+      // Asking for a window that has mostly already passed returns nothing
+      // useful: a caller ringing at 3pm about "today" was being answered from a
+      // range starting at midnight. Never ask about the past.
+      const startMs = Math.max(dayStart, Date.now());
       const endMs = toEpochMs(endTime, { endOfDay: true }) ?? dayEnd;
+
+      if (endMs <= startMs) {
+        return res.status(200).json({
+          results: [{
+            toolCallId: toolCall.id,
+            result: "That day has already passed. Which day would you like instead?",
+          }],
+        });
+      }
 
       let response;
       try {
@@ -1657,7 +1670,7 @@ const executeToolFromVapi = async (req, res) => {
             timeout: TOOL_HTTP_TIMEOUT_MS,
             headers: {
               Authorization: `Bearer ${accessToken}`,
-              Version: "2021-07-28",
+              Version: "2021-04-15",
             },
             timeout: 10_000,
           },
@@ -1685,6 +1698,18 @@ const executeToolFromVapi = async (req, res) => {
       }
 
       const slots = slotsFromFreeSlots(response.data);
+
+      // Every "no availability" report so far has been this call succeeding and
+      // returning something the parser did not recognise. Log the shape — not
+      // the whole body — so the next one is answerable from the server log.
+      if (!slots.length) {
+        console.warn(
+          `check_availability found no slots for calendar ${calendarId} ` +
+            `between ${new Date(startMs).toISOString()} and ${new Date(endMs).toISOString()}` +
+            `${zone ? ` (${zone})` : ""}. Response keys: ` +
+            JSON.stringify(Object.keys(response.data || {})),
+        );
+      }
 
       return res.json({
         results: [
@@ -1763,7 +1788,7 @@ const executeToolFromVapi = async (req, res) => {
           timeout: TOOL_HTTP_TIMEOUT_MS,
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            Version: "2021-07-28",
+            Version: "2021-04-15",
           },
         },
       );
@@ -2020,7 +2045,7 @@ const executeToolFromVapi = async (req, res) => {
           timeout: TOOL_HTTP_TIMEOUT_MS,
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            Version: "2021-07-28",
+            Version: "2021-04-15",
           },
         },
       );
@@ -2236,7 +2261,7 @@ const executeToolFromVapi = async (req, res) => {
             timeout: TOOL_HTTP_TIMEOUT_MS,
             headers: {
               Authorization: `Bearer ${accessToken}`,
-              Version: "2021-07-28",
+              Version: "2021-04-15",
             },
           },
         );
