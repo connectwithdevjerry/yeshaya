@@ -7,7 +7,6 @@ const FormData = require("form-data");
 const fs = require("fs");
 const { fillTemplate, extractText, toE164 } = require("../helperFunctions");
 const { MAKE_OUTBOUND_CALL } = require("../constants");
-const emailHelper = require("../resendObject");
 const { createNotification } = require("./notification.controller");
 const {
   validateContact,
@@ -15,6 +14,7 @@ const {
   mergeContactData,
 } = require("../helpers/contactValidator");
 const appointmentModel = require("../model/appointment.model");
+const sendUserEmail = require("../helpers/sendUserEmail");
 const { fmtWhen, confirmationEmail } = require("../helpers/appointmentEmails");
 const kbFileModel = require("../model/kbFile.model");
 const { saveImageToDB } = require("../cloudinaryImageHandler");
@@ -1797,7 +1797,6 @@ const executeToolFromVapi = async (req, res) => {
         // Confirmation email to the customer (white-label sender if configured)
         if (customerEmail) {
           try {
-            const sendUserEmail = require("../helpers/sendUserEmail");
             await sendUserEmail(
               userId,
               customerEmail,
@@ -2106,10 +2105,16 @@ const executeToolFromVapi = async (req, res) => {
         });
       }
 
-      // Truncate to avoid hitting Vapi/LLM context limits (approx 8k-10k chars)
+      // Truncate to avoid hitting Vapi/LLM context limits. A voice call pays
+      // for this twice: once in the turn that fetches it, and again on every
+      // turn after, since it stays in the conversation. 10k characters is
+      // ~2.5k tokens of prompt on a model capped at 150 tokens of reply — far
+      // more than it can use, and the caller hears the difference as a pause.
+      // Text channels have no such budget, so they keep the larger window.
+      const limit = message.call ? 2500 : 10000;
       const finalContent =
-        markdownContent.length > 10000
-          ? markdownContent.substring(0, 10000) + "... [Content Truncated]"
+        markdownContent.length > limit
+          ? markdownContent.substring(0, limit) + "... [Content Truncated]"
           : markdownContent;
 
       return res.status(200).json({
@@ -2139,8 +2144,17 @@ const executeToolFromVapi = async (req, res) => {
       }
 
       try {
-        // Send email using Resend
-        await emailHelper(recipientEmail, subject, message);
+        // book_appointment already sends its confirmation from the agency's own
+        // Resend account and address when they have configured one. An email the
+        // assistant sends mid-conversation arriving from the platform instead
+        // reads as coming from a different company.
+        //
+        // The body is written by a model as prose, so its line breaks are real
+        // and would otherwise collapse into one paragraph in an HTML mail.
+        const html = /<[a-z][\s\S]*>/i.test(message)
+          ? message
+          : String(message).replace(/\n/g, "<br>");
+        await sendUserEmail(userId, recipientEmail, subject, html);
 
         return res.status(200).json({
           results: [
