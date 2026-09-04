@@ -1114,20 +1114,22 @@ const assistantsSlice = createSlice({
     availableCalendars: [],
     fetchingCalendars: false,
     calendarError: null,
+    // Kept apart from calendarError, which fetchConnectedCalendar also sets —
+    // including for "no calendar is linked", which is not a failed load.
+    calendarListError: null,
     calendarReconnectRequired: false,
     linkingCalendar: false,
     assistantTools: [],
     fetchingAssistantTools: false,
     connectedCalendar: null,
+    connectedCalendarFor: null, // the assistant `connectedCalendar` describes
     calendarLinked: null,      // null = not checked yet
     calendarMissing: false,
     fetchingConnectedCalendar: false,
     addingTool: false,
     toolError: null,
-    assistantTools: [],
     sendingChat: false,
     chatError: null,
-    chatHistory: [],
     callLogs: [],
     fetchingLogs: false,
     logsError: null,
@@ -1223,9 +1225,17 @@ const assistantsSlice = createSlice({
       })
 
       // 🔹 Get single
-      .addCase(getAssistantById.pending, (state) => {
+      .addCase(getAssistantById.pending, (state, action) => {
         state.loading = true;
         state.error = null;
+        // One shared slot. Holding the last assistant while a different one
+        // loads shows its voice, model and prompt under the new assistant —
+        // and PromptEditor seeds an empty editor from whatever is in here.
+        const wanted = action.meta.arg?.assistantId;
+        const held = state.selectedAssistant;
+        if (held && held.id !== wanted && held.assistantId !== wanted) {
+          state.selectedAssistant = null;
+        }
       })
       .addCase(getAssistantById.fulfilled, (state, action) => {
         state.loading = false;
@@ -1365,6 +1375,7 @@ const assistantsSlice = createSlice({
         state.knowledgeBaseError = null;
       })
       .addCase(deleteKnowledgeBase.fulfilled, (state, action) => {
+        state.deletingKnowledgeBase = false;
         state.knowledgeBasesData = state.knowledgeBasesData.filter(
           (kb) => kb.id !== action.payload,
         );
@@ -1465,9 +1476,10 @@ const assistantsSlice = createSlice({
         state.linkingCalendar = true;
         state.calendarError = null;
       })
-      .addCase(removeCalendarFromAssistant.fulfilled, (state) => {
+      .addCase(removeCalendarFromAssistant.fulfilled, (state, action) => {
         state.linkingCalendar = false;
         state.connectedCalendar = null;
+        state.connectedCalendarFor = action.meta.arg?.assistantId ?? null;
         state.calendarLinked = false;
         state.calendarMissing = false;
         if (state.selectedAssistant) state.selectedAssistant.calendar = "";
@@ -1499,32 +1511,47 @@ const assistantsSlice = createSlice({
       .addCase(fetchGHLCalendars.pending, (state) => {
         state.fetchingCalendars = true;
         state.calendarError = null;
+        state.calendarListError = null;
         state.calendarReconnectRequired = false;
       })
       .addCase(fetchGHLCalendars.fulfilled, (state, action) => {
         state.fetchingCalendars = false;
         state.availableCalendars = action.payload;
+        state.calendarListError = null;
         state.calendarReconnectRequired = false;
       })
       .addCase(fetchGHLCalendars.rejected, (state, action) => {
         state.fetchingCalendars = false;
+        // Otherwise the grid keeps rendering the calendars of whichever
+        // sub-account was open last, and they are selectable.
+        state.availableCalendars = [];
         state.calendarError = action.payload?.message || action.payload;
+        state.calendarListError = action.payload?.message || action.payload;
         state.calendarReconnectRequired = !!action.payload?.reconnectRequired;
         state.calendarMissing = !!action.payload?.calendarMissing;
         state.calendarLinked = action.payload?.calendarLinked !== false;
       })
 
       // 🔹 Fetch Connected Calendar
-      .addCase(fetchConnectedCalendar.pending, (state) => {
+      .addCase(fetchConnectedCalendar.pending, (state, action) => {
         state.fetchingConnectedCalendar = true;
         state.calendarError = null;
         state.calendarReconnectRequired = false;
         state.calendarMissing = false;
         state.calendarLinked = null;
+        // The grid renders as soon as the calendar list lands, which can be
+        // before this resolves — with the last assistant's calendar still here,
+        // it badges the wrong card Connected. Re-checking the same assistant
+        // keeps its answer, so linking one does not blink the badge off.
+        if (state.connectedCalendarFor !== action.meta.arg?.assistantId) {
+          state.connectedCalendar = null;
+          state.connectedCalendarFor = null;
+        }
       })
       .addCase(fetchConnectedCalendar.fulfilled, (state, action) => {
         state.fetchingConnectedCalendar = false;
         state.connectedCalendar = action.payload; // This stores the { calendarId, assistantId, ... } object
+        state.connectedCalendarFor = action.meta.arg?.assistantId ?? null;
         state.calendarLinked = true;
         state.calendarMissing = false;
         state.calendarReconnectRequired = false;
@@ -1544,6 +1571,7 @@ const assistantsSlice = createSlice({
         // reason to claim the calendar is gone.
         if (action.payload && typeof action.payload === "object") {
           state.connectedCalendar = null;
+          state.connectedCalendarFor = action.meta.arg?.assistantId ?? null;
           state.calendarLinked = action.payload.calendarLinked !== false;
           state.calendarMissing = !!action.payload.calendarMissing;
         }
@@ -1572,10 +1600,11 @@ const assistantsSlice = createSlice({
         state.sendingChat = true;
         state.chatError = null;
       })
-      .addCase(sendChatMessage.fulfilled, (state, action) => {
+      .addCase(sendChatMessage.fulfilled, (state) => {
         state.sendingChat = false;
-        // If your API returns the full conversation or just the new reply:
-        // state.chatHistory.push(action.payload);
+        // The transcript is held by ChatLab, which restores it from the
+        // assistant's customer memory via fetchChatHistory — there is no copy
+        // of it in the store to keep in step.
       })
       .addCase(sendChatMessage.rejected, (state, action) => {
         state.sendingChat = false;
@@ -1680,6 +1709,9 @@ const assistantsSlice = createSlice({
 
       // Delete Contact
       .addCase(deleteContact.fulfilled, (state, action) => {
+        // Without this the flag stays true and the contact panel's Save button
+        // is disabled and spinning until the page is reloaded.
+        state.contactActionLoading = false;
         state.contacts = state.contacts.filter((c) => c.id !== action.payload);
       })
       .addCase(deleteContact.pending, (state) => {
