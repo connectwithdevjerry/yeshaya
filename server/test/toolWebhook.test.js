@@ -17,7 +17,7 @@ const t = (name, fn) => {
   catch (e) { console.log(`  FAIL ${name}\n       ${e.message}`); fail++; }
 };
 
-const { parseToolArgs, resolveAssistantId, toolCallsFrom, toEpochMs, dayWindowAround, isValidTimeZone } = require("../controller/assistant.controller");
+const { parseToolArgs, resolveAssistantId, toolCallsFrom, toEpochMs, dayWindowAround, isValidTimeZone, slotsFromFreeSlots } = require("../controller/assistant.controller");
 
 console.log("\n-- tool arguments --");
 t("JSON string is parsed (the OpenAI convention Vapi follows)", () =>
@@ -163,6 +163,34 @@ t("an invalid zone falls back to the UTC window rather than throwing", () => {
   const [start, end] = dayWindowAround(Date.parse("2026-09-11T15:00:00Z"), "Mars/Olympus");
   assert.strictEqual(start, Date.parse("2026-09-11T00:00:00.000Z"));
   assert.strictEqual(end, Date.parse("2026-09-11T23:59:59.999Z"));
+});
+
+console.log("\n-- free-slot shapes --");
+t("a top-level slots array is used as-is", () =>
+  assert.deepStrictEqual(
+    slotsFromFreeSlots({ slots: ["2026-09-10T09:00:00-04:00"] }),
+    ["2026-09-10T09:00:00-04:00"]));
+t("a date-keyed response is flattened, not read as empty", () =>
+  assert.deepStrictEqual(
+    slotsFromFreeSlots({
+      "2026-09-10": { slots: ["2026-09-10T09:00:00-04:00", "2026-09-10T10:00:00-04:00"] },
+      traceId: "abc",
+    }),
+    ["2026-09-10T09:00:00-04:00", "2026-09-10T10:00:00-04:00"]));
+t("several days are combined", () =>
+  assert.strictEqual(
+    slotsFromFreeSlots({
+      "2026-09-10": { slots: ["a", "b"] },
+      "2026-09-11": { slots: ["c"] },
+      traceId: "x",
+    }).length, 3));
+t("traceId is never mistaken for a day", () =>
+  assert.ok(!slotsFromFreeSlots({ traceId: "abc" }).includes("abc")));
+t("a genuinely empty diary is still empty", () => {
+  assert.deepStrictEqual(slotsFromFreeSlots({ slots: [] }), []);
+  assert.deepStrictEqual(slotsFromFreeSlots({ traceId: "x" }), []);
+  assert.deepStrictEqual(slotsFromFreeSlots(null), []);
+  assert.deepStrictEqual(slotsFromFreeSlots("nope"), []);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
