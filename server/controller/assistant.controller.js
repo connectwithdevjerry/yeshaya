@@ -1736,7 +1736,11 @@ const executeToolFromVapi = async (req, res) => {
       // Search the whole day the assistant asked about unless it gave an
       // explicit end, so "do you have anything Friday?" is not answered from a
       // one-second window.
-      const zone = isValidTimeZone(timezone) ? timezone : null;
+      // Prefer the sub-account's own timezone over whatever the model supplied:
+      // the business's calendar runs on one, and the model is guessing.
+      const zone =
+        (isValidTimeZone(targetSubAccount?.timezone) && targetSubAccount.timezone) ||
+        (isValidTimeZone(timezone) ? timezone : null);
       const [dayStart, dayEnd] = dayWindowAround(startAt, zone);
 
       // Asking for a window that has mostly already passed returns nothing
@@ -1820,12 +1824,61 @@ const executeToolFromVapi = async (req, res) => {
           results: [{ toolCallId: toolCall.id, result: "What time on that day should I book?" }],
         });
       }
-      const { time: startTime, zoneless } = toGhlAppointmentTime(requested);
-      if (zoneless) {
-        console.warn(
-          `book_appointment got a time with no timezone (${requested}); ` +
-            `treating it as UTC, which may not be the calendar's zone.`,
+      // Confirm the time against the slots GoHighLevel is publishing right now
+      // and book the string it gave us. GHL matches a booking against its own
+      // published slots, so a time we re-expressed — the same instant as a UTC
+      // "Z" form, say — is refused with "The slot you have selected is no
+      // longer available" on a calendar that is wide open.
+      const bookZone = isValidTimeZone(targetSubAccount?.timezone)
+        ? targetSubAccount.timezone
+        : null;
+      const [bookDayStart, bookDayEnd] = dayWindowAround(toEpochMs(requested), bookZone);
+
+      let startTime = null;
+      let offered = [];
+      try {
+        const { slots: daySlots } = await fetchFreeSlots({
+          calendarId,
+          accessToken,
+          startMs: Math.max(bookDayStart, Date.now()),
+          endMs: bookDayEnd,
+          timezone: bookZone,
+        });
+        offered = daySlots;
+        startTime = matchSlot(daySlots, requested);
+        console.log(
+          `book_appointment: asked for ${requested}; ` +
+            `${daySlots.length} slot(s) published that day; matched ${startTime || "none"}`,
         );
+      } catch (slotErr) {
+        // Losing the confirmation is not a reason to refuse the booking.
+        console.warn(
+          "book_appointment could not re-check availability:",
+          slotErr.response?.data || slotErr.message,
+        );
+      }
+
+      if (!startTime && offered.length) {
+        // GHL would answer this with "no longer available", which tells the
+        // caller nothing. Offer what is actually free instead.
+        return res.json({
+          results: [{
+            toolCallId: toolCall.id,
+            result: `That exact time isn't open. These are: ${offered.slice(0, 6).join(", ")}. Which would you like?`,
+          }],
+        });
+      }
+
+      if (!startTime) {
+        // Nothing to check against — send the time as given and let GHL decide.
+        const fallback = toGhlAppointmentTime(requested);
+        startTime = fallback.time;
+        if (fallback.zoneless) {
+          console.warn(
+            `book_appointment got a time with no timezone (${requested}); ` +
+              `treating it as UTC, which may not be the calendar's zone.`,
+          );
+        }
       }
 
       // Step A: Upsert Contact
@@ -2585,6 +2638,43 @@ const executeToolFromVapi = async (req, res) => {
       results: [{ toolCallId: toolCall.id, error: "Service unavailable." }],
     });
   }
+};
+
+// Learn a sub-account's timezone without making anyone wait for it.
+//
+// The assistant needs it to work out what "tomorrow" means, and the call path
+// cannot afford a round trip to GoHighLevel to find out. This runs detached:
+// this call uses whatever is already stored (UTC if nothing is), and the next
+// one has the real answer.
+const backfillSubaccountTimezone = (userId, accountId) => {
+  (async () => {
+    try {
+      const tkns = await getSubGhlTokens(userId, accountId);
+      const { data } = await axios.get(
+        `https://services.leadconnectorhq.com/locations/${accountId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${tkns.data.access_token}`,
+            Version: "2021-07-28",
+            Accept: "application/json",
+          },
+          timeout: TOOL_HTTP_TIMEOUT_MS,
+        },
+      );
+      const tz = (data?.location || data || {}).timezone;
+      if (!tz) return;
+      await userModel.updateOne(
+        { _id: userId, "ghlSubAccountIds.accountId": accountId },
+        { $set: { "ghlSubAccountIds.$.timezone": tz } },
+      );
+      console.log(`Stored timezone ${tz} for sub-account ${accountId}`);
+    } catch (e) {
+      console.warn(
+        `Could not learn timezone for sub-account ${accountId}:`,
+        e.response?.data?.message || e.message,
+      );
+    }
+  })();
 };
 
 const getSubGhlTokens = async (userId, accountId) => {
@@ -4390,6 +4480,7 @@ const makeOutboundCall = async (req, res) => {
       assistantId,
       memory,
       assistantNotes: targetAssistant.teamNotes,
+      timezone: targetSubaccount?.timezone || "",
       caller: { number: customerNumber },
       base: {
         firstMessage: message,
@@ -4461,6 +4552,9 @@ const sendChatMessage = async (req, res) => {
   const user = await userModel.findById(userId);
 
   const chatSubaccountId = resolveSubaccountId(user, assistantId);
+  const chatSubaccount = (user.ghlSubAccountIds || []).find(
+    (sub) => sub.accountId === chatSubaccountId,
+  );
   const chatAssistant = (user.ghlSubAccountIds || [])
     .flatMap((sub) => sub.vapiAssistants || [])
     .find((ast) => ast.assistantId === assistantId);
@@ -4494,7 +4588,11 @@ const sendChatMessage = async (req, res) => {
 
   try {
     const input = [
-      ...memorySystemTurns(memory, { assistantNotes: chatAssistant?.teamNotes, ...scope }),
+      ...memorySystemTurns(memory, {
+        assistantNotes: chatAssistant?.teamNotes,
+        timezone: chatSubaccount?.timezone || "",
+        ...scope,
+      }),
       ...recentTurnsFor(memory, scope),
       { role: "user", content: userText },
     ];
@@ -5127,6 +5225,18 @@ const getSubAccountGhlDetails = async (req, res) => {
       timezone: loc.timezone || "",
     };
 
+    // Keep the timezone. The assistant needs it to reason about dates on a
+    // call, and re-fetching it there would cost a round trip while the caller
+    // waits. Best-effort: a failure here must not fail the page.
+    if (business.timezone) {
+      userModel
+        .updateOne(
+          { _id: userId, "ghlSubAccountIds.accountId": subaccountId },
+          { $set: { "ghlSubAccountIds.$.timezone": business.timezone } },
+        )
+        .catch((e) => console.warn("could not store sub-account timezone:", e.message));
+    }
+
     return res.status(200).json({ status: true, data: business });
   } catch (error) {
     console.error("❌ getSubAccountGhlDetails error:", error.response?.data || error.message);
@@ -5272,6 +5382,7 @@ module.exports = {
   getSubAccountGhlDetails,
   importContacts,
   getSubGhlTokensExport: getSubGhlTokens,
+  backfillSubaccountTimezone,
 };
 
 // what's left

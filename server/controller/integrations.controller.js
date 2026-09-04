@@ -16,7 +16,7 @@ const { HighLevel } = require("@gohighlevel/api-client");
 
 const https = require("https");
 const twilio = require("twilio");
-const { getVapiPhoneId } = require("./assistant.controller");
+const { getVapiPhoneId, backfillSubaccountTimezone } = require("./assistant.controller");
 const {
   extractVariables,
   fillTemplate,
@@ -1308,10 +1308,17 @@ const twilioCallReceiver = async (req, res) => {
     // derived from the wallet balance — doing so cut live calls off mid-sentence.
     const maxDurationSeconds = billing.callDurationCap();
 
+    // The assistant works out "tomorrow" and "next Tuesday" from this. Without
+    // it the model answers from its training data — it was offering dates in
+    // 2024. Learned in the background the first time so no call waits on it.
+    const subTimezone = targetSubaccount[0]?.timezone || "";
+    if (!subTimezone) backfillSubaccountTimezone(userId, subaccount);
+
     const assistantOverrides = await buildAssistantOverrides({
       assistantId: assistant,
       memory,
       assistantNotes: targetAssistant[0]?.teamNotes,
+      timezone: subTimezone,
       // Known from the ring, with or without memory behind it.
       caller: { number: callerNumber, name: myCustomer?.firstName || "" },
       base: {
@@ -1410,7 +1417,10 @@ const twilioSmsReceiver = async (req, res) => {
     });
 
     const input = [
-      ...memorySystemTurns(memory, { assistantNotes: targetAssistant.teamNotes }),
+      ...memorySystemTurns(memory, {
+        assistantNotes: targetAssistant.teamNotes,
+        timezone: targetSubaccount?.timezone || "",
+      }),
       ...recentTurnsFor(memory),
       { role: "user", content: userText },
     ];

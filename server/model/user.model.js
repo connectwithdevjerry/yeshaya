@@ -61,6 +61,9 @@ const userSchema = mongoose.Schema({
   ghlSubAccountIds: [
     {
       accountId:              String,
+      // The location's IANA timezone from GoHighLevel. Without it the assistant
+      // reasons about dates in UTC, which is the wrong day near midnight.
+      timezone:               String,
       ghlSubRefreshToken:     String,
       ghlSubRefreshTokenExpiry: Date,
       ghlSubAccessToken:      String,

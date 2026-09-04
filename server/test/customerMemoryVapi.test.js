@@ -106,9 +106,24 @@ const memory = {
   t("three calls to one assistant hit Vapi once, not three times", () =>
     assert.strictEqual(served, 1));
 
-  ov = await M.buildAssistantOverrides({ assistantId: "ast_1", memory: null, base: { firstMessage: "Hi!" } });
-  t("no memory = base returned untouched, no Vapi read", () =>
-    assert.deepStrictEqual(ov, { firstMessage: "Hi!" }));
+  // The date is injected whether or not there is memory: the model was
+  // otherwise answering from its training data and offering dates in 2024.
+  getHandler = async () => ({
+    data: { model: { provider: "openai", model: "gpt-4o", messages: [{ role: "system", content: "Base." }] } },
+  });
+  ov = await M.buildAssistantOverrides({
+    assistantId: "ast_dateonly", memory: null, timezone: "America/New_York", base: { firstMessage: "Hi!" },
+  });
+  t("with no memory the base survives", () => assert.strictEqual(ov.firstMessage, "Hi!"));
+  t("the date is injected anyway", () => {
+    assert.ok(ov.model.messages[0].content.includes("## Today"));
+    assert.ok(ov.model.messages[0].content.startsWith("Base."));
+  });
+  t("the business timezone reaches the prompt and the variables", () => {
+    assert.ok(ov.model.messages[0].content.includes("America/New_York"));
+    assert.strictEqual(ov.variableValues.currentTimezone, "America/New_York");
+    assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(ov.variableValues.currentDate));
+  });
 
   // The shape this codebase actually creates assistants in. assistant.controller
   // sends `model.systemPrompt`, and the prompt editor reads it back from there,
