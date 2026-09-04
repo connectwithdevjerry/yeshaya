@@ -1348,6 +1348,28 @@ const slotsFromFreeSlots = (payload) => {
   return collected;
 };
 
+// GET the calendar's free slots for a window. Shared by the availability check
+// and by booking, which has to confirm against the same list GoHighLevel will
+// validate the booking against.
+const fetchFreeSlots = async ({ calendarId, accessToken, startMs, endMs, timezone }) => {
+  const { data } = await axios.get(
+    `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`,
+    {
+      params: {
+        startDate: startMs,
+        endDate: endMs,
+        ...(timezone && { timezone }),
+      },
+      timeout: TOOL_HTTP_TIMEOUT_MS,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Version: "2021-04-15",
+      },
+    },
+  );
+  return { slots: slotsFromFreeSlots(data), raw: data };
+};
+
 // ─── date arguments ──────────────────────────────────────────────────────────
 
 // Turns whatever the assistant put in a date argument into epoch milliseconds.
@@ -1462,6 +1484,81 @@ const dayWindowAround = (ms, timeZone) => {
 // `arguments` follows the OpenAI convention and arrives as a JSON *string* on
 // current payloads; destructuring it as an object yields undefined for every
 // field, which is why check_availability and book_appointment never saw a date.
+// The appointment endpoint takes an ISO 8601 string, and GoHighLevel's own
+// free-slots response hands the assistant times that already carry the
+// calendar's UTC offset — "2026-09-10T09:00:00-04:00". When the assistant
+// echoes one of those back, sending it through unchanged is exactly right and
+// avoids re-expressing it in a form the validator may not take: Date's
+// toISOString() emits milliseconds, which GHL's documented format does not.
+//
+// Anything else — an epoch, a bare "2026-09-10 14:30" — is normalised to
+// seconds precision. Note that a datetime with no offset at all is ambiguous:
+// Date.parse reads it as the server's zone (UTC here), not the business's, so
+// it is reported rather than silently booked at the wrong hour.
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
+
+const toGhlAppointmentTime = (value) => {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (ISO_WITH_OFFSET.test(raw)) return { time: raw, zoneless: false };
+
+  const ms = toEpochMs(value);
+  if (ms === null) return { time: null, zoneless: false };
+  return {
+    time: new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z"),
+    // A bare local datetime carried no zone, so the instant above is a guess.
+    zoneless: /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(raw) && !/(Z|[+-]\d{2}:?\d{2})$/.test(raw),
+  };
+};
+
+// Pick the slot GoHighLevel itself offered that the assistant meant.
+//
+// GHL rejects a booking whose startTime does not line up with a real slot —
+// "The slot you have selected is no longer available" — and it matches against
+// the strings it published, which carry the calendar's own offset
+// ("2026-09-10T09:00:00-04:00"). Anything re-expressed on the way through, a
+// UTC Z form especially, stops matching even though it names the same instant.
+//
+// So never book a time we composed. Take the time the assistant asked for, find
+// the published slot it refers to, and send that slot back verbatim.
+const matchSlot = (slots, requested) => {
+  const list = (slots || []).filter((x) => typeof x === "string");
+  if (!list.length) return null;
+
+  const wantedMs = toEpochMs(requested);
+
+  // The assistant echoed a slot back, or named the same instant another way.
+  if (wantedMs !== null) {
+    const exact = list.find((slot) => Date.parse(slot) === wantedMs);
+    if (exact) return exact;
+  }
+
+  // It gave a wall-clock time with no zone ("2026-09-10T09:00"), which is the
+  // calendar's local time even though nothing in the string says so. GHL's own
+  // slots carry local time in their first 16 characters, so compare that.
+  const wall = String(requested || "").match(/T(\d{2}):(\d{2})/);
+  if (wall) {
+    const sameClock = list.find((slot) => {
+      const slotWall = slot.match(/T(\d{2}):(\d{2})/);
+      return slotWall && slotWall[1] === wall[1] && slotWall[2] === wall[2];
+    });
+    if (sameClock) return sameClock;
+  }
+
+  // Near enough to be what they meant — a minute of rounding, not a different
+  // appointment. Anything further away is offered as an alternative instead.
+  if (wantedMs !== null) {
+    let best = null;
+    let bestGap = Infinity;
+    for (const slot of list) {
+      const gap = Math.abs(Date.parse(slot) - wantedMs);
+      if (gap < bestGap) { best = slot; bestGap = gap; }
+    }
+    if (best && bestGap <= 60_000) return best;
+  }
+
+  return null;
+};
+
 const parseToolArgs = (raw) => {
   if (!raw) return {};
   if (typeof raw === "object") return raw;
@@ -1657,24 +1754,11 @@ const executeToolFromVapi = async (req, res) => {
         });
       }
 
-      let response;
+      let slots, rawSlots;
       try {
-        response = await axios.get(
-          `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`,
-          {
-            params: {
-              startDate: startMs,
-              endDate: endMs,
-              ...(zone && { timezone: zone }),
-            },
-            timeout: TOOL_HTTP_TIMEOUT_MS,
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              Version: "2021-04-15",
-            },
-            timeout: 10_000,
-          },
-        );
+        ({ slots, raw: rawSlots } = await fetchFreeSlots({
+          calendarId, accessToken, startMs, endMs, timezone: zone,
+        }));
       } catch (slotsErr) {
         // 404 here means the calendar itself is gone from GoHighLevel, not that
         // there happen to be no slots. Saying "no availability" would send the
@@ -1697,8 +1781,6 @@ const executeToolFromVapi = async (req, res) => {
         throw slotsErr;
       }
 
-      const slots = slotsFromFreeSlots(response.data);
-
       // Every "no availability" report so far has been this call succeeding and
       // returning something the parser did not recognise. Log the shape — not
       // the whole body — so the next one is answerable from the server log.
@@ -1707,7 +1789,7 @@ const executeToolFromVapi = async (req, res) => {
           `check_availability found no slots for calendar ${calendarId} ` +
             `between ${new Date(startMs).toISOString()} and ${new Date(endMs).toISOString()}` +
             `${zone ? ` (${zone})` : ""}. Response keys: ` +
-            JSON.stringify(Object.keys(response.data || {})),
+            JSON.stringify(Object.keys(rawSlots || {})),
         );
       }
 
@@ -1726,8 +1808,7 @@ const executeToolFromVapi = async (req, res) => {
       const { customerEmail, customerName } = args;
       // The tool exposes the param as `requestedTime`; accept `startTime` too.
       const requested = args.requestedTime || args.startTime;
-      const requestedAt = toEpochMs(requested);
-      if (requestedAt === null) {
+      if (toEpochMs(requested) === null) {
         return res.json({
           results: [{ toolCallId: toolCall.id, result: "I couldn't read the requested time. Please restate the date and time." }],
         });
@@ -1739,9 +1820,13 @@ const executeToolFromVapi = async (req, res) => {
           results: [{ toolCallId: toolCall.id, result: "What time on that day should I book?" }],
         });
       }
-      // GoHighLevel's appointment endpoint takes ISO 8601, not the epoch its
-      // free-slots endpoint wants. Normalise so either input shape works.
-      const startTime = new Date(requestedAt).toISOString();
+      const { time: startTime, zoneless } = toGhlAppointmentTime(requested);
+      if (zoneless) {
+        console.warn(
+          `book_appointment got a time with no timezone (${requested}); ` +
+            `treating it as UTC, which may not be the calendar's zone.`,
+        );
+      }
 
       // Step A: Upsert Contact
       const contactRes = await axios.post(
@@ -1775,23 +1860,49 @@ const executeToolFromVapi = async (req, res) => {
 
       // Step B: Create Appointment (v2 endpoint is /calendars/events/appointments)
       const title = `Vapi Booking: ${customerName}`;
-      const eventRes = await axios.post(
-        "https://services.leadconnectorhq.com/calendars/events/appointments",
-        {
-          calendarId,
-          locationId,
-          contactId,
-          startTime,
-          title,
-        },
-        {
-          timeout: TOOL_HTTP_TIMEOUT_MS,
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Version: "2021-04-15",
+      const appointmentPayload = {
+        calendarId,
+        locationId,
+        contactId,
+        startTime,
+        title,
+      };
+
+      let eventRes;
+      try {
+        eventRes = await axios.post(
+          "https://services.leadconnectorhq.com/calendars/events/appointments",
+          appointmentPayload,
+          {
+            timeout: TOOL_HTTP_TIMEOUT_MS,
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-04-15",
+            },
           },
-        },
-      );
+        );
+      } catch (bookErr) {
+        // This used to fall through to the handler's generic catch, which logs
+        // "GHL Error" and tells the caller the service is unavailable — the
+        // same thing it says for an expired token or a network blip. A booking
+        // that fails after the customer has agreed a time deserves to say what
+        // GoHighLevel actually objected to, and to what.
+        console.error(
+          "book_appointment rejected by GoHighLevel:",
+          JSON.stringify({
+            status: bookErr.response?.status,
+            body: bookErr.response?.data,
+            sent: appointmentPayload,
+          }),
+        );
+        return res.status(200).json({
+          results: [{
+            toolCallId: toolCall.id,
+            result:
+              "I couldn't confirm that slot on the calendar. Someone from the team will follow up to finish booking it.",
+          }],
+        });
+      }
 
       // ── Phase A: store appointment, confirm by email, notify agency ──
       const ghlEventId = eventRes.data?.id || eventRes.data?.event?.id || "";
@@ -2223,7 +2334,13 @@ const executeToolFromVapi = async (req, res) => {
           results: [{ toolCallId: toolCall.id, result: "What time on that day should I schedule it?" }],
         });
       }
-      const startTime = new Date(requestedAt).toISOString();
+      const { time: startTime, zoneless } = toGhlAppointmentTime(args.startTime);
+      if (zoneless) {
+        console.warn(
+          `self_schedule got a time with no timezone (${args.startTime}); ` +
+            `treating it as UTC, which may not be the calendar's zone.`,
+        );
+      }
 
       try {
         // Get fresh access token
@@ -5146,6 +5263,8 @@ module.exports = {
   toEpochMs,
   dayWindowAround,
   slotsFromFreeSlots,
+  toGhlAppointmentTime,
+  matchSlot,
   isValidTimeZone,
   resolveAssistantId,
   toolCallsFrom,
