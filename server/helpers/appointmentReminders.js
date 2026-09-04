@@ -40,6 +40,15 @@ const sendReminder = async (appt, whenLabel) => {
 
 // One sweep: find appointments due for a reminder and send
 const runSweep = async () => {
+  // Reminders are GoHighLevel's, sent by the calendar's own notification
+  // settings. Ours would arrive beside them from a different sender, so the
+  // sweep does nothing unless it is deliberately switched on — the way back
+  // for a calendar with no reminder configured.
+  if (process.env.SEND_OWN_REMINDERS !== "true") {
+    console.log("Appointment reminders are handled by GoHighLevel — sweep skipped.");
+    return;
+  }
+
   try {
     const now = Date.now();
 

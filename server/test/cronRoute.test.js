@@ -91,6 +91,31 @@ const call = (path, { auth, key } = {}) =>
     assert.deepStrictEqual(ran, []);
   });
 
+  console.log("\n-- customer messages are GoHighLevel's, not ours --");
+  // Checks the gate in the real module, not the stub above. The models it pulls
+  // in open a database connection at require time, so they are stubbed first.
+  let touchedDb = false;
+  for (const [path, exports] of [
+    ["../model/appointment.model", { find: async () => { touchedDb = true; return []; } }],
+    ["../model/user.model", { findById: () => ({ select: async () => null }) }],
+    ["../controller/notification.controller", { createNotification: async () => {} }],
+    ["../resendObject", async () => {}],
+  ]) {
+    const id = require.resolve(path);
+    require.cache[id] = { id, filename: id, loaded: true, exports };
+  }
+  delete require.cache[REMIND];
+  delete process.env.SEND_OWN_REMINDERS;
+  const realReminders = require("../helpers/appointmentReminders");
+  await realReminders.runSweep();
+  t("the sweep does nothing unless deliberately switched on", () =>
+    assert.strictEqual(touchedDb, false));
+
+  process.env.SEND_OWN_REMINDERS = "true";
+  await realReminders.runSweep();
+  t("...and does run when it is", () => assert.strictEqual(touchedDb, true));
+  delete process.env.SEND_OWN_REMINDERS;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
