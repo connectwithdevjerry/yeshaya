@@ -17,7 +17,7 @@ const t = (name, fn) => {
   catch (e) { console.log(`  FAIL ${name}\n       ${e.message}`); fail++; }
 };
 
-const { parseToolArgs, resolveAssistantId, toolCallsFrom, toEpochMs, dayWindowAround, isValidTimeZone, slotsFromFreeSlots } = require("../controller/assistant.controller");
+const { parseToolArgs, resolveAssistantId, toolCallsFrom, toEpochMs, dayWindowAround, isValidTimeZone, slotsFromFreeSlots, toGhlAppointmentTime } = require("../controller/assistant.controller");
 
 console.log("\n-- tool arguments --");
 t("JSON string is parsed (the OpenAI convention Vapi follows)", () =>
@@ -192,6 +192,38 @@ t("a genuinely empty diary is still empty", () => {
   assert.deepStrictEqual(slotsFromFreeSlots(null), []);
   assert.deepStrictEqual(slotsFromFreeSlots("nope"), []);
 });
+
+console.log("\n-- appointment times --");
+// GoHighLevel hands the assistant slots carrying the calendar's own offset.
+// Echoing one back should reach the booking endpoint exactly as it came.
+t("a slot string from free-slots goes through untouched", () =>
+  assert.strictEqual(
+    toGhlAppointmentTime("2026-09-10T09:00:00-04:00").time,
+    "2026-09-10T09:00:00-04:00"));
+t("a Z time is kept as-is too", () =>
+  assert.strictEqual(
+    toGhlAppointmentTime("2026-09-10T13:00:00Z").time,
+    "2026-09-10T13:00:00Z"));
+t("milliseconds are never emitted — GHL's format has none", () => {
+  const { time } = toGhlAppointmentTime(Date.parse("2026-09-10T13:00:00Z"));
+  assert.strictEqual(time, "2026-09-10T13:00:00Z");
+  assert.ok(!/\.\d{3}/.test(time));
+});
+t("an epoch becomes a clean ISO string", () =>
+  assert.strictEqual(
+    toGhlAppointmentTime(Date.parse("2026-09-10T13:00:00Z")).time,
+    "2026-09-10T13:00:00Z"));
+t("a time with no zone is flagged, not silently booked", () => {
+  const got = toGhlAppointmentTime("2026-09-10T09:00:00");
+  assert.strictEqual(got.zoneless, true);
+  assert.strictEqual(got.time, "2026-09-10T09:00:00Z");
+});
+t("a time that carries a zone is not flagged", () => {
+  assert.strictEqual(toGhlAppointmentTime("2026-09-10T09:00:00-04:00").zoneless, false);
+  assert.strictEqual(toGhlAppointmentTime("2026-09-10T13:00:00Z").zoneless, false);
+});
+t("an unreadable time is null, so booking asks again", () =>
+  assert.strictEqual(toGhlAppointmentTime("some time next week").time, null));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -1462,6 +1462,32 @@ const dayWindowAround = (ms, timeZone) => {
 // `arguments` follows the OpenAI convention and arrives as a JSON *string* on
 // current payloads; destructuring it as an object yields undefined for every
 // field, which is why check_availability and book_appointment never saw a date.
+// The appointment endpoint takes an ISO 8601 string, and GoHighLevel's own
+// free-slots response hands the assistant times that already carry the
+// calendar's UTC offset — "2026-09-10T09:00:00-04:00". When the assistant
+// echoes one of those back, sending it through unchanged is exactly right and
+// avoids re-expressing it in a form the validator may not take: Date's
+// toISOString() emits milliseconds, which GHL's documented format does not.
+//
+// Anything else — an epoch, a bare "2026-09-10 14:30" — is normalised to
+// seconds precision. Note that a datetime with no offset at all is ambiguous:
+// Date.parse reads it as the server's zone (UTC here), not the business's, so
+// it is reported rather than silently booked at the wrong hour.
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
+
+const toGhlAppointmentTime = (value) => {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (ISO_WITH_OFFSET.test(raw)) return { time: raw, zoneless: false };
+
+  const ms = toEpochMs(value);
+  if (ms === null) return { time: null, zoneless: false };
+  return {
+    time: new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z"),
+    // A bare local datetime carried no zone, so the instant above is a guess.
+    zoneless: /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(raw) && !/(Z|[+-]\d{2}:?\d{2})$/.test(raw),
+  };
+};
+
 const parseToolArgs = (raw) => {
   if (!raw) return {};
   if (typeof raw === "object") return raw;
@@ -1726,8 +1752,7 @@ const executeToolFromVapi = async (req, res) => {
       const { customerEmail, customerName } = args;
       // The tool exposes the param as `requestedTime`; accept `startTime` too.
       const requested = args.requestedTime || args.startTime;
-      const requestedAt = toEpochMs(requested);
-      if (requestedAt === null) {
+      if (toEpochMs(requested) === null) {
         return res.json({
           results: [{ toolCallId: toolCall.id, result: "I couldn't read the requested time. Please restate the date and time." }],
         });
@@ -1739,9 +1764,13 @@ const executeToolFromVapi = async (req, res) => {
           results: [{ toolCallId: toolCall.id, result: "What time on that day should I book?" }],
         });
       }
-      // GoHighLevel's appointment endpoint takes ISO 8601, not the epoch its
-      // free-slots endpoint wants. Normalise so either input shape works.
-      const startTime = new Date(requestedAt).toISOString();
+      const { time: startTime, zoneless } = toGhlAppointmentTime(requested);
+      if (zoneless) {
+        console.warn(
+          `book_appointment got a time with no timezone (${requested}); ` +
+            `treating it as UTC, which may not be the calendar's zone.`,
+        );
+      }
 
       // Step A: Upsert Contact
       const contactRes = await axios.post(
@@ -1775,23 +1804,49 @@ const executeToolFromVapi = async (req, res) => {
 
       // Step B: Create Appointment (v2 endpoint is /calendars/events/appointments)
       const title = `Vapi Booking: ${customerName}`;
-      const eventRes = await axios.post(
-        "https://services.leadconnectorhq.com/calendars/events/appointments",
-        {
-          calendarId,
-          locationId,
-          contactId,
-          startTime,
-          title,
-        },
-        {
-          timeout: TOOL_HTTP_TIMEOUT_MS,
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Version: "2021-04-15",
+      const appointmentPayload = {
+        calendarId,
+        locationId,
+        contactId,
+        startTime,
+        title,
+      };
+
+      let eventRes;
+      try {
+        eventRes = await axios.post(
+          "https://services.leadconnectorhq.com/calendars/events/appointments",
+          appointmentPayload,
+          {
+            timeout: TOOL_HTTP_TIMEOUT_MS,
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Version: "2021-04-15",
+            },
           },
-        },
-      );
+        );
+      } catch (bookErr) {
+        // This used to fall through to the handler's generic catch, which logs
+        // "GHL Error" and tells the caller the service is unavailable — the
+        // same thing it says for an expired token or a network blip. A booking
+        // that fails after the customer has agreed a time deserves to say what
+        // GoHighLevel actually objected to, and to what.
+        console.error(
+          "book_appointment rejected by GoHighLevel:",
+          JSON.stringify({
+            status: bookErr.response?.status,
+            body: bookErr.response?.data,
+            sent: appointmentPayload,
+          }),
+        );
+        return res.status(200).json({
+          results: [{
+            toolCallId: toolCall.id,
+            result:
+              "I couldn't confirm that slot on the calendar. Someone from the team will follow up to finish booking it.",
+          }],
+        });
+      }
 
       // ── Phase A: store appointment, confirm by email, notify agency ──
       const ghlEventId = eventRes.data?.id || eventRes.data?.event?.id || "";
@@ -2223,7 +2278,13 @@ const executeToolFromVapi = async (req, res) => {
           results: [{ toolCallId: toolCall.id, result: "What time on that day should I schedule it?" }],
         });
       }
-      const startTime = new Date(requestedAt).toISOString();
+      const { time: startTime, zoneless } = toGhlAppointmentTime(args.startTime);
+      if (zoneless) {
+        console.warn(
+          `self_schedule got a time with no timezone (${args.startTime}); ` +
+            `treating it as UTC, which may not be the calendar's zone.`,
+        );
+      }
 
       try {
         // Get fresh access token
@@ -5146,6 +5207,7 @@ module.exports = {
   toEpochMs,
   dayWindowAround,
   slotsFromFreeSlots,
+  toGhlAppointmentTime,
   isValidTimeZone,
   resolveAssistantId,
   toolCallsFrom,
