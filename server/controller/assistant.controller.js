@@ -94,11 +94,12 @@ const toolsProperties = {
       startTime: {
         type: "string",
         description:
-          "The ISO 8601 timestamp to start checking from (e.g., 2024-05-01T09:00:00Z)",
+          "The day to check, as a date (e.g. 2026-05-01) or an ISO 8601 timestamp (e.g. 2026-05-01T09:00:00Z). The whole of that day is searched unless endTime is given.",
       },
       endTime: {
         type: "string",
-        description: "The ISO 8601 timestamp to stop checking at.",
+        description:
+          "Optional. Stop checking at this ISO 8601 timestamp instead of the end of the day.",
       },
       timezone: {
         type: "string",
@@ -115,7 +116,8 @@ const toolsProperties = {
       customerEmail: { type: "string", description: "The email of the caller" },
       requestedTime: {
         type: "string",
-        description: "The ISO string of the appointment time",
+        description:
+          "The appointment time as an ISO 8601 timestamp, including the time of day (e.g. 2026-05-01T14:30:00Z). A date on its own is not enough to book.",
       },
     },
     requiredValues: ["customerName", "customerEmail", "requestedTime"],
@@ -1323,6 +1325,113 @@ const createCustomTool = async (req, res) => {
   }
 };
 
+// ─── date arguments ──────────────────────────────────────────────────────────
+
+// Turns whatever the assistant put in a date argument into epoch milliseconds.
+//
+// The tool schemas ask for an ISO 8601 timestamp, but a model will just as
+// readily send a bare "2026-09-10", a local-looking "2026-09-10 14:30", or the
+// epoch it was handed back by an earlier tool. GoHighLevel's calendar endpoints
+// take epoch milliseconds and reject anything else with a 422 — and NaN
+// serialises into the query string as the literal "NaN", which is how
+// `startDate must be a number conforming to the specified constraints` came
+// back for every availability check.
+//
+// Returns null when the value cannot be read as a date, so callers can say so
+// to the caller instead of putting NaN on the wire.
+const toEpochMs = (value, { endOfDay = false } = {}) => {
+  if (value === null || value === undefined || value === "") return null;
+
+  // Already epoch — milliseconds, or seconds from a model that rounded.
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value < 1e11 ? Math.round(value * 1000) : Math.round(value);
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (/^\d{10}$/.test(raw)) return Number(raw) * 1000;
+  if (/^\d{13}$/.test(raw)) return Number(raw);
+
+  // A bare calendar date carries no time. Anchor it to the start or the end of
+  // that day depending on which end of a range is being built.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const ms = Date.parse(`${raw}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`);
+    return Number.isNaN(ms) ? null : ms;
+  }
+
+  const ms = Date.parse(raw);
+  if (!Number.isNaN(ms)) return ms;
+
+  // "2026-09-10 14:30" — valid enough for a human, not for Date.parse.
+  const spaced = Date.parse(raw.replace(" ", "T"));
+  return Number.isNaN(spaced) ? null : spaced;
+};
+
+// True only for a zone this runtime's tz data actually knows. Legacy aliases
+// like "EST" are real entries and pass; strings a model reached for on its own
+// ("GMT+1", "pacific standard time", a typo) do not, and must not be forwarded
+// — GoHighLevel rejects the request rather than ignoring the field.
+const isValidTimeZone = (tz) => {
+  if (!tz || typeof tz !== "string") return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// How far `timeZone` is from UTC at the given instant, in milliseconds.
+// Derived from the formatted local time rather than a table, so DST is whatever
+// the runtime's own zone data says it is.
+const zoneOffsetMs = (ms, timeZone) => {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour12: false,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    })
+      .formatToParts(new Date(ms))
+      .map((p) => [p.type, p.value]),
+  );
+  const local = Date.UTC(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+    Number(parts.hour) % 24, Number(parts.minute), Number(parts.second),
+  );
+  return local - ms;
+};
+
+// The day containing `ms`, as a [start, end] pair of epoch milliseconds.
+//
+// Without a zone this is the UTC day, which is what it always was — and for a
+// business anywhere west of Greenwich that window ends mid-evening local time,
+// so "anything Friday?" never saw Friday evening's slots.
+const dayWindowAround = (ms, timeZone) => {
+  if (!isValidTimeZone(timeZone)) {
+    const start = new Date(ms);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(start.getTime());
+    end.setUTCHours(23, 59, 59, 999);
+    return [start.getTime(), end.getTime()];
+  }
+
+  // Local midnight, resolved twice: the first guess uses the offset in force at
+  // `ms`, which is the wrong one when the day being asked about crosses a DST
+  // change.
+  const localDayStart = (instant) => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const floored = Math.floor((instant + zoneOffsetMs(instant, timeZone)) / dayMs) * dayMs;
+    const asUtc = floored - zoneOffsetMs(floored, timeZone);
+    // Re-resolve against the offset actually in force at the candidate.
+    return floored - zoneOffsetMs(asUtc, timeZone);
+  };
+
+  const start = localDayStart(ms);
+  const end = start + 24 * 60 * 60 * 1000 - 1;
+  return [start, end];
+};
+
 // Vapi's tool-call payload is not one fixed shape, and every assumption the
 // handler made about it failed silently — a tool that cannot read its arguments
 // just returns nothing useful, and the assistant stalls or improvises.
@@ -1487,16 +1596,41 @@ const executeToolFromVapi = async (req, res) => {
 
     // 1 --- TOOL: CHECK AVAILABILITY ---
     if (name === "check_availability") {
-      const { startTime } = args; // "YYYY-MM-DD"
-      const startMs = new Date(`${startTime}T00:00:00Z`).getTime();
-      const endMs = new Date(`${startTime}T23:59:59Z`).getTime();
+      const { startTime, endTime, timezone } = args;
+
+      // This used to interpolate the argument into `${startTime}T00:00:00Z`,
+      // which only works for a bare "YYYY-MM-DD" — and the tool schema asks the
+      // model for a full ISO timestamp, so it usually produced
+      // "2026-09-10T09:00:00ZT00:00:00Z", an Invalid Date, and NaN on the wire.
+      const startAt = toEpochMs(startTime);
+      if (startAt === null) {
+        console.warn(`check_availability got an unusable startTime: ${JSON.stringify(startTime)}`);
+        return res.status(200).json({
+          results: [{
+            toolCallId: toolCall.id,
+            result: "I didn't catch which day you'd like. Could you say the date again?",
+          }],
+        });
+      }
+
+      // Search the whole day the assistant asked about unless it gave an
+      // explicit end, so "do you have anything Friday?" is not answered from a
+      // one-second window.
+      const zone = isValidTimeZone(timezone) ? timezone : null;
+      const [dayStart, dayEnd] = dayWindowAround(startAt, zone);
+      const startMs = dayStart;
+      const endMs = toEpochMs(endTime, { endOfDay: true }) ?? dayEnd;
 
       let response;
       try {
         response = await axios.get(
           `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`,
           {
-            params: { startDate: startMs, endDate: endMs },
+            params: {
+              startDate: startMs,
+              endDate: endMs,
+              ...(zone && { timezone: zone }),
+            },
             headers: {
               Authorization: `Bearer ${accessToken}`,
               Version: "2021-07-28",
@@ -1541,12 +1675,23 @@ const executeToolFromVapi = async (req, res) => {
     if (name === "book_appointment") {
       const { customerEmail, customerName } = args;
       // The tool exposes the param as `requestedTime`; accept `startTime` too.
-      const startTime = args.requestedTime || args.startTime;
-      if (!startTime) {
+      const requested = args.requestedTime || args.startTime;
+      const requestedAt = toEpochMs(requested);
+      if (requestedAt === null) {
         return res.json({
           results: [{ toolCallId: toolCall.id, result: "I couldn't read the requested time. Please restate the date and time." }],
         });
       }
+      // A bare date would book at midnight. Ask rather than put someone in the
+      // diary at a time nobody agreed to.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(requested).trim())) {
+        return res.json({
+          results: [{ toolCallId: toolCall.id, result: "What time on that day should I book?" }],
+        });
+      }
+      // GoHighLevel's appointment endpoint takes ISO 8601, not the epoch its
+      // free-slots endpoint wants. Normalise so either input shape works.
+      const startTime = new Date(requestedAt).toISOString();
 
       // Step A: Upsert Contact
       const contactRes = await axios.post(
@@ -1794,12 +1939,12 @@ const executeToolFromVapi = async (req, res) => {
       const accessToken = await getFreshAccessToken(user);
 
       // Default range: If AI doesn't provide dates, look from 30 days ago to 90 days ahead
-      const startAt = startDate
-        ? new Date(startDate).getTime()
-        : Date.now() - 30 * 24 * 60 * 60 * 1000;
-      const endAt = endDate
-        ? new Date(endDate).getTime()
-        : Date.now() + 90 * 24 * 60 * 60 * 1000;
+      // An unreadable date falls back to the default window rather than
+      // reaching GoHighLevel as NaN, which it answers with a 422.
+      const startAt =
+        toEpochMs(startDate) ?? Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const endAt =
+        toEpochMs(endDate, { endOfDay: true }) ?? Date.now() + 90 * 24 * 60 * 60 * 1000;
 
       const response = await axios.get(
         `https://services.leadconnectorhq.com/calendars/events`,
@@ -1934,9 +2079,10 @@ const executeToolFromVapi = async (req, res) => {
 
     // 8 --- TOOL: SELF SCHEDULE (GOHIGHLEVEL) ---
     if (name === "self_schedule") {
-      const { customerName, customerEmail, startTime, title } = args;
+      const { customerName, customerEmail, title } = args;
+      const requestedAt = toEpochMs(args.startTime);
 
-      if (!customerName || !customerEmail || !startTime) {
+      if (!customerName || !customerEmail || requestedAt === null) {
         return res.status(200).json({
           results: [
             {
@@ -1947,6 +2093,12 @@ const executeToolFromVapi = async (req, res) => {
           ],
         });
       }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(args.startTime).trim())) {
+        return res.status(200).json({
+          results: [{ toolCallId: toolCall.id, result: "What time on that day should I schedule it?" }],
+        });
+      }
+      const startTime = new Date(requestedAt).toISOString();
 
       try {
         // Get fresh access token
@@ -4856,6 +5008,9 @@ module.exports = {
   updateTeamNotes,
   // exported for tests
   parseToolArgs,
+  toEpochMs,
+  dayWindowAround,
+  isValidTimeZone,
   resolveAssistantId,
   toolCallsFrom,
   getSubAccountSpend,
