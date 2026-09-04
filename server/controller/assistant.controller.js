@@ -2304,6 +2304,26 @@ const getSubGhlTokens = async (userId, accountId) => {
   }
 };
 
+// Confirms an arrayFilters write to a nested assistant actually landed.
+//
+// `updateOne` matches the user document, not the array element, so
+// `matchedCount` is 1 whenever the user exists — even when the filters matched
+// no sub-account or assistant and nothing was written. Reporting success off
+// that is how a calendar could be "unlinked successfully" while still linked.
+//
+// modifiedCount of 0 is ambiguous: either nothing matched, or the field already
+// held the value being written. Only that case costs a read to tell them apart.
+const assistantWriteLanded = async ({ userId, accountId, assistantId, field, expected }) => {
+  const user = await userModel.findById(userId).select("ghlSubAccountIds").lean();
+  const sub = (user?.ghlSubAccountIds || []).find((s) => s.accountId === accountId);
+  const assistant = (sub?.vapiAssistants || []).find((a) => a.assistantId === assistantId);
+  if (!assistant) return { ok: false, reason: "This assistant does not exist under that sub-account." };
+  if ((assistant[field] || "") !== (expected || "")) {
+    return { ok: false, reason: "The change could not be saved. Please try again." };
+  }
+  return { ok: true };
+};
+
 const addCalendarId = async (req, res) => {
   const userId = req.user;
   const { accountId, assistantId, calendarId } = req.body;
@@ -2325,11 +2345,11 @@ const addCalendarId = async (req, res) => {
       },
     );
 
-    if (result.matchedCount === 0) {
-      return res.send({
-        status: false,
-        message: "User or Assistant structure not found.",
+    if (result.modifiedCount === 0) {
+      const check = await assistantWriteLanded({
+        userId, accountId, assistantId, field: "calendar", expected: calendarId,
       });
+      if (!check.ok) return res.send({ status: false, message: check.reason });
     }
 
     return res.send({
@@ -2390,11 +2410,11 @@ const removeCalendarId = async (req, res) => {
       },
     );
 
-    if (result.matchedCount === 0) {
-      return res.send({
-        status: false,
-        message: "User or Assistant structure not found.",
+    if (result.modifiedCount === 0) {
+      const check = await assistantWriteLanded({
+        userId, accountId, assistantId, field: "calendar", expected: "",
       });
+      if (!check.ok) return res.send({ status: false, message: check.reason });
     }
 
     return res.send({ status: true, message: "Calendar unlinked successfully." });
