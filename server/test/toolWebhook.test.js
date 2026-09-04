@@ -17,7 +17,7 @@ const t = (name, fn) => {
   catch (e) { console.log(`  FAIL ${name}\n       ${e.message}`); fail++; }
 };
 
-const { parseToolArgs, resolveAssistantId, toolCallsFrom } = require("../controller/assistant.controller");
+const { parseToolArgs, resolveAssistantId, toolCallsFrom, toEpochMs, dayWindowAround, isValidTimeZone } = require("../controller/assistant.controller");
 
 console.log("\n-- tool arguments --");
 t("JSON string is parsed (the OpenAI convention Vapi follows)", () =>
@@ -60,6 +60,110 @@ t("toolCallList (older payloads)", () =>
   assert.strictEqual(toolCallsFrom({ toolCallList: [{ id: "1" }, { id: "2" }] }).length, 2));
 t("neither present yields an empty list", () => assert.deepStrictEqual(toolCallsFrom({}), []));
 t("a non-array is not trusted", () => assert.deepStrictEqual(toolCallsFrom({ toolCalls: "x" }), []));
+
+console.log("\n-- date arguments --");
+// The live failure: the schema asks for an ISO timestamp, the handler built
+// `${startTime}T00:00:00Z` from it, and GoHighLevel answered every availability
+// check with "startDate must be a number conforming to the specified
+// constraints" because NaN reached it as the string "NaN".
+t("a full ISO timestamp is read, not mangled", () =>
+  assert.strictEqual(toEpochMs("2026-09-10T09:00:00Z"), Date.parse("2026-09-10T09:00:00Z")));
+t("the old interpolation is what broke — confirm it produced NaN", () =>
+  assert.ok(Number.isNaN(new Date("2026-09-10T09:00:00Z" + "T00:00:00Z").getTime())));
+t("a bare date anchors to the start of that UTC day", () =>
+  assert.strictEqual(toEpochMs("2026-09-10"), Date.parse("2026-09-10T00:00:00.000Z")));
+t("a bare date can anchor to the end of the day for a range", () =>
+  assert.strictEqual(toEpochMs("2026-09-10", { endOfDay: true }), Date.parse("2026-09-10T23:59:59.999Z")));
+t("epoch milliseconds pass through", () =>
+  assert.strictEqual(toEpochMs(1789041600000), 1789041600000));
+t("epoch seconds are scaled up", () =>
+  assert.strictEqual(toEpochMs(1789041600), 1789041600000));
+t("numeric strings are accepted in both scales", () => {
+  assert.strictEqual(toEpochMs("1789041600000"), 1789041600000);
+  assert.strictEqual(toEpochMs("1789041600"), 1789041600000);
+});
+t("a space instead of T still parses", () =>
+  assert.strictEqual(toEpochMs("2026-09-10 14:30:00Z"), Date.parse("2026-09-10T14:30:00Z")));
+t("unreadable input is null, never NaN — NaN is what reached GHL", () => {
+  for (const bad of ["next tuesday", "", "   ", null, undefined, "not a date", {}]) {
+    const got = toEpochMs(bad);
+    assert.strictEqual(got, null, `expected null for ${JSON.stringify(bad)}, got ${got}`);
+  }
+});
+t("NaN itself is rejected", () => assert.strictEqual(toEpochMs(NaN), null));
+
+t("a day window spans one whole UTC day", () => {
+  const [start, end] = dayWindowAround(Date.parse("2026-09-10T09:00:00Z"));
+  assert.strictEqual(start, Date.parse("2026-09-10T00:00:00.000Z"));
+  assert.strictEqual(end, Date.parse("2026-09-10T23:59:59.999Z"));
+});
+t("asking about a time of day still searches the whole day", () => {
+  const [start, end] = dayWindowAround(toEpochMs("2026-09-10T23:30:00Z"));
+  assert.strictEqual(start, Date.parse("2026-09-10T00:00:00.000Z"));
+  assert.ok(end > start);
+});
+
+console.log("\n-- day windows honour the caller's timezone --");
+// A UTC window ends at 23:59Z, which is 19:59 in New York — so an assistant
+// asked "anything Friday?" never saw Friday evening.
+const nyLabel = (ms) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York", hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  }).format(new Date(ms));
+
+t("a New York day starts at local midnight", () => {
+  const [start] = dayWindowAround(Date.parse("2026-09-11T15:00:00Z"), "America/New_York");
+  assert.strictEqual(nyLabel(start), "2026-09-11, 00:00");
+});
+t("...and ends just before the next local midnight", () => {
+  const [, end] = dayWindowAround(Date.parse("2026-09-11T15:00:00Z"), "America/New_York");
+  assert.strictEqual(nyLabel(end), "2026-09-11, 23:59");
+});
+t("the window is one day long", () => {
+  const [start, end] = dayWindowAround(Date.parse("2026-09-11T15:00:00Z"), "America/New_York");
+  assert.strictEqual(end - start, 24 * 60 * 60 * 1000 - 1);
+});
+t("a half-hour zone lands on local midnight too", () => {
+  const [start] = dayWindowAround(Date.parse("2026-09-11T15:00:00Z"), "Asia/Kolkata");
+  const label = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata", hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  }).format(new Date(start));
+  assert.strictEqual(label, "2026-09-11, 00:00");
+});
+t("a day that ends a DST change still starts at local midnight", () => {
+  // US clocks go back on 2026-11-01; that local day is 25 hours long.
+  const [start] = dayWindowAround(Date.parse("2026-11-01T18:00:00Z"), "America/New_York");
+  assert.strictEqual(nyLabel(start), "2026-11-01, 00:00");
+});
+t("a day that starts one does too", () => {
+  // US clocks go forward on 2026-03-08.
+  const [start] = dayWindowAround(Date.parse("2026-03-08T18:00:00Z"), "America/New_York");
+  assert.strictEqual(nyLabel(start), "2026-03-08, 00:00");
+});
+t("no zone keeps the old UTC behaviour", () => {
+  const [start, end] = dayWindowAround(Date.parse("2026-09-11T15:00:00Z"));
+  assert.strictEqual(start, Date.parse("2026-09-11T00:00:00.000Z"));
+  assert.strictEqual(end, Date.parse("2026-09-11T23:59:59.999Z"));
+});
+t("a zone the model invented is refused, not forwarded to GHL", () => {
+  for (const bad of ["GMT+1", "Mars/Olympus", "pacific standard time", "", null, undefined, 5]) {
+    assert.strictEqual(isValidTimeZone(bad), false, `expected ${JSON.stringify(bad)} to be invalid`);
+  }
+});
+t("real zones pass, including the legacy aliases a model reaches for", () => {
+  // "EST" and "EST5EDT" are genuine tz database entries, so they are forwarded
+  // rather than dropped — only strings no tz database knows are refused.
+  for (const good of ["America/New_York", "UTC", "Europe/London", "EST", "EST5EDT", "GMT"]) {
+    assert.ok(isValidTimeZone(good), `expected ${good} to be valid`);
+  }
+});
+t("an invalid zone falls back to the UTC window rather than throwing", () => {
+  const [start, end] = dayWindowAround(Date.parse("2026-09-11T15:00:00Z"), "Mars/Olympus");
+  assert.strictEqual(start, Date.parse("2026-09-11T00:00:00.000Z"));
+  assert.strictEqual(end, Date.parse("2026-09-11T23:59:59.999Z"));
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
