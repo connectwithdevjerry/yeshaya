@@ -142,6 +142,15 @@ const runSweep = async () => {
 // Daily, early morning UTC. Frequent enough to catch a break within a day,
 // infrequent enough not to hammer GoHighLevel.
 const startCalendarHealthChecks = () => {
+  // node-cron needs a process that stays alive between ticks. On Vercel the
+  // function is torn down after each request, so this never fired in
+  // production. The sweep is reached over HTTP there instead (see
+  // route/cron.route.js and vercel.json); this path is for a long-running host.
+  if (process.env.VERCEL) {
+    console.log("Serverless runtime detected — sweep runs via the cron endpoint, not node-cron.");
+    return;
+  }
+
   cron.schedule("0 6 * * *", runSweep);
   console.log("📅 Calendar health checks scheduled (daily 06:00 UTC)");
 };

@@ -7,7 +7,7 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "test": "node test/phone.test.js && node test/customerMemory.test.js && node test/customerMemoryVapi.test.js && node test/toolWebhook.test.js && node test/calendarHealth.test.js && node test/billing.test.js",
+    "test": "node test/phone.test.js && node test/customerMemory.test.js && node test/customerMemoryVapi.test.js && node test/toolWebhook.test.js && node test/calendarHealth.test.js && node test/billing.test.js && node test/cronRoute.test.js",
     "dev": "nodemon index.js",
     "start": "node index.js"
   },

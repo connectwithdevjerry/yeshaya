@@ -2064,14 +2064,26 @@ const executeToolFromVapi = async (req, res) => {
       const businessName = user?.company?.name || "us";
       const when = fmtWhen(startTime);
 
-      // Return immediately to Vapi so the AI doesn't pause mid-call
-      res.json({
-        results: [{ toolCallId: toolCall.id, result: "Confirmed!" }],
-      });
+      // These used to run detached, after the response had already been sent,
+      // to keep the caller from waiting. On Vercel that means they never ran at
+      // all: the function is frozen the moment the response goes out, so the
+      // appointment was never stored, no confirmation was ever sent, and the
+      // agency was never notified — and with no stored appointment there was
+      // nothing for the reminder sweep to find either.
+      //
+      // They are awaited now. Each is bounded and independently caught, so the
+      // whole set costs well under a second and no single failure can take the
+      // booking down with it.
+      const withDeadline = (label, promise, ms = 4000) =>
+        Promise.race([
+          promise,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+          ),
+        ]).catch((e) => console.error(`⚠️ ${label} failed:`, e.message));
 
-      // Fire and forget side-effects
-      (async () => {
-        try {
+      await Promise.all([
+        withDeadline("appointment store", (async () => {
           await appointmentModel.create({
             userId,
             subaccountId: locationId,
@@ -2079,36 +2091,40 @@ const executeToolFromVapi = async (req, res) => {
             ghlEventId,
             ghlContactId: contactId,
             customerName,
-            customerEmail,
+            customerEmail: identity.email || "",
             startTime: new Date(startTime),
             title,
           });
-        } catch (e) { console.error("⚠️ appointment store failed:", e.message); }
+        })()),
 
-        // Confirmation email to the customer (white-label sender if configured)
-        if (customerEmail) {
-          try {
-            await sendUserEmail(
+        // Confirmation to the customer, from the agency's own sender when they
+        // have configured one. Sent to the address we actually validated, not
+        // whatever the transcriber produced.
+        identity.email
+          ? withDeadline("confirmation email", sendUserEmail(
               userId,
-              customerEmail,
+              identity.email,
               `Appointment Confirmed — ${businessName}`,
               confirmationEmail({ customerName, when, businessName, title: "" }),
-            );
-          } catch (e) { console.error("⚠️ confirmation email failed:", e.message); }
-        }
+            ))
+          : Promise.resolve(),
 
-        // Notify the agency
-        try {
-          await createNotification({
-            userId,
-            type: "general",
-            title: "New Appointment Booked",
-            message: `${customerName || customerEmail || "A customer"} booked an appointment for ${when}.`,
-            metadata: { subaccountId: locationId, startTime, customerEmail },
-          });
-        } catch (e) { console.error("⚠️ notification failed:", e.message); }
-      })().catch(e => console.error("Unhandled error in book_appointment background job:", e));
-      return;
+        withDeadline("agency notification", createNotification({
+          userId,
+          type: "general",
+          title: "New Appointment Booked",
+          message: `${customerName || identity.email || "A customer"} booked an appointment for ${when}.`,
+          metadata: { subaccountId: locationId, startTime, customerEmail: identity.email },
+        })),
+      ]);
+
+      console.log(
+        `book_appointment: stored + notified for ${identity.email || identity.phone} at ${startTime}`,
+      );
+
+      return res.json({
+        results: [{ toolCallId: toolCall.id, result: "Confirmed!" }],
+      });
     }
 
     // 3 --- TOOL: UPDATE USER DETAILS ---
