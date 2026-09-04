@@ -5,6 +5,12 @@
 // useful, and the caller hears the assistant stall or improvise.
 const assert = require("assert");
 
+// The controller constructs Resend and Stripe clients at require time, and both
+// throw without a key. Nothing under test talks to either, so stub the keys
+// rather than leave the whole file un-runnable (which is what npm test hit).
+process.env.RESEND_API_KEY = process.env.RESEND_API_KEY || "re_test";
+process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_stub";
+
 let pass = 0, fail = 0;
 const t = (name, fn) => {
   try { fn(); console.log(`  ok   ${name}`); pass++; }

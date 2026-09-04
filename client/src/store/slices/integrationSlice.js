@@ -661,6 +661,11 @@ const integrationSlice = createSlice({
         if (state.subAccounts) {
           state.subAccounts = state.subAccounts.filter(acc => acc.id !== deletedId);
         }
+        // The detail panel is a separate slot from the list, so deleting the
+        // sub-account being viewed left its settings on screen.
+        if (state.subAccountDetails?.accountId === deletedId) {
+          state.subAccountDetails = null;
+        }
       })
 
       // Toggle Favorite
@@ -706,9 +711,16 @@ const integrationSlice = createSlice({
       })
 
       // Fetch single sub-account details
-      .addCase(fetchSubAccountDetails.pending, (state) => {
+      .addCase(fetchSubAccountDetails.pending, (state, action) => {
         state.fetchingSubAccountDetails = true;
         state.subAccountDetailsError = null;
+        // One shared slot for whichever sub-account is open, and both the
+        // Integration and Sub-account tabs render as soon as it is non-null.
+        // Holding the last one while a different location loads shows its
+        // CRM connection status, custom name and notes under this one.
+        if (state.subAccountDetails && state.subAccountDetails.accountId !== action.meta.arg) {
+          state.subAccountDetails = null;
+        }
       })
       .addCase(fetchSubAccountDetails.fulfilled, (state, action) => {
         state.fetchingSubAccountDetails = false;

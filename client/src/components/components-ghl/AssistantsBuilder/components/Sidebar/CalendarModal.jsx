@@ -34,6 +34,7 @@ export const CalendarModal = ({ isOpen, onClose }) => {
     connectedCalendar,
     fetchingConnectedCalendar,
     calendarReconnectRequired,
+    calendarListError,
   } = useSelector((s) => s.assistants);
 
   const handleReconnect = async () => {
@@ -168,7 +169,11 @@ export const CalendarModal = ({ isOpen, onClose }) => {
               ) : availableCalendars.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {availableCalendars.map((cal) => {
-                    const isConnected  = connectedCalendar?.calendar?.id === cal.id;
+                    // Both sides can be undefined — with no calendar linked
+                    // that comparison is true, and every card claims to be the
+                    // connected one.
+                    const linkedId    = connectedCalendar?.calendar?.id;
+                    const isConnected = !!linkedId && linkedId === cal.id;
                     const isLinkingThis = processingId === cal.id;
 
                     return (
@@ -240,6 +245,24 @@ export const CalendarModal = ({ isOpen, onClose }) => {
                       </motion.div>
                     );
                   })}
+                </div>
+              ) : calendarListError ? (
+                <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-6">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center">
+                    <AlertTriangle className="w-6 h-6 text-amber-500" />
+                  </div>
+                  <div className="max-w-sm">
+                    <p className="text-sm font-semibold text-gray-600">Couldn't load calendars</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {typeof calendarListError === "string" ? calendarListError : "Try syncing again."}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleSync}
+                    className="mt-1 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Try again
+                  </button>
                 </div>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center gap-3 text-center">

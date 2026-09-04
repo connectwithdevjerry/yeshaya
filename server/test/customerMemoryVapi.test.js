@@ -110,6 +110,47 @@ const memory = {
   t("no memory = base returned untouched, no Vapi read", () =>
     assert.deepStrictEqual(ov, { firstMessage: "Hi!" }));
 
+  // The shape this codebase actually creates assistants in. assistant.controller
+  // sends `model.systemPrompt`, and the prompt editor reads it back from there,
+  // so `model.messages` is empty — appending only to it appended to nothing, and
+  // the assistant never saw the caller's number.
+  console.log("\n-- the legacy systemPrompt shape --");
+  getHandler = async () => ({
+    data: {
+      model: {
+        provider: "openai", model: "gpt-4o-mini",
+        systemPrompt: "You are Ada, a receptionist.",
+      },
+    },
+  });
+  ov = await M.buildAssistantOverrides({
+    assistantId: "ast_legacy",
+    memory: null,
+    caller: { number: "+15551234567" },
+    base: {},
+  });
+  t("the block reaches systemPrompt", () =>
+    assert.ok(ov.model.systemPrompt.includes("+15551234567")));
+  t("the assistant's own prompt is kept there", () =>
+    assert.ok(ov.model.systemPrompt.startsWith("You are Ada")));
+  t("and is mirrored into messages, prompt included", () => {
+    assert.strictEqual(ov.model.messages.length, 1);
+    assert.strictEqual(ov.model.messages[0].role, "system");
+    assert.ok(ov.model.messages[0].content.startsWith("You are Ada"));
+    assert.ok(ov.model.messages[0].content.includes("+15551234567"));
+  });
+  t("the caller's number is never asked for", () =>
+    assert.ok(/never ask them to read it out/i.test(ov.model.systemPrompt)));
+
+  getHandler = async () => ({
+    data: { model: { provider: "openai", model: "gpt-4o", messages: [{ role: "system", content: "Base." }] } },
+  });
+  ov = await M.buildAssistantOverrides({
+    assistantId: "ast_modern", memory, caller: { number: "+15551234567" }, base: {},
+  });
+  t("the messages shape does not gain a systemPrompt it never had", () =>
+    assert.strictEqual(ov.model.systemPrompt, undefined));
+
   console.log("\n-- postVapiCall retries without the model override --");
   let attempt = 0;
   postHandler = async (url, body) => {
@@ -142,6 +183,53 @@ const memory = {
   try { await M.postVapiCall({ assistantId: "a", assistantOverrides: { firstMessage: "x" } }); }
   catch (e) { threw = true; }
   t("400 with no model override is not retried", () => assert.ok(threw));
+
+  console.log("\n-- a rejected systemPrompt costs the field, not the block --");
+  attempt = 0;
+  postHandler = async (url, body) => {
+    attempt++;
+    if (attempt === 1) throw Object.assign(new Error("bad field"), {
+      response: { status: 400, data: { message: "property systemPrompt should not exist" } },
+    });
+    return { data: { id: "call_ok", body } };
+  };
+  calls.post.length = 0;
+  res = await M.postVapiCall({
+    assistantId: "a",
+    assistantOverrides: {
+      firstMessage: "Hi",
+      model: { provider: "openai", systemPrompt: "prompt+block", messages: [{ role: "system", content: "prompt+block" }] },
+    },
+  });
+  t("the call goes through on the second attempt", () => {
+    assert.strictEqual(res.data.id, "call_ok");
+    assert.strictEqual(calls.post.length, 2);
+  });
+  t("only systemPrompt was dropped", () =>
+    assert.strictEqual(calls.post[1].body.assistantOverrides.model.systemPrompt, undefined));
+  t("the block survives in messages", () =>
+    assert.strictEqual(
+      calls.post[1].body.assistantOverrides.model.messages[0].content, "prompt+block"));
+
+  attempt = 0;
+  postHandler = async (url, body) => {
+    attempt++;
+    if (attempt <= 2) throw Object.assign(new Error("bad model"), {
+      response: { status: 400, data: { message: "model override invalid" } },
+    });
+    return { data: { id: "call_ok", body } };
+  };
+  calls.post.length = 0;
+  res = await M.postVapiCall({
+    assistantId: "a",
+    assistantOverrides: { firstMessage: "Hi", model: { provider: "openai", systemPrompt: "x" } },
+  });
+  t("a model Vapi keeps rejecting is dropped whole, and the call still connects", () => {
+    assert.strictEqual(res.data.id, "call_ok");
+    assert.strictEqual(calls.post.length, 3);
+    assert.strictEqual(calls.post[2].body.assistantOverrides.model, undefined);
+    assert.strictEqual(calls.post[2].body.assistantOverrides.firstMessage, "Hi");
+  });
 
   console.log("\n-- postVapiChat retries without the system turn --");
   attempt = 0;

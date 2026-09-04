@@ -553,7 +553,12 @@ const buildCallBlock = ({ number, name } = {}) => {
     "## This call",
     `The person on this call is contacting you from ${number}.`,
     "You ALREADY have their phone number — never ask them to read it out, and never ask them to confirm it unless they bring it up themselves.",
-    "When a tool needs their phone number, use this one.",
+    "When a tool needs their phone number, use this one. It is attached to their CRM record automatically.",
+    // Assistants configured before this existed carry prompts that tell them to
+    // collect a phone number. This block is appended after those instructions
+    // and has to win, so say so rather than leaving the model to weigh two
+    // contradictory orders.
+    "This overrides anything earlier in your instructions about collecting or asking for a phone number.",
     name ? `Their name is ${name}.` : "",
   ].filter(Boolean).join("\n");
 };
@@ -632,17 +637,43 @@ const buildAssistantOverrides = async ({
 
     const model = assistant?.model;
     if (model && typeof model === "object") {
+      // Vapi holds a system prompt in one of two places, and this codebase
+      // creates assistants in the older shape: assistant.controller.js sends
+      // `model.systemPrompt`, and the prompt editor reads it back from there.
+      // Appending only to `model.messages` therefore appended to an empty
+      // array, and whichever field Vapi honours at inference, half the prompt
+      // was in the other one. So write the combined text to BOTH: the
+      // assistant's own instructions and this block stay together either way.
+      const legacyPrompt =
+        typeof model.systemPrompt === "string" ? model.systemPrompt : "";
       const messages = Array.isArray(model.messages) ? [...model.messages] : [];
       const systemIndex = messages.findIndex((m) => m.role === "system");
+      const msgPrompt = systemIndex >= 0 ? messages[systemIndex].content || "" : "";
+      // Vapi may mirror systemPrompt into messages. Keep whatever each holds,
+      // but do not hand the model the same instructions twice.
+      const parts = [];
+      if (legacyPrompt) parts.push(legacyPrompt);
+      if (msgPrompt && !legacyPrompt.includes(msgPrompt)) parts.push(msgPrompt);
+      const existing = parts.join("\n\n");
+      const combined = existing ? `${existing}\n\n${block}` : block;
+
       if (systemIndex >= 0) {
-        messages[systemIndex] = {
-          ...messages[systemIndex],
-          content: `${messages[systemIndex].content || ""}\n\n${block}`,
-        };
+        messages[systemIndex] = { ...messages[systemIndex], content: combined };
       } else {
-        messages.unshift({ role: "system", content: block });
+        messages.unshift({ role: "system", content: combined });
       }
+
       overrides.model = { ...model, messages };
+      if (legacyPrompt) overrides.model.systemPrompt = combined;
+
+      console.log(
+        `[customerMemory] injecting ${block.length} chars into ${assistantId} (` +
+          `${legacyPrompt ? "systemPrompt+messages" : "messages"} shape)`,
+      );
+    } else {
+      console.warn(
+        `[customerMemory] assistant ${assistantId} has no model object — context block not injected`,
+      );
     }
   } catch (e) {
     // Prompt injection is a bonus; {{memory}} substitution still works.
@@ -655,28 +686,49 @@ const buildAssistantOverrides = async ({
   return overrides;
 };
 
-// POST https://api.vapi.ai/call, retrying once without the model override if
-// Vapi rejects it. A memory override must never be the reason a call fails.
+// POST https://api.vapi.ai/call. If Vapi rejects the model override, shed it
+// a piece at a time — the legacy `systemPrompt` field first, then the whole
+// model — so the context block is given up only as far as Vapi forces. A memory
+// override must never be the reason a call fails.
 const postVapiCall = async (payload) => {
-  try {
-    return await axios.post("https://api.vapi.ai/call", payload, {
+  const post = (body) =>
+    axios.post("https://api.vapi.ai/call", body, {
       headers: vapiHeaders(),
       timeout: 30_000,
     });
+
+  try {
+    return await post(payload);
   } catch (e) {
-    const overrodeModel = !!payload?.assistantOverrides?.model;
-    if (!overrodeModel || e.response?.status !== 400) throw e;
+    const model = payload?.assistantOverrides?.model;
+    if (!model || e.response?.status !== 400) throw e;
+
+    // `systemPrompt` is the legacy prompt field. Vapi accepts it when creating
+    // an assistant, but if its override schema does not, dropping just that
+    // field keeps the block in `messages` rather than losing it altogether.
+    if (model.systemPrompt) {
+      const { systemPrompt: _legacy, ...restModel } = model;
+      console.warn(
+        "[customerMemory] Vapi rejected the model override; retrying without systemPrompt:",
+        e.response?.data?.message || e.message,
+      );
+      try {
+        return await post({
+          ...payload,
+          assistantOverrides: { ...payload.assistantOverrides, model: restModel },
+        });
+      } catch (e2) {
+        if (e2.response?.status !== 400) throw e2;
+        e = e2;
+      }
+    }
 
     console.warn(
       "[customerMemory] Vapi rejected the model override, retrying without it:",
       e.response?.data?.message || e.message,
     );
-    const { model, ...restOverrides } = payload.assistantOverrides;
-    return axios.post(
-      "https://api.vapi.ai/call",
-      { ...payload, assistantOverrides: restOverrides },
-      { headers: vapiHeaders(), timeout: 30_000 },
-    );
+    const { model: _dropped, ...restOverrides } = payload.assistantOverrides;
+    return post({ ...payload, assistantOverrides: restOverrides });
   }
 };
 
