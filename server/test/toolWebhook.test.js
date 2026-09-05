@@ -365,6 +365,51 @@ t("an empty tag is no tag, not an empty one written to the CRM", () => {
   assert.strictEqual(sourceTagFor({ contactTag: "   " }), "");
 });
 
+// The webhook's GoHighLevel calls, checked against the method each endpoint
+// answers. Both of these shipped and 404'd: a POST to the calendar *list*
+// endpoint, and a GET to a search endpoint that only takes POST. Neither
+// failed loudly — one told the caller scheduling had failed, the other quietly
+// dropped the caller's name out of the greeting — so read the sources and
+// assert on the shapes rather than wait to be told again.
+console.log("\n-- GoHighLevel endpoints answer the method we send --");
+{
+  const fs = require("fs");
+  const path = require("path");
+  const src = (f) =>
+    fs.readFileSync(path.join(__dirname, "..", "controller", f), "utf8");
+  const assistantSrc = src("assistant.controller.js");
+  const integrationsSrc = src("integrations.controller.js");
+
+  t("appointments are created at /calendars/events/appointments", () => {
+    // A POST whose URL ends at /calendars/events — no /appointments — is the bug.
+    const bad = /axios\.post\(\s*[`"'][^`"']*\/calendars\/events[`"']/.exec(assistantSrc);
+    assert.strictEqual(bad, null, `POST to the calendar list endpoint: ${bad && bad[0]}`);
+    assert.ok(
+      assistantSrc.includes("/calendars/events/appointments"),
+      "no appointment-creation endpoint left in the controller",
+    );
+  });
+
+  t("every appointment we create asks GHL to send its own confirmation", () => {
+    // Count the URL literals, not the comments that name the endpoint.
+    const creations =
+      assistantSrc.split('leadconnectorhq.com/calendars/events/appointments"').length - 1;
+    const confirmed = assistantSrc.split('appointmentStatus: "confirmed"').length - 1;
+    assert.ok(
+      confirmed >= creations,
+      `${creations} appointment endpoints but only ${confirmed} confirmed statuses`,
+    );
+  });
+
+  t("the caller lookup uses the endpoint GET actually serves", () => {
+    assert.ok(
+      !/axios\.get\(\s*[`"'][^`"']*\/contacts\/search/.test(integrationsSrc),
+      "GET /contacts/search — that endpoint answers POST only",
+    );
+  });
+}
+
+
 (async () => {
   const SUB = { contactTag: "Coastal Realty AI", contactTagEnabled: true };
   posted.length = 0;
