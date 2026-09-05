@@ -696,38 +696,6 @@ export const saveCustomFieldMap = createAsyncThunk(
   },
 );
 
-// Working hours — the days and times an assistant is on duty. Absent or
-// disabled means always, so this changes nothing until an agency switches it on.
-export const fetchWorkingHours = createAsyncThunk(
-  "assistants/fetchWorkingHours",
-  async ({ subaccountId, assistantId }, { rejectWithValue }) => {
-    try {
-      const res = await apiClient.get(
-        `/assistants/working-hours?subaccountId=${subaccountId}&assistantId=${assistantId}`,
-      );
-      if (!res.data.status) return rejectWithValue(res.data.message || "Failed to load hours");
-      return res.data.data;
-    } catch (err) {
-      return rejectWithValue(err.response?.data?.message || "Error loading working hours");
-    }
-  },
-);
-
-export const saveWorkingHours = createAsyncThunk(
-  "assistants/saveWorkingHours",
-  async ({ subaccountId, assistantId, enabled, days, closedMessage }, { rejectWithValue }) => {
-    try {
-      const res = await apiClient.post("/assistants/working-hours", {
-        subaccountId, assistantId, enabled, days, closedMessage,
-      });
-      if (!res.data.status) return rejectWithValue(res.data.message || "Failed to save");
-      return res.data.data;
-    } catch (err) {
-      return rejectWithValue(err.response?.data?.message || "Error saving working hours");
-    }
-  },
-);
-
 // Search a knowledge base's stored text (embedding playground)
 export const searchKnowledgeBase = createAsyncThunk(
   "assistants/searchKnowledgeBase",

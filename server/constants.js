@@ -70,7 +70,6 @@ const GET_ALL_KNOWLEDGE_BASES = "/get-all-knowledge-bases";
 const KB_SEARCH = "/kb-search";
 const GET_GHL_CUSTOM_FIELDS = "/ghl-custom-fields";
 const SAVE_CUSTOM_FIELD_MAP = "/custom-field-map";
-const WORKING_HOURS = "/working-hours";
 const RMV_ASSISTANT_KNOWLEDGE = "/remove-knowlege-base-from-assistant";
 const DELETE_KNOWLEDGE_BASE = "/delete-knowlege-base";
 const SEND_CHAT_MESSAGE = "/send-chat-message";
@@ -184,7 +183,6 @@ module.exports = {
   KB_SEARCH,
   GET_GHL_CUSTOM_FIELDS,
   SAVE_CUSTOM_FIELD_MAP,
-  WORKING_HOURS,
   LINK_KNOWLEDGE_BASES_2_ASSISTANT,
   RMV_ASSISTANT_KNOWLEDGE,
   DELETE_KNOWLEDGE_BASE,
