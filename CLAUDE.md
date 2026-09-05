@@ -63,6 +63,10 @@ times, so check for it before adding anything scheduled or deferred:
   for a long-running host, guarded on `process.env.VERCEL`.
 - **MongoDB change streams do not stay open.** `helpers/autoTopUp.js` used to
   rely on one; it is now called directly after every debit.
+- **In-memory caches never hit.** Each invocation is a fresh process, so a
+  module-level `Map` is always empty. `customerMemory.js` had one in front of a
+  Vapi read, which meant every inbound call paid for that round trip while the
+  caller waited — the cache had never worked once in production.
 
 Vercel's Hobby plan rejects any cron more frequent than daily at deploy time.
 
@@ -94,8 +98,13 @@ Vercel's Hobby plan rejects any cron more frequent than daily at deploy time.
 
 - **Assistants store their prompt in `model.systemPrompt`**, not
   `model.messages` — see `VAPI_ASSISTANT_CONFIG` and the prompt editor.
-  `buildAssistantOverrides()` writes to both, since it is not certain which
-  Vapi honours at inference.
+- **Prompt injection is off** (`VAPI_PROMPT_INJECTION=on` enables it). It took
+  inbound calls down: the assistant answered, said nothing, and hung up. It
+  reads the assistant back from Vapi on every call and replaces its model for
+  the duration, and `postVapiCall` only degrades on a 400, so an override Vapi
+  accepts and then cannot run never falls back. Bringing it back means removing
+  the live fetch. `variableValues` (`{{memory}}`, `{{currentDate}}`) still ship
+  on every call and cost nothing.
 - **The model does not know what day it is** unless told. Left to itself it
   answers from training data and books appointments in the past. The date, time
   and timezone are injected into every conversation by `buildTodayBlock()`.
