@@ -1645,6 +1645,54 @@ const contactIdentity = ({ email, phone, firstName, phoneIsFallback = false }) =
   };
 };
 
+// Mark every contact this platform creates or touches, so an agency can tell
+// at a glance in GoHighLevel which of their contacts came from an assistant —
+// and can segment or automate on it.
+//
+// The wording, and whether it happens at all, is the agency's choice per
+// sub-account, set in Sub-account Settings. A reseller's client should not
+// necessarily find this platform's name on their contacts, and some will not
+// want the tag at all.
+const DEFAULT_SOURCE_TAG = "from yashayah";
+
+// The tag to write for a sub-account, or "" for none. Only an explicit false
+// disables it, so a sub-account stored before the setting existed keeps
+// tagging rather than silently stopping.
+const sourceTagFor = (subaccount) => {
+  if (subaccount?.contactTagEnabled === false) return "";
+  const tag = subaccount?.contactTag ?? DEFAULT_SOURCE_TAG;
+  return String(tag || "").trim();
+};
+
+// Applied through the dedicated tags endpoint rather than as a `tags` field on
+// the upsert. The upsert's own tag handling would be one request fewer, but if
+// it replaces rather than appends it would strip every other tag the contact
+// already carries, across the whole CRM. This endpoint only ever adds.
+const applySourceTag = async (contactId, accessToken, subaccount) => {
+  const tag = sourceTagFor(subaccount);
+  if (!contactId || !tag) return;
+  try {
+    await axios.post(
+      `https://services.leadconnectorhq.com/contacts/${contactId}/tags`,
+      { tags: [tag] },
+      {
+        timeout: TOOL_HTTP_TIMEOUT_MS,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Version: "2021-07-28",
+          "Content-Type": "application/json",
+        },
+      },
+    );
+  } catch (e) {
+    // A missing tag is not worth failing a booking or losing a contact over.
+    console.warn(
+      `Could not tag contact ${contactId} with "${tag}":`,
+      e.response?.data?.message || e.message,
+    );
+  }
+};
+
 const parseToolArgs = (raw) => {
   if (!raw) return {};
   if (typeof raw === "object") return raw;
@@ -2003,6 +2051,7 @@ const executeToolFromVapi = async (req, res) => {
       );
 
       const contactId = contactRes.data?.contact?.id;
+      await applySourceTag(contactId, accessToken, targetSubAccount);
       if (!contactId) {
         console.error("book_appointment: upsert returned no contact id", contactRes.data);
         return res.status(200).json({
@@ -2201,6 +2250,8 @@ const executeToolFromVapi = async (req, res) => {
         email,
         name: [firstName, lastName].filter(Boolean).join(" "),
       });
+      await applySourceTag(response.data?.contact?.id, accessToken, targetSubAccount);
+
       if (memory) {
         const ghlContactId = response.data?.contact?.id;
         if (ghlContactId) memory.ghlContactId = ghlContactId;
@@ -2258,6 +2309,8 @@ const executeToolFromVapi = async (req, res) => {
           results: [{ toolCallId: toolCall.id, result: "Could not find or create that contact." }],
         });
       }
+
+      await applySourceTag(contactId, accessToken, targetSubAccount);
 
       const url = `https://services.leadconnectorhq.com/contacts/${contactId}/tags`;
       const headers = { Authorization: `Bearer ${accessToken}`, Version: "2021-07-28", "Content-Type": "application/json" };
@@ -2566,13 +2619,16 @@ const executeToolFromVapi = async (req, res) => {
           },
         );
 
+        const selfScheduleContactId = contactRes.data?.contact?.id;
+        await applySourceTag(selfScheduleContactId, accessToken, targetSubAccount);
+
         // Step B: Create Event/Appointment
         await axios.post(
           "https://services.leadconnectorhq.com/calendars/events",
           {
             calendarId,
             locationId,
-            contactId: contactRes.data?.contact?.id,
+            contactId: selfScheduleContactId,
             startTime,
             title: title || `Scheduled: ${customerName}`,
           },
@@ -2650,6 +2706,7 @@ const executeToolFromVapi = async (req, res) => {
         );
 
         const contactId = contactRes.data?.contact?.id;
+        await applySourceTag(contactId, accessToken, targetSubAccount);
         if (!contactId) {
           console.error("create_task: upsert returned no contact id", contactRes.data);
           return res.status(200).json({
@@ -5530,6 +5587,9 @@ module.exports = {
   localDayWindowFor,
   emailFromSpeech,
   contactIdentity,
+  DEFAULT_SOURCE_TAG,
+  sourceTagFor,
+  applySourceTag,
   isValidTimeZone,
   resolveAssistantId,
   toolCallsFrom,

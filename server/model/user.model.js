@@ -61,6 +61,12 @@ const userSchema = mongoose.Schema({
   ghlSubAccountIds: [
     {
       accountId:              String,
+      // The tag put on every contact an assistant creates or touches in this
+      // location's CRM, so an agency can see which contacts came from here.
+      // Off, or renamed, per sub-account: a reseller's client should not
+      // necessarily see this platform's name on their contacts.
+      contactTag:             { type: String, default: "from yashayah" },
+      contactTagEnabled:      { type: Boolean, default: true },
       // The location's IANA timezone from GoHighLevel. Without it the assistant
       // reasons about dates in UTC, which is the wrong day near midnight.
       timezone:               String,

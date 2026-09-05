@@ -17,6 +17,13 @@ import toast, { Toaster } from "react-hot-toast";
 export const AssistantBuilderPage = () => {
   const [isToolkitOpen, setIsToolkitOpen] = useState(false);
   const [promptContent, setPromptContent] = useState("");
+  // The prompt as it stands on the server. Held separately from promptContent
+  // so "has anything changed?" is a comparison, and so it can be moved forward
+  // after a save without waiting for the assistant list to come round again.
+  // null until the editor has been seeded — before that there is nothing to
+  // compare against, and the button must not offer to save an empty editor
+  // over a real prompt.
+  const [savedPrompt, setSavedPrompt] = useState(null);
 
   const [searchParams] = useSearchParams();
   const dispatch = useDispatch();
@@ -41,6 +48,7 @@ export const AssistantBuilderPage = () => {
     if (currentAssistant && currentAssistant.id !== initializedAssistantId.current) {
       if (currentAssistant.model?.systemPrompt !== undefined) {
         setPromptContent(currentAssistant.model.systemPrompt || "");
+        setSavedPrompt(currentAssistant.model.systemPrompt || "");
       }
       initializedAssistantId.current = currentAssistant.id;
     }
@@ -77,6 +85,7 @@ export const AssistantBuilderPage = () => {
         }),
       ).unwrap();
 
+      setSavedPrompt(promptContent);
       toast.success("Saved successfully!");
     } catch (error) {
       console.error("Save failed:", error);
@@ -91,6 +100,7 @@ export const AssistantBuilderPage = () => {
       <AssistantHeader
         assistantId={assistantId}
         onSave={handleSave}
+        hasUnsavedChanges={savedPrompt !== null && promptContent !== savedPrompt}
       />
 
       <div className="flex flex-1 overflow-hidden">

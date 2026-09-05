@@ -8,6 +8,17 @@ const assert = require("assert");
 // The controller constructs Resend and Stripe clients at require time, and both
 // throw without a key. Nothing under test talks to either, so stub the keys
 // rather than leave the whole file un-runnable (which is what npm test hit).
+const AXIOS = require.resolve("axios");
+const posted = [];
+let postImpl = async () => ({ data: {} });
+require.cache[AXIOS] = {
+  id: AXIOS, filename: AXIOS, loaded: true,
+  exports: {
+    async post(url, body, cfg) { posted.push({ url, body, cfg }); return postImpl(url, body, cfg); },
+    async get() { return { data: {} }; },
+  },
+};
+
 process.env.RESEND_API_KEY = process.env.RESEND_API_KEY || "re_test";
 process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_stub";
 
@@ -17,7 +28,7 @@ const t = (name, fn) => {
   catch (e) { console.log(`  FAIL ${name}\n       ${e.message}`); fail++; }
 };
 
-const { parseToolArgs, resolveAssistantId, toolCallsFrom, toEpochMs, dayWindowAround, isValidTimeZone, slotsFromFreeSlots, toGhlAppointmentTime, matchSlot, emailFromSpeech, contactIdentity, localDayWindowFor } = require("../controller/assistant.controller");
+const { parseToolArgs, resolveAssistantId, toolCallsFrom, toEpochMs, dayWindowAround, isValidTimeZone, slotsFromFreeSlots, toGhlAppointmentTime, matchSlot, emailFromSpeech, contactIdentity, localDayWindowFor, DEFAULT_SOURCE_TAG, sourceTagFor, applySourceTag } = require("../controller/assistant.controller");
 
 console.log("\n-- tool arguments --");
 t("JSON string is parsed (the OpenAI convention Vapi follows)", () =>
@@ -337,5 +348,63 @@ t("an unknown zone still yields a whole day", () => {
   assert.ok(end - start > 23 * 60 * 60 * 1000);
 });
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+console.log("\n-- the contact tag is the agency's choice --");
+t("a sub-account that predates the setting keeps the default", () => {
+  assert.strictEqual(sourceTagFor({}), DEFAULT_SOURCE_TAG);
+  assert.strictEqual(sourceTagFor(undefined), DEFAULT_SOURCE_TAG);
+  assert.strictEqual(sourceTagFor({ contactTagEnabled: true }), DEFAULT_SOURCE_TAG);
+});
+t("their own wording is used when they set one", () =>
+  assert.strictEqual(sourceTagFor({ contactTag: "Coastal Realty AI" }), "Coastal Realty AI"));
+t("switching it off means no tag at all", () => {
+  assert.strictEqual(sourceTagFor({ contactTagEnabled: false }), "");
+  assert.strictEqual(sourceTagFor({ contactTag: "anything", contactTagEnabled: false }), "");
+});
+t("an empty tag is no tag, not an empty one written to the CRM", () => {
+  assert.strictEqual(sourceTagFor({ contactTag: "" }), "");
+  assert.strictEqual(sourceTagFor({ contactTag: "   " }), "");
+});
+
+(async () => {
+  const SUB = { contactTag: "Coastal Realty AI", contactTagEnabled: true };
+  posted.length = 0;
+  await applySourceTag("contact_123", "tok_abc", SUB);
+  t("the tag goes to the add-tags endpoint, which only ever appends", () => {
+    assert.strictEqual(posted.length, 1);
+    assert.strictEqual(
+      posted[0].url,
+      "https://services.leadconnectorhq.com/contacts/contact_123/tags",
+    );
+  });
+  t("it is the sub-account's own tag", () =>
+    assert.deepStrictEqual(posted[0].body, { tags: ["Coastal Realty AI"] }));
+  t("the contact's other tags are never named, so none can be replaced", () =>
+    assert.strictEqual(Object.keys(posted[0].body).length, 1));
+  t("it is authorised and time-bounded", () => {
+    assert.strictEqual(posted[0].cfg.headers.Authorization, "Bearer tok_abc");
+    assert.ok(posted[0].cfg.timeout > 0);
+  });
+
+  posted.length = 0;
+  await applySourceTag("contact_123", "tok_abc", { contactTagEnabled: false });
+  t("switched off, nothing is sent to GoHighLevel at all", () =>
+    assert.strictEqual(posted.length, 0));
+
+  posted.length = 0;
+  await applySourceTag("", "tok_abc", SUB);
+  await applySourceTag(null, "tok_abc", SUB);
+  t("no contact id means no request", () => assert.strictEqual(posted.length, 0));
+
+  postImpl = async () => { throw Object.assign(new Error("nope"), { response: { status: 422 } }); };
+  posted.length = 0;
+  let threw = false;
+  try { await applySourceTag("contact_123", "tok_abc", SUB); } catch { threw = true; }
+  t("a failed tag never breaks the booking that produced the contact", () => {
+    assert.strictEqual(threw, false);
+    assert.strictEqual(posted.length, 1);
+  });
+  postImpl = async () => ({ data: {} });
+
+  console.log(`\n${pass} passed, ${fail} failed`);
+  process.exit(fail ? 1 : 0);
+})();

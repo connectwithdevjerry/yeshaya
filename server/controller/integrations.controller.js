@@ -1974,6 +1974,10 @@ const getSubAccountDetails = async (req, res) => {
       accountId:        sub.accountId,
       customName:       sub.customName || "",
       notes:            sub.notes || "",
+      contactTag:       sub.contactTag ?? "from yashayah",
+      // Only an explicit false turns it off, so a sub-account saved before
+      // this existed keeps tagging rather than silently stopping.
+      contactTagEnabled: sub.contactTagEnabled !== false,
       connected:        sub.connected === true || hasLiveToken,
       isFavorite:       sub.isFavorite || false,
       isArchived:       sub.isArchived || false,
@@ -2043,7 +2047,7 @@ const updateSubAccountMeta = async (req, res) => {
   try {
     const userId = req.user;
     const { id } = req.params;
-    const { customName, notes } = req.body;
+    const { customName, notes, contactTag, contactTagEnabled } = req.body;
 
     const user = await userModel.findById(userId);
     if (!user) return res.status(404).json({ status: false, message: "User not found" });
@@ -2053,12 +2057,23 @@ const updateSubAccountMeta = async (req, res) => {
 
     if (customName !== undefined) sub.customName = customName.trim();
     if (notes      !== undefined) sub.notes      = notes.trim();
+    if (contactTag !== undefined) sub.contactTag = String(contactTag).trim().slice(0, 60);
+    if (contactTagEnabled !== undefined) sub.contactTagEnabled = !!contactTagEnabled;
 
     user.markModified("ghlSubAccountIds");
     await user.save();
 
     console.log(`✅ updateSubAccountMeta → ${id}`, { customName, notes });
-    return res.status(200).json({ status: true, message: "Updated successfully", data: { customName: sub.customName, notes: sub.notes } });
+    return res.status(200).json({
+      status: true,
+      message: "Updated successfully",
+      data: {
+        customName: sub.customName,
+        notes: sub.notes,
+        contactTag: sub.contactTag ?? "",
+        contactTagEnabled: sub.contactTagEnabled !== false,
+      },
+    });
   } catch (err) {
     console.error("❌ updateSubAccountMeta:", err.message);
     return res.status(500).json({ status: false, message: "Failed to update sub-account" });

@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Rocket,
   CircleCheck,
+  Circle,
   ChevronDown,
   Loader2,
 } from "lucide-react";
@@ -70,7 +71,7 @@ const getModelIcon = (model) => {
   return "https://cdn.brandfetch.io/idR3duQxYl/w/400/h/400/theme/dark/icon.jpeg";
 };
 
-export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
+export const AssistantHeader = ({ onSave, assistantId: propAssistantId, hasUnsavedChanges = false }) => {
   const [isModelModalOpen,   setIsModelModalOpen]   = useState(false);
   const [isRenameModalOpen,  setIsRenameModalOpen]  = useState(false);
   const [isIssuesModalOpen,  setIsIssuesModalOpen]  = useState(false);
@@ -233,10 +234,19 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
           <ChevronDown className="w-3 h-3 text-gray-400" />
         </motion.button>
 
-        {/* Saved indicator */}
-        <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-gray-400">
-          <CircleCheck className="w-3 h-3 text-gray-300" />
-          <span>Saved</span>
+        {/* Saved indicator. It used to read "Saved" unconditionally, including
+            with edits sitting in the editor unsaved. */}
+        <div
+          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs ${
+            hasUnsavedChanges ? "text-amber-600" : "text-gray-400"
+          }`}
+        >
+          {hasUnsavedChanges ? (
+            <Circle className="w-3 h-3 fill-amber-500 text-amber-500" />
+          ) : (
+            <CircleCheck className="w-3 h-3 text-gray-300" />
+          )}
+          <span>{hasUnsavedChanges ? "Unsaved changes" : "Saved"}</span>
         </div>
 
         <div className="h-5 w-px bg-gray-100" />
@@ -290,11 +300,16 @@ export const AssistantHeader = ({ onSave, assistantId: propAssistantId }) => {
         </button>
 
         <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
+          whileHover={hasUnsavedChanges ? { scale: 1.03 } : undefined}
+          whileTap={hasUnsavedChanges ? { scale: 0.97 } : undefined}
           onClick={handleSave}
-          disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-xs font-semibold shadow-md shadow-indigo-500/20 hover:brightness-110 transition-all disabled:opacity-70"
+          disabled={saving || !hasUnsavedChanges}
+          title={hasUnsavedChanges ? "Save your changes" : "No changes to save"}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+            hasUnsavedChanges
+              ? "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/20 hover:brightness-110"
+              : "bg-gray-100 text-gray-400 cursor-not-allowed"
+          } disabled:opacity-70`}
         >
           {saving ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />

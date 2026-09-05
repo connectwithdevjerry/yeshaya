@@ -37,6 +37,8 @@ const SubAccountTab = () => {
 
   const [customName, setCustomName] = useState("");
   const [notes,      setNotes]      = useState("");
+  const [contactTag,        setContactTag]        = useState("");
+  const [contactTagEnabled, setContactTagEnabled] = useState(true);
   const [copied,     setCopied]     = useState(false);
   const [saving,     setSaving]     = useState(false);
   const [dirty,      setDirty]      = useState(false);
@@ -49,6 +51,8 @@ const SubAccountTab = () => {
     if (subAccountDetails) {
       setCustomName(subAccountDetails.customName || "");
       setNotes(subAccountDetails.notes || "");
+      setContactTag(subAccountDetails.contactTag ?? "");
+      setContactTagEnabled(subAccountDetails.contactTagEnabled !== false);
       setDirty(false);
     }
   }, [subAccountDetails]);
@@ -63,7 +67,9 @@ const SubAccountTab = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await dispatch(updateSubAccountMeta({ id: subaccountId, customName, notes })).unwrap();
+      await dispatch(updateSubAccountMeta({
+        id: subaccountId, customName, notes, contactTag, contactTagEnabled,
+      })).unwrap();
       toast.success("Sub-account settings saved");
       setDirty(false);
     } catch (err) {
@@ -146,6 +152,51 @@ const SubAccountTab = () => {
           rows={3}
           className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none"
         />
+      </div>
+
+      {/* Contact tag. Applied in GoHighLevel to every contact an assistant
+          creates or touches here, so the agency can tell those apart from the
+          rest of the CRM. Off or renamed per sub-account, because a reseller's
+          client should not necessarily see this platform's name on their
+          contacts. */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-3">
+          <label className="block text-sm font-semibold text-gray-800">Tag contacts in GoHighLevel</label>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={contactTagEnabled}
+            onClick={() => { setContactTagEnabled(!contactTagEnabled); setDirty(true); }}
+            className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
+              contactTagEnabled ? "bg-indigo-500" : "bg-gray-200"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform mt-0.5 ${
+                contactTagEnabled ? "translate-x-4" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+        <p className="text-xs text-gray-500">
+          Adds this tag to every contact your assistants create or update here, so you
+          can find them in GoHighLevel. It is only ever added — existing tags on a
+          contact are never touched.
+        </p>
+        <input
+          type="text"
+          value={contactTag}
+          onChange={(e) => { setContactTag(e.target.value); setDirty(true); }}
+          disabled={!contactTagEnabled}
+          placeholder="e.g. from yashayah"
+          maxLength={60}
+          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:bg-gray-50 disabled:text-gray-400"
+        />
+        {contactTagEnabled && !contactTag.trim() && (
+          <p className="text-xs text-amber-600">
+            Give the tag a name, or switch it off — an empty tag adds nothing.
+          </p>
+        )}
       </div>
 
       {/* Location ID (read-only) */}
