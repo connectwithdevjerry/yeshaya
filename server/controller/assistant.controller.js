@@ -2021,6 +2021,21 @@ const executeToolFromVapi = async (req, res) => {
         contactId,
         startTime,
         title,
+        // The confirmation the customer receives is GoHighLevel's own — the
+        // one configured on the calendar, in its own wording, over whichever
+        // of email and SMS the agency has enabled there. These two fields are
+        // what make it fire for a booking created through the API:
+        //
+        //   appointmentStatus — GoHighLevel sends the "Appointment Booked"
+        //   notification when an appointment is created with confirmed status.
+        //   Left unset, the booking takes the calendar's default, which need
+        //   not be confirmed, and nothing is sent.
+        //
+        //   toNotify — its notification switch for this appointment. If the
+        //   calendar is configured to notify and nothing arrives, this is the
+        //   first field to check.
+        appointmentStatus: "confirmed",
+        toNotify: true,
       };
 
       let eventRes;
@@ -2097,10 +2112,12 @@ const executeToolFromVapi = async (req, res) => {
           });
         })()),
 
-        // Confirmation to the customer, from the agency's own sender when they
-        // have configured one. Sent to the address we actually validated, not
-        // whatever the transcriber produced.
-        identity.email
+        // Customer confirmations belong to GoHighLevel: the calendar's own
+        // notification sends the email and the SMS, and ours would land beside
+        // it as a second message from a different sender. Off unless
+        // explicitly switched on, which is the way back for a calendar that
+        // has no notification configured.
+        identity.email && process.env.SEND_OWN_CONFIRMATION_EMAIL === "true"
           ? withDeadline("confirmation email", sendUserEmail(
               userId,
               identity.email,
