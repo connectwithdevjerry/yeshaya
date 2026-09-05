@@ -662,6 +662,58 @@ const fetchAssistant = async (assistantId) => {
   return data;
 };
 
+// Only the fields Vapi's model DTOs actually accept.
+//
+// `GET /assistant/{id}` returns more than it takes back: server-generated ids,
+// timestamps and org ids, on the model and inside every tool. Spreading that
+// response into a call override sends all of it back as a model to run — and a
+// model Vapi cannot construct is an assistant that answers, has nothing to say,
+// and hangs up a few seconds later.
+//
+// The list is from @vapi-ai/server-sdk's own model types, plus `systemPrompt`,
+// which the assistants here are created with.
+const WRITABLE_MODEL_FIELDS = [
+  "provider",
+  "model",
+  "messages",
+  "systemPrompt",
+  "temperature",
+  "maxTokens",
+  "toolIds",
+  "tools",
+  "knowledgeBase",
+  "knowledgeBaseId",
+  "fallbackModels",
+  "emotionRecognitionEnabled",
+  "numFastTurns",
+  "toolStrictCompatibilityMode",
+];
+
+// Keep only what may be written, and reference saved tools by id rather than
+// sending their whole definition back — a tool that came back from a GET with
+// an id already exists, and re-sending its body is what a create expects, not
+// an override.
+const modelForOverride = (model) => {
+  const out = {};
+  for (const key of WRITABLE_MODEL_FIELDS) {
+    if (model[key] !== undefined) out[key] = model[key];
+  }
+
+  if (Array.isArray(out.tools)) {
+    const toolIds = new Set(Array.isArray(out.toolIds) ? out.toolIds : []);
+    const transient = [];
+    for (const tool of out.tools) {
+      if (tool && typeof tool === "object" && tool.id) toolIds.add(tool.id);
+      else if (tool) transient.push(tool);
+    }
+    if (transient.length) out.tools = transient;
+    else delete out.tools;
+    if (toolIds.size) out.toolIds = [...toolIds];
+  }
+
+  return out;
+};
+
 const buildAssistantOverrides = async ({
   assistantId,
   memory,
@@ -688,6 +740,16 @@ const buildAssistantOverrides = async ({
       currentTimezone: isValidTimeZone(timezone) ? timezone : "UTC",
     },
   };
+
+  // The prompt injection replaces the assistant's model for the duration of the
+  // call. That is the riskiest thing this file does, and it happens on every
+  // call, so it can be switched off from the environment without a deploy:
+  // the assistant then runs its own stored config, and {{memory}} still works
+  // for prompts that use it.
+  if (process.env.VAPI_PROMPT_INJECTION === "off") {
+    console.warn("[customerMemory] prompt injection disabled by VAPI_PROMPT_INJECTION=off");
+    return overrides;
+  }
 
   try {
     const assistant = await fetchAssistant(assistantId);
@@ -720,7 +782,7 @@ const buildAssistantOverrides = async ({
         messages.unshift({ role: "system", content: combined });
       }
 
-      overrides.model = { ...model, messages };
+      overrides.model = modelForOverride({ ...model, messages });
       if (legacyPrompt) overrides.model.systemPrompt = combined;
 
       console.log(
@@ -997,6 +1059,7 @@ module.exports = {
   recentTurnsFor,
   // vapi
   buildAssistantOverrides,
+  modelForOverride,
   buildTodayBlock,
   currentIsoDate,
   postVapiCall,

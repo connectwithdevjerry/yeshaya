@@ -265,6 +265,61 @@ const memory = {
     assert.deepStrictEqual(calls.post[1].body.input, [{ role: "user", content: "hello" }]));
   t("the user's message survived", () => assert.strictEqual(calls.post[1].body.input[0].content, "hello"));
 
+  console.log("\n-- a call override may only carry what Vapi accepts --");
+  // GET /assistant/{id} returns more than it takes back. Spreading its response
+  // into a call override sends server-generated fields as a model to run, and a
+  // model Vapi cannot construct answers, says nothing, and hangs up.
+  const FROM_GET = {
+    provider: "openai", model: "gpt-4o-mini", temperature: 0.7, maxTokens: 150,
+    systemPrompt: "You are Ada.",
+    id: "mdl_1", orgId: "org_1", createdAt: "2026-01-01", updatedAt: "2026-01-02",
+    tools: [
+      { id: "tool_saved", orgId: "org_1", createdAt: "x", type: "function", function: { name: "book" } },
+      { type: "function", function: { name: "transient" } },
+    ],
+    toolIds: ["tool_a"],
+  };
+  const cleaned = M.modelForOverride(FROM_GET);
+
+  t("server-generated fields never go back", () => {
+    for (const key of ["id", "orgId", "createdAt", "updatedAt"]) {
+      assert.strictEqual(cleaned[key], undefined, `${key} should be stripped`);
+    }
+  });
+  t("what the model needs to run survives", () => {
+    assert.strictEqual(cleaned.provider, "openai");
+    assert.strictEqual(cleaned.model, "gpt-4o-mini");
+    assert.strictEqual(cleaned.temperature, 0.7);
+    assert.strictEqual(cleaned.maxTokens, 150);
+    assert.strictEqual(cleaned.systemPrompt, "You are Ada.");
+  });
+  t("a saved tool is referenced by id, not re-sent whole", () => {
+    assert.ok(cleaned.toolIds.includes("tool_saved"));
+    assert.ok(cleaned.toolIds.includes("tool_a"), "existing toolIds are kept");
+    assert.ok(!cleaned.tools.some((x) => x.id), "no tool carries an id");
+  });
+  t("a transient tool is kept — nothing else references it", () =>
+    assert.strictEqual(cleaned.tools[0].function.name, "transient"));
+  t("an assistant with no tools gains no empty arrays", () => {
+    const bare = M.modelForOverride({ provider: "openai", model: "gpt-4o" });
+    assert.strictEqual(bare.tools, undefined);
+    assert.strictEqual(bare.toolIds, undefined);
+  });
+
+  console.log("\n-- and can be switched off without a deploy --");
+  process.env.VAPI_PROMPT_INJECTION = "off";
+  calls.get.length = 0;
+  ov = await M.buildAssistantOverrides({
+    assistantId: "ast_1", memory, timezone: "UTC", base: { firstMessage: "Hi!" },
+  });
+  t("no model override is sent at all", () => assert.strictEqual(ov.model, undefined));
+  t("the assistant is not even read from Vapi", () => assert.strictEqual(calls.get.length, 0));
+  t("the base and variables still go through", () => {
+    assert.strictEqual(ov.firstMessage, "Hi!");
+    assert.ok(ov.variableValues.memory.length > 0);
+  });
+  delete process.env.VAPI_PROMPT_INJECTION;
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
