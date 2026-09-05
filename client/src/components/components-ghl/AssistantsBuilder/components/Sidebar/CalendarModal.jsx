@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   X, Calendar as CalendarIcon, ExternalLink,
-  Trash2, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Plug,
+  Trash2, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Plug, BellRing,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -167,6 +167,35 @@ export const CalendarModal = ({ isOpen, onClose }) => {
                   <p className="text-sm text-gray-400 font-medium">Loading calendars…</p>
                 </div>
               ) : availableCalendars.length > 0 ? (
+                <>
+                  {/* Where the customer's confirmation actually comes from.
+                      Booking through the assistant makes an appointment
+                      eligible for the calendar's own notification, but it does
+                      not create that configuration — and there is nothing in
+                      this app to show whether it exists, so an agency that
+                      never set it up would only find out from a customer who
+                      heard nothing. */}
+                  <div className="mb-4 flex items-start gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
+                    <div className="p-1.5 rounded-lg bg-white flex-shrink-0">
+                      <BellRing className="w-4 h-4 text-indigo-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-gray-800">
+                        Confirmations come from GoHighLevel
+                      </p>
+                      <p className="text-[11px] text-gray-500 leading-relaxed mt-1">
+                        When the assistant books, GoHighLevel sends the confirmation and
+                        reminders — in your wording, over email and SMS. Turn them on once
+                        per calendar in{" "}
+                        <span className="font-semibold text-gray-700">
+                          GoHighLevel → Calendar Settings → Notifications
+                        </span>
+                        , and enable <span className="font-semibold text-gray-700">Appointment Booked</span>{" "}
+                        to the Contact. Nothing is sent until you do.
+                      </p>
+                    </div>
+                  </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {availableCalendars.map((cal) => {
                     // Both sides can be undefined — with no calendar linked
@@ -246,6 +275,7 @@ export const CalendarModal = ({ isOpen, onClose }) => {
                     );
                   })}
                 </div>
+                </>
               ) : calendarListError ? (
                 <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-6">
                   <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center">
