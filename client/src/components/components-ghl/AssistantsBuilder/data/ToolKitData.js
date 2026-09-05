@@ -1,5 +1,5 @@
 // src/data/ToolKitData.js
-import { Settings, ToolCase, MapPin, Book, Calendar, Search, Users, AlertTriangle } from 'lucide-react'; // Changed ToolCase to Tool to match actual Lucide icon
+import { Settings, ToolCase, MapPin, Book, Calendar, Search, Users, Clock, AlertTriangle } from 'lucide-react'; // Changed ToolCase to Tool to match actual Lucide icon
 
 export const toolkitItems = [
     { title: "Chat Settings", icon: Settings, type: "panel" },
@@ -10,6 +10,7 @@ export const toolkitItems = [
     { title: "Calendars", icon: Calendar, type: "modal" },
     { title: "Find & Replace", icon: Search, type: "panel" },
     { title: "Team Notes", icon: Users, type: "panel" },
+    { title: "Working Hours", icon: Clock, type: "panel" },
 ];
 
 export const bottomMenuItem = {

@@ -111,6 +111,20 @@ const userSchema = mongoose.Schema({
           teamNotes: { type: String, required: false },
           inboundDynamicMessage: { type: String, required: false },
           outboundDynamicMessage: { type: String, required: false },
+          // When this assistant is on duty. Absent or disabled means always,
+          // so an assistant nobody has scheduled keeps answering.
+          workingHours: {
+            enabled:       { type: Boolean, default: false },
+            closedMessage: String,
+            days: [
+              {
+                day:     Number,   // 0 = Sunday
+                enabled: { type: Boolean, default: true },
+                start:   String,   // "09:00", in the sub-account's timezone
+                end:     String,   // "17:00"; earlier than start means overnight
+              },
+            ],
+          },
           knowledgeBaseToolIds: [String],
           connectedTools: [String],
           customFieldMap: [
