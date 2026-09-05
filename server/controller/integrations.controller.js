@@ -1256,12 +1256,17 @@ const twilioCallReceiver = async (req, res) => {
         const accessToken = tokens?.data?.access_token;
         if (!accessToken) throw new Error(tokens?.message || "no GHL access token");
 
+        // /contacts/search answers POST only — a GET to it is refused with
+        // "Cannot GET /contacts/search" (404), which the catch below turned
+        // into the un-personalised greeting. So the dynamic opening line has
+        // never once used the caller's name. The lookup GHL serves over GET is
+        // /contacts/ with locationId and query; it returns the same shape.
         const response = await axios.get(
-          "https://services.leadconnectorhq.com/contacts/search",
+          "https://services.leadconnectorhq.com/contacts/",
           {
             params: {
               locationId: subaccount,
-              query: callerNumber, // GHL search allows querying by phone number string
+              query: callerNumber, // GHL matches a phone number as a query string
             },
             headers: {
               Authorization: `Bearer ${accessToken}`,

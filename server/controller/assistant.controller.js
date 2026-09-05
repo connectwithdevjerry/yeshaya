@@ -2643,23 +2643,53 @@ const executeToolFromVapi = async (req, res) => {
         await applySourceTag(selfScheduleContactId, accessToken, targetSubAccount);
 
         // Step B: Create Event/Appointment
-        await axios.post(
-          "https://services.leadconnectorhq.com/calendars/events",
-          {
-            calendarId,
-            locationId,
-            contactId: selfScheduleContactId,
-            startTime,
-            title: title || `Scheduled: ${customerName}`,
-          },
-          {
-            timeout: TOOL_HTTP_TIMEOUT_MS,
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              Version: "2021-04-15",
+        //
+        // `/calendars/events` only answers GET — it is the list endpoint. A
+        // POST to it is refused with "Cannot POST /calendars/events" (404),
+        // which is what every self_schedule call got: the contact was created,
+        // the appointment never was, and the caller heard that scheduling had
+        // failed. Appointments are created at /calendars/events/appointments,
+        // the same endpoint book_appointment uses.
+        //
+        // appointmentStatus/toNotify are what make GoHighLevel send its own
+        // "Appointment Booked" confirmation for an appointment created through
+        // the API — see book_appointment above for the full note.
+        const selfSchedulePayload = {
+          calendarId,
+          locationId,
+          contactId: selfScheduleContactId,
+          startTime,
+          title: title || `Scheduled: ${customerName}`,
+          appointmentStatus: "confirmed",
+          toNotify: true,
+        };
+
+        try {
+          await axios.post(
+            "https://services.leadconnectorhq.com/calendars/events/appointments",
+            selfSchedulePayload,
+            {
+              timeout: TOOL_HTTP_TIMEOUT_MS,
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                Version: "2021-04-15",
+              },
             },
-          },
-        );
+          );
+        } catch (bookErr) {
+          // Log what GoHighLevel objected to, and to what. The generic catch
+          // below prints only the message, which for a rejected payload says
+          // nothing about which field it disliked.
+          console.error(
+            "self_schedule rejected by GoHighLevel:",
+            JSON.stringify({
+              status: bookErr.response?.status,
+              body: bookErr.response?.data,
+              sent: selfSchedulePayload,
+            }),
+          );
+          throw bookErr;
+        }
 
         return res.status(200).json({
           results: [

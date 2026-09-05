@@ -76,6 +76,15 @@ Vercel's Hobby plan rejects any cron more frequent than daily at deploy time.
   Contacts use `2021-07-28`. Sending the Contacts version to a calendar
   endpoint returns a shape nothing recognises, which reads as an empty diary —
   every availability check failed this way.
+- **Check the method an endpoint answers, not just its path.** Appointments are
+  created at `POST /calendars/events/appointments`; `/calendars/events` is the
+  *list* endpoint and answers GET only, refusing a POST with
+  `Cannot POST /calendars/events`. `/contacts/search` is the mirror image — POST
+  only, so a GET to it 404s; the lookup GET serves is `/contacts/` with
+  `locationId` and `query`. Both shipped, and neither failed loudly: one told
+  the caller scheduling had failed, the other silently dropped the caller's name
+  out of the dynamic greeting. `test/toolWebhook.test.js` now reads the
+  controllers and asserts on both shapes.
 - **Times must be the strings GoHighLevel published.** A booking is matched
   against its own free-slot strings, which carry the calendar's offset
   (`2026-09-10T09:00:00-04:00`). The same instant re-expressed as UTC matches
