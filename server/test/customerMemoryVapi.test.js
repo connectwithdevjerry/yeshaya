@@ -24,6 +24,10 @@ require.cache[AXIOS] = {
 const MODEL = require.resolve("../model/customerMemory.model");
 require.cache[MODEL] = { id: MODEL, filename: MODEL, loaded: true, exports: {} };
 
+// Prompt injection is opt-in since it took inbound calls down. These tests are
+// about what it sends when it IS on, so switch it on for the file.
+process.env.VAPI_PROMPT_INJECTION = "on";
+
 const M = require("../helpers/customerMemory");
 
 const memory = {
@@ -306,8 +310,8 @@ const memory = {
     assert.strictEqual(bare.toolIds, undefined);
   });
 
-  console.log("\n-- and can be switched off without a deploy --");
-  process.env.VAPI_PROMPT_INJECTION = "off";
+  console.log("\n-- and is off unless deliberately switched on --");
+  delete process.env.VAPI_PROMPT_INJECTION;
   calls.get.length = 0;
   ov = await M.buildAssistantOverrides({
     assistantId: "ast_1", memory, timezone: "UTC", base: { firstMessage: "Hi!" },
@@ -318,7 +322,14 @@ const memory = {
     assert.strictEqual(ov.firstMessage, "Hi!");
     assert.ok(ov.variableValues.memory.length > 0);
   });
-  delete process.env.VAPI_PROMPT_INJECTION;
+  process.env.VAPI_PROMPT_INJECTION = "off";
+  calls.get.length = 0;
+  const explicitOff = await M.buildAssistantOverrides({ assistantId: "ast_1", memory, base: {} });
+  t("an explicit off is off too", () => {
+    assert.strictEqual(explicitOff.model, undefined);
+    assert.strictEqual(calls.get.length, 0);
+  });
+  process.env.VAPI_PROMPT_INJECTION = "on";
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

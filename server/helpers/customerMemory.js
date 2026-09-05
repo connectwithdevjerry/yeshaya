@@ -741,15 +741,33 @@ const buildAssistantOverrides = async ({
     },
   };
 
-  // The prompt injection replaces the assistant's model for the duration of the
-  // call. That is the riskiest thing this file does, and it happens on every
-  // call, so it can be switched off from the environment without a deploy:
-  // the assistant then runs its own stored config, and {{memory}} still works
-  // for prompts that use it.
-  if (process.env.VAPI_PROMPT_INJECTION === "off") {
-    console.warn("[customerMemory] prompt injection disabled by VAPI_PROMPT_INJECTION=off");
+  // Prompt injection is OFF unless deliberately switched on, because it took
+  // inbound calls down: the assistant answered, said nothing, and hung up.
+  //
+  // Two things are wrong with it, and both are on the path between a caller
+  // ringing and hearing anything.
+  //
+  // It reads the assistant back from Vapi on every call. The cache below was
+  // supposed to make that rare, but a serverless invocation is a fresh process
+  // — the Map is always empty, so the cache never hit once in production and
+  // every call paid for a round trip to api.vapi.ai before it could be placed.
+  //
+  // And it replaces the assistant's model for the duration of the call. An
+  // override Vapi accepts but cannot run leaves an assistant with nothing to
+  // say, and postVapiCall only degrades on a 400, so a request accepted and
+  // then failing at runtime never falls back.
+  //
+  // Bringing it back means removing the live fetch — keeping the prompt where
+  // this codebase can already reach it, rather than asking Vapi for it while
+  // someone waits. Until then {{memory}} and the variables below still work
+  // for prompts that use them; those cost nothing.
+  if (process.env.VAPI_PROMPT_INJECTION !== "on") {
     return overrides;
   }
+  console.warn(
+    "[customerMemory] VAPI_PROMPT_INJECTION=on — the assistant is read from Vapi on " +
+      "every call and its model is replaced. This has taken inbound calls down before.",
+  );
 
   try {
     const assistant = await fetchAssistant(assistantId);
