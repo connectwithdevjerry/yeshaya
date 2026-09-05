@@ -17,7 +17,6 @@ const { HighLevel } = require("@gohighlevel/api-client");
 const https = require("https");
 const twilio = require("twilio");
 const { getVapiPhoneId, backfillSubaccountTimezone } = require("./assistant.controller");
-const { isWithinWorkingHours } = require("../helpers/workingHours");
 const {
   extractVariables,
   fillTemplate,
@@ -1226,20 +1225,6 @@ const twilioCallReceiver = async (req, res) => {
       return res.type("text/xml").send(twiml.toString());
     }
 
-    // Outside the assistant's working hours, say so in the agency's own words
-    // rather than answering as though the office were open. Judged on the
-    // sub-account's clock, not the server's.
-    const duty = isWithinWorkingHours(
-      targetAssistant[0]?.workingHours,
-      targetSubaccount[0]?.timezone,
-    );
-    if (!duty.open) {
-      console.log(`Inbound call for ${assistant} refused: ${duty.reason}`);
-      const twiml = new VoiceResponse();
-      twiml.say(duty.message);
-      return res.type("text/xml").send(twiml.toString());
-    }
-
     const targetPhoneNumber = targetAssistant[0].numberDetails.filter(
       (number) => number.phoneNum === receiverNumber,
     );
@@ -1423,15 +1408,6 @@ const twilioSmsReceiver = async (req, res) => {
     if (user.walletBalance <= 0) return reply(null);
     if (checkFeature(user, "chat")) return reply(null);
     if (await checkUsageLimit(user, subaccount, "messages")) return reply(null);
-
-    const smsDuty = isWithinWorkingHours(
-      targetAssistant?.workingHours,
-      targetSubaccount?.timezone,
-    );
-    if (!smsDuty.open) {
-      console.log(`Inbound SMS for ${assistant} answered out of hours: ${smsDuty.reason}`);
-      return reply(smsDuty.message);
-    }
 
     // ---- PER-CUSTOMER MEMORY (read) ----
     const memory = await ensureMemory({

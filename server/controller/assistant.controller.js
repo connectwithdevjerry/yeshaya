@@ -22,13 +22,6 @@ const kbFileModel = require("../model/kbFile.model");
 const { saveImageToDB } = require("../cloudinaryImageHandler");
 const { reportCalendarProblem } = require("../helpers/calendarHealth");
 const {
-  isWithinWorkingHours,
-  DAYS,
-  defaultWeek,
-  minutesFromTime,
-  DEFAULT_CLOSED_MESSAGE,
-} = require("../helpers/workingHours");
-const {
   resolveSubaccountId,
   checkFeature,
   checkUsageLimit,
@@ -3134,114 +3127,6 @@ const removeCalendarId = async (req, res) => {
   }
 };
 
-
-// ─── Working hours ───────────────────────────────────────────────────────────
-//
-// One row per day of the week, in the sub-account's timezone. Absent or
-// disabled means the assistant is always on duty, which is what every existing
-// assistant has, so adding this changes nothing until someone switches it on.
-
-const getWorkingHours = async (req, res) => {
-  try {
-    const { subaccountId, assistantId } = req.query;
-    if (!subaccountId || !assistantId) {
-      return res.send({ status: false, message: "subaccountId and assistantId are required" });
-    }
-    const user = await userModel.findById(req.user).select("ghlSubAccountIds").lean();
-    const sub = (user?.ghlSubAccountIds || []).find((x) => x.accountId === subaccountId);
-    const assistant = (sub?.vapiAssistants || []).find((a) => a.assistantId === assistantId);
-    if (!assistant) return res.send({ status: false, message: "This assistant does not exist!" });
-
-    const stored = assistant.workingHours || {};
-    return res.send({
-      status: true,
-      data: {
-        enabled: stored.enabled === true,
-        closedMessage: stored.closedMessage || "",
-        // Seed the form with a sensible week rather than seven blank rows, but
-        // only for display — nothing is stored until they save.
-        days: stored.days?.length ? stored.days : defaultWeek(),
-        // Shown in the panel so it is clear whose clock these hours are on.
-        timezone: sub?.timezone || "UTC",
-        dayLabels: DAYS,
-        defaultClosedMessage: DEFAULT_CLOSED_MESSAGE,
-      },
-    });
-  } catch (error) {
-    console.error("getWorkingHours error:", error.message);
-    return res.send({ status: false, message: error.message });
-  }
-};
-
-const saveWorkingHours = async (req, res) => {
-  try {
-    const { subaccountId, assistantId, enabled, days, closedMessage } = req.body;
-    if (!subaccountId || !assistantId) {
-      return res.send({ status: false, message: "subaccountId and assistantId are required" });
-    }
-
-    // Validate before storing. A row that cannot be read closes that day, and
-    // an agency who typed "9pm" should be told rather than quietly shut on a
-    // day they meant to be open.
-    const cleaned = [];
-    for (const row of Array.isArray(days) ? days : []) {
-      const dayIndex = Number(row?.day);
-      if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6) continue;
-      const label = DAYS[dayIndex]?.label || `Day ${dayIndex}`;
-      const on = row.enabled !== false;
-      if (on) {
-        if (minutesFromTime(row.start) === null) {
-          return res.send({ status: false, message: `${label}: "${row.start}" is not a time.` });
-        }
-        if (minutesFromTime(row.end) === null) {
-          return res.send({ status: false, message: `${label}: "${row.end}" is not a time.` });
-        }
-        if (minutesFromTime(row.start) === minutesFromTime(row.end)) {
-          return res.send({
-            status: false,
-            message: `${label}: opening and closing times are the same.`,
-          });
-        }
-      }
-      cleaned.push({
-        day: dayIndex,
-        enabled: on,
-        start: String(row.start || "").trim(),
-        end: String(row.end || "").trim(),
-      });
-    }
-
-    if (enabled === true && !cleaned.some((d) => d.enabled)) {
-      return res.send({
-        status: false,
-        message: "Every day is switched off — the assistant would never answer.",
-      });
-    }
-
-    const user = await userModel.findById(req.user);
-    const sub = (user?.ghlSubAccountIds || []).find((x) => x.accountId === subaccountId);
-    const assistant = (sub?.vapiAssistants || []).find((a) => a.assistantId === assistantId);
-    if (!assistant) return res.send({ status: false, message: "This assistant does not exist!" });
-
-    assistant.workingHours = {
-      enabled: enabled === true,
-      closedMessage: String(closedMessage || "").trim().slice(0, 300),
-      days: cleaned,
-    };
-    user.markModified("ghlSubAccountIds");
-    await user.save();
-
-    return res.send({
-      status: true,
-      data: assistant.workingHours,
-      message: enabled === true ? "Working hours saved." : "Working hours turned off.",
-    });
-  } catch (error) {
-    console.error("saveWorkingHours error:", error.message);
-    return res.send({ status: false, message: error.message });
-  }
-};
-
 // ─── Map Custom Fields: list a location's GHL custom fields + saved mapping ────
 const getGhlCustomFields = async (req, res) => {
   try {
@@ -4781,19 +4666,6 @@ const makeOutboundCall = async (req, res) => {
     if (!targetAssistant)
       return res.send({ status: false, message: "Assistant does not exist!" });
 
-    // Dialling someone at 3am is worse than not dialling them. The schedule is
-    // the agency's own, on the sub-account's clock.
-    const outboundDuty = isWithinWorkingHours(
-      targetAssistant.workingHours,
-      targetSubaccount.timezone,
-    );
-    if (!outboundDuty.open) {
-      return res.send({
-        status: false,
-        message: `This assistant is outside its working hours (${outboundDuty.reason}).`,
-      });
-    }
-
     const outboundDynamicMessage = targetAssistant.outboundDynamicMessage || "";
 
     console.log({ outboundDynamicMessage, dynamicValues });
@@ -4907,17 +4779,6 @@ const sendChatMessage = async (req, res) => {
     (await checkUsageLimit(user, chatSubaccountId, "messages"));
   if (chatBlockReason) {
     return res.send({ status: false, reply: [{ role: "assistant", content: chatBlockReason }] });
-  }
-
-  const chatDuty = isWithinWorkingHours(
-    chatAssistant?.workingHours,
-    chatSubaccount?.timezone,
-  );
-  if (!chatDuty.open) {
-    return res.send({
-      status: true,
-      reply: [{ role: "assistant", content: chatDuty.message }],
-    });
   }
 
   // Chatting as a named contact unifies this thread with that person's calls and
@@ -5737,8 +5598,6 @@ module.exports = {
   importContacts,
   getSubGhlTokensExport: getSubGhlTokens,
   backfillSubaccountTimezone,
-  getWorkingHours,
-  saveWorkingHours,
 };
 
 // what's left
