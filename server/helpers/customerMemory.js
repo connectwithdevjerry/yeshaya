@@ -635,198 +635,67 @@ const recentTurnsFor = (memory, { limit = CONTEXT_TURNS, assistantId } = {}) =>
 
 // ─── Vapi call helpers ───────────────────────────────────────────────────────
 
-// Build assistantOverrides that carry the memory into a voice call.
+// The one line an assistant's prompt needs for a call's context to reach it.
 //
-// Two mechanisms, belt and braces:
-//   1. variableValues.memory — works if the prompt uses {{memory}}.
-//   2. A model override that appends the block to the assistant's own system
-//      prompt — works with no prompt changes at all. Requires reading the
-//      assistant back from Vapi so the rest of its model config is preserved.
-// The assistant's own config, briefly cached. Reading it back from Vapi sits on
-// the path between a call arriving and being answered, so the round-trip is
-// time-to-answer the caller experiences as silence. Assistant configs change
-// rarely; a short TTL removes the round-trip for back-to-back calls without
-// holding a stale prompt for long.
-const ASSISTANT_CACHE_TTL_MS = 60_000;
-const assistantCache = new Map();
+// Everything this file knows — today's date, the caller's number, team notes,
+// what the customer said last time — is sent on every call as the `memory`
+// variable. Vapi places it wherever the prompt says {{memory}}. So the prompt
+// changes once, and nothing on the path between a caller ringing and hearing
+// something has to ask Vapi anything.
+//
+// This replaces a model override built from a live GET /assistant/{id}. That
+// read happened on every call — the cache in front of it was a module-level Map,
+// and every serverless invocation is a fresh process, so it never hit once — and
+// the override then replaced the assistant's model for the duration of the call.
+// Between them they left assistants answering, saying nothing, and hanging up.
+const PROMPT_CONTEXT_MARKER = "{{memory}}";
 
-const fetchAssistant = async (assistantId) => {
-  const hit = assistantCache.get(assistantId);
-  if (hit && Date.now() - hit.at < ASSISTANT_CACHE_TTL_MS) return hit.data;
+const PROMPT_CONTEXT_BLOCK = [
+  "## Live context",
+  "Everything below is about the person you are speaking to right now, and about",
+  "today. Trust it over anything you think you already know.",
+  "",
+  PROMPT_CONTEXT_MARKER,
+].join("\n");
 
-  const { data } = await axios.get(`https://api.vapi.ai/assistant/${assistantId}`, {
-    headers: vapiHeaders(),
-    timeout: 10_000,
-  });
-  assistantCache.set(assistantId, { at: Date.now(), data });
-  return data;
+// Put the marker into a prompt that lacks it, and leave one that has it alone.
+// Called wherever a prompt is written — never on the call path.
+const withPromptContext = (prompt) => {
+  const text = typeof prompt === "string" ? prompt : "";
+  if (text.includes(PROMPT_CONTEXT_MARKER)) return text;
+  return `${text.replace(/\s+$/, "")}\n\n${PROMPT_CONTEXT_BLOCK}\n`;
 };
 
-// Only the fields Vapi's model DTOs actually accept.
+// The overrides that carry this call's context to the assistant.
 //
-// `GET /assistant/{id}` returns more than it takes back: server-generated ids,
-// timestamps and org ids, on the model and inside every tool. Spreading that
-// response into a call override sends all of it back as a model to run — and a
-// model Vapi cannot construct is an assistant that answers, has nothing to say,
-// and hangs up a few seconds later.
-//
-// The list is from @vapi-ai/server-sdk's own model types, plus `systemPrompt`,
-// which the assistants here are created with.
-const WRITABLE_MODEL_FIELDS = [
-  "provider",
-  "model",
-  "messages",
-  "systemPrompt",
-  "temperature",
-  "maxTokens",
-  "toolIds",
-  "tools",
-  "knowledgeBase",
-  "knowledgeBaseId",
-  "fallbackModels",
-  "emotionRecognitionEnabled",
-  "numFastTurns",
-  "toolStrictCompatibilityMode",
-];
-
-// Keep only what may be written, and reference saved tools by id rather than
-// sending their whole definition back — a tool that came back from a GET with
-// an id already exists, and re-sending its body is what a create expects, not
-// an override.
-const modelForOverride = (model) => {
-  const out = {};
-  for (const key of WRITABLE_MODEL_FIELDS) {
-    if (model[key] !== undefined) out[key] = model[key];
-  }
-
-  if (Array.isArray(out.tools)) {
-    const toolIds = new Set(Array.isArray(out.toolIds) ? out.toolIds : []);
-    const transient = [];
-    for (const tool of out.tools) {
-      if (tool && typeof tool === "object" && tool.id) toolIds.add(tool.id);
-      else if (tool) transient.push(tool);
-    }
-    if (transient.length) out.tools = transient;
-    else delete out.tools;
-    if (toolIds.size) out.toolIds = [...toolIds];
-  }
-
-  return out;
-};
-
+// Nothing here talks to Vapi, and nothing replaces the assistant's own
+// configuration — which is why it cannot fail a call. A variable Vapi cannot
+// place renders empty; it does not leave an assistant unable to run.
 const buildAssistantOverrides = async ({
-  assistantId,
   memory,
   assistantNotes,
   caller,
   timezone,
   base = {},
-}) => {
-  const block = buildContextBlock(memory, { assistantNotes, caller, timezone });
-  if (!block) return base;
+}) => ({
+  ...base,
+  variableValues: {
+    ...(base.variableValues || {}),
+    // The whole block, for the {{memory}} marker above.
+    memory: buildContextBlock(memory, { assistantNotes, caller, timezone }),
+    // And individually, for a prompt that wants to place one somewhere specific.
+    customerPhone: caller?.number || memory?.phone || "",
+    customerName: memory?.name || caller?.name || "",
+    isReturningCustomer: memory?.interactionCount > 0 ? "true" : "false",
+    currentDate: currentIsoDate(timezone),
+    currentTimezone: isValidTimeZone(timezone) ? timezone : "UTC",
+  },
+});
 
-  const overrides = {
-    ...base,
-    variableValues: {
-      ...(base.variableValues || {}),
-      memory: block,
-      // Available to prompts as {{customerPhone}} / {{customerName}} even on a
-      // first call, when there is no memory to draw a name from yet.
-      customerPhone: caller?.number || memory?.phone || "",
-      customerName: memory?.name || caller?.name || "",
-      isReturningCustomer: memory?.interactionCount > 0 ? "true" : "false",
-      // So a prompt can use {{currentDate}} directly if it wants to.
-      currentDate: currentIsoDate(timezone),
-      currentTimezone: isValidTimeZone(timezone) ? timezone : "UTC",
-    },
-  };
-
-  // Prompt injection is OFF unless deliberately switched on, because it took
-  // inbound calls down: the assistant answered, said nothing, and hung up.
-  //
-  // Two things are wrong with it, and both are on the path between a caller
-  // ringing and hearing anything.
-  //
-  // It reads the assistant back from Vapi on every call. The cache below was
-  // supposed to make that rare, but a serverless invocation is a fresh process
-  // — the Map is always empty, so the cache never hit once in production and
-  // every call paid for a round trip to api.vapi.ai before it could be placed.
-  //
-  // And it replaces the assistant's model for the duration of the call. An
-  // override Vapi accepts but cannot run leaves an assistant with nothing to
-  // say, and postVapiCall only degrades on a 400, so a request accepted and
-  // then failing at runtime never falls back.
-  //
-  // Bringing it back means removing the live fetch — keeping the prompt where
-  // this codebase can already reach it, rather than asking Vapi for it while
-  // someone waits. Until then {{memory}} and the variables below still work
-  // for prompts that use them; those cost nothing.
-  if (process.env.VAPI_PROMPT_INJECTION !== "on") {
-    return overrides;
-  }
-  console.warn(
-    "[customerMemory] VAPI_PROMPT_INJECTION=on — the assistant is read from Vapi on " +
-      "every call and its model is replaced. This has taken inbound calls down before.",
-  );
-
-  try {
-    const assistant = await fetchAssistant(assistantId);
-
-    const model = assistant?.model;
-    if (model && typeof model === "object") {
-      // Vapi holds a system prompt in one of two places, and this codebase
-      // creates assistants in the older shape: assistant.controller.js sends
-      // `model.systemPrompt`, and the prompt editor reads it back from there.
-      // Appending only to `model.messages` therefore appended to an empty
-      // array, and whichever field Vapi honours at inference, half the prompt
-      // was in the other one. So write the combined text to BOTH: the
-      // assistant's own instructions and this block stay together either way.
-      const legacyPrompt =
-        typeof model.systemPrompt === "string" ? model.systemPrompt : "";
-      const messages = Array.isArray(model.messages) ? [...model.messages] : [];
-      const systemIndex = messages.findIndex((m) => m.role === "system");
-      const msgPrompt = systemIndex >= 0 ? messages[systemIndex].content || "" : "";
-      // Vapi may mirror systemPrompt into messages. Keep whatever each holds,
-      // but do not hand the model the same instructions twice.
-      const parts = [];
-      if (legacyPrompt) parts.push(legacyPrompt);
-      if (msgPrompt && !legacyPrompt.includes(msgPrompt)) parts.push(msgPrompt);
-      const existing = parts.join("\n\n");
-      const combined = existing ? `${existing}\n\n${block}` : block;
-
-      if (systemIndex >= 0) {
-        messages[systemIndex] = { ...messages[systemIndex], content: combined };
-      } else {
-        messages.unshift({ role: "system", content: combined });
-      }
-
-      overrides.model = modelForOverride({ ...model, messages });
-      if (legacyPrompt) overrides.model.systemPrompt = combined;
-
-      console.log(
-        `[customerMemory] injecting ${block.length} chars into ${assistantId} (` +
-          `${legacyPrompt ? "systemPrompt+messages" : "messages"} shape)`,
-      );
-    } else {
-      console.warn(
-        `[customerMemory] assistant ${assistantId} has no model object — context block not injected`,
-      );
-    }
-  } catch (e) {
-    // Prompt injection is a bonus; {{memory}} substitution still works.
-    console.warn(
-      "[customerMemory] could not read assistant for prompt injection:",
-      e.response?.data?.message || e.message,
-    );
-  }
-
-  return overrides;
-};
-
-// POST https://api.vapi.ai/call. If Vapi rejects the model override, shed it
-// a piece at a time — the legacy `systemPrompt` field first, then the whole
-// model — so the context block is given up only as far as Vapi forces. A memory
-// override must never be the reason a call fails.
+// POST https://api.vapi.ai/call, retrying once without the variable values if
+// Vapi refuses them. Carrying a call's context must never be the reason the
+// call fails — better an assistant that answers without knowing who is on the
+// line than one that does not answer.
 const postVapiCall = async (payload) => {
   const post = (body) =>
     axios.post("https://api.vapi.ai/call", body, {
@@ -837,35 +706,15 @@ const postVapiCall = async (payload) => {
   try {
     return await post(payload);
   } catch (e) {
-    const model = payload?.assistantOverrides?.model;
-    if (!model || e.response?.status !== 400) throw e;
-
-    // `systemPrompt` is the legacy prompt field. Vapi accepts it when creating
-    // an assistant, but if its override schema does not, dropping just that
-    // field keeps the block in `messages` rather than losing it altogether.
-    if (model.systemPrompt) {
-      const { systemPrompt: _legacy, ...restModel } = model;
-      console.warn(
-        "[customerMemory] Vapi rejected the model override; retrying without systemPrompt:",
-        e.response?.data?.message || e.message,
-      );
-      try {
-        return await post({
-          ...payload,
-          assistantOverrides: { ...payload.assistantOverrides, model: restModel },
-        });
-      } catch (e2) {
-        if (e2.response?.status !== 400) throw e2;
-        e = e2;
-      }
-    }
+    const hasVariables = !!payload?.assistantOverrides?.variableValues;
+    if (!hasVariables || e.response?.status !== 400) throw e;
 
     console.warn(
-      "[customerMemory] Vapi rejected the model override, retrying without it:",
+      "[customerMemory] Vapi rejected the variable values, retrying without them:",
       e.response?.data?.message || e.message,
     );
-    const { model: _dropped, ...restOverrides } = payload.assistantOverrides;
-    return post({ ...payload, assistantOverrides: restOverrides });
+    const { variableValues, ...rest } = payload.assistantOverrides;
+    return post({ ...payload, assistantOverrides: rest });
   }
 };
 
@@ -1077,7 +926,9 @@ module.exports = {
   recentTurnsFor,
   // vapi
   buildAssistantOverrides,
-  modelForOverride,
+  withPromptContext,
+  PROMPT_CONTEXT_MARKER,
+  PROMPT_CONTEXT_BLOCK,
   buildTodayBlock,
   currentIsoDate,
   postVapiCall,

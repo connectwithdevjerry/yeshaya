@@ -98,13 +98,15 @@ Vercel's Hobby plan rejects any cron more frequent than daily at deploy time.
 
 - **Assistants store their prompt in `model.systemPrompt`**, not
   `model.messages` — see `VAPI_ASSISTANT_CONFIG` and the prompt editor.
-- **Prompt injection is off** (`VAPI_PROMPT_INJECTION=on` enables it). It took
-  inbound calls down: the assistant answered, said nothing, and hung up. It
-  reads the assistant back from Vapi on every call and replaces its model for
-  the duration, and `postVapiCall` only degrades on a 400, so an override Vapi
-  accepts and then cannot run never falls back. Bringing it back means removing
-  the live fetch. `variableValues` (`{{memory}}`, `{{currentDate}}`) still ship
-  on every call and cost nothing.
+- **A call's context reaches the model through `{{memory}}`, not an override.**
+  Everything known about the caller and about today ships as `variableValues`
+  on every call, and Vapi places it where the prompt says `{{memory}}`.
+  `withPromptContext()` puts that marker into a prompt wherever one is written —
+  at creation and on every save — so nothing on the call path asks Vapi
+  anything. The previous design read the assistant back on every call and
+  replaced its model for the duration; it took inbound calls down, with the
+  assistant answering, saying nothing, and hanging up. Never put a network call
+  between a caller ringing and the call being placed.
 - **The model does not know what day it is** unless told. Left to itself it
   answers from training data and books appointments in the past. The date, time
   and timezone are injected into every conversation by `buildTodayBlock()`.
