@@ -9,6 +9,7 @@ import { ToolsAndAPIsModal } from "./Sidebar/ToolsAndAPIsModal";
 import { CalendarModal } from "./Sidebar/CalendarModal";
 import { KnowledgeBaseSettings } from "./Sidebar/KnowledgeBaseSettings";
 import { MapCustomFieldsPanel } from "./Sidebar/MapCustomFieldsPanel";
+import { WorkingHoursPanel } from "./Sidebar/WorkingHoursPanel";
 import { FindReplacePanel } from "./Sidebar/FindReplacePanel";
 import { TeamNotesPanel } from "./Sidebar/TeamNotesPanel";
 
@@ -32,6 +33,7 @@ const ToolkitItem = ({ item, isSelected, onSelect, openToolsModal, openCalendarM
     if (item.title === "Map Custom Fields")       return <MapCustomFieldsPanel />;
     if (item.title === "Find & Replace")          return <FindReplacePanel promptContent={promptContent} setPromptContent={setPromptContent} />;
     if (item.title === "Team Notes")              return <TeamNotesPanel />;
+    if (item.title === "Working Hours")           return <WorkingHoursPanel />;
     return null;
   };
 

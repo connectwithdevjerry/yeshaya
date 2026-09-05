@@ -34,6 +34,8 @@ const {
   kbSearch,
   getGhlCustomFields,
   saveCustomFieldMap,
+  getWorkingHours,
+  saveWorkingHours,
   removeKnowledgeBaseFromAssistant,
   deleteKnowledgeBase,
   executeToolFromVapi,
@@ -85,6 +87,7 @@ const {
   KB_SEARCH,
   GET_GHL_CUSTOM_FIELDS,
   SAVE_CUSTOM_FIELD_MAP,
+  WORKING_HOURS,
   LINK_KNOWLEDGE_BASES_2_ASSISTANT,
   RMV_ASSISTANT_KNOWLEDGE,
   EXECUTE_TOOL,
@@ -165,6 +168,8 @@ router.get(GET_ALL_KNOWLEDGE_BASES, verifyAccessToken, getAllKnowledgeBases);
 router.get(KB_SEARCH, verifyAccessToken, kbSearch);
 router.get(GET_GHL_CUSTOM_FIELDS, verifyAccessToken, getGhlCustomFields);
 router.post(SAVE_CUSTOM_FIELD_MAP, verifyAccessToken, saveCustomFieldMap);
+router.get(WORKING_HOURS, verifyAccessToken, getWorkingHours);
+router.post(WORKING_HOURS, verifyAccessToken, saveWorkingHours);
 router.post(
   LINK_KNOWLEDGE_BASES_2_ASSISTANT,
   verifyAccessToken,
