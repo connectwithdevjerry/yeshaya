@@ -41,6 +41,7 @@ const {
   postVapiCall,
   postVapiChat,
   contactsFromMemory,
+  withPromptContext,
 } = require("../helpers/customerMemory");
 
 const toolsProperties = {
@@ -362,7 +363,11 @@ const VAPI_ASSISTANT_CONFIG = ({
   model: {
     model: "gpt-4o-mini",
     provider: "openai",
-    systemPrompt: prompt,
+    // The marker through which a call's context — today's date, the caller's
+    // number, what they said last time — reaches the model. Added here so a new
+    // assistant has it from the start, and nothing has to be injected while a
+    // caller waits.
+    systemPrompt: withPromptContext(prompt),
     temperature: 0.7,
     maxTokens: 150,
   },
@@ -801,9 +806,24 @@ const updateAssistant = async (req, res) => {
         message: "This assistant does not exist!",
       });
 
+    // A prompt saved from the builder must keep the context marker, or the
+    // assistant quietly stops being told who is calling and what day it is.
+    // Adding it here rather than in the client means it holds for every route
+    // that writes a prompt.
+    const patched =
+      typeof updateData?.model?.systemPrompt === "string"
+        ? {
+            ...updateData,
+            model: {
+              ...updateData.model,
+              systemPrompt: withPromptContext(updateData.model.systemPrompt),
+            },
+          }
+        : updateData;
+
     const response = await axios.patch(
       `https://api.vapi.ai/assistant/${assistantId}`,
-      updateData,
+      patched,
       {
         headers: {
           Authorization: `Bearer ${VAPI_API_KEY}`,
